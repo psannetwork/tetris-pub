@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>テトリス 観戦モード</title>
+    <!-- ©Psannetwork -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: linear-gradient(135deg, #222, #444);
+        font-family: Arial, sans-serif;
+      }
+      #gameCanvas {
+        display: block;
+        background: #111;
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      /* 中央オーバーレイ：ルーム一覧パネル */
+      #controlPanel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 320px;
+        background: rgba(255, 255, 255, 0.97);
+        padding: 20px;
+        border-radius: 10px;
+        z-index: 20;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+        transition: opacity 0.3s ease;
+      }
+      #controlPanel h2 {
+        margin-top: 0;
+        font-size: 24px;
+        text-align: center;
+        color: #333;
+      }
+      #roomList button,
+      #controlPanel button {
+        display: block;
+        width: 100%;
+        margin-top: 10px;
+        font-size: 16px;
+        padding: 8px;
+        background: #007acc;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+      #roomList button:hover,
+      #controlPanel button:hover {
+        background: #005fa3;
+      }
+      /* ハンバーガーアイコン：観戦中に表示（ルーム一覧に戻る） */
+      #hamburger {
+        position: absolute;
+        top: 15px;
+        left: 15px;
+        width: 30px;
+        height: 30px;
+        z-index: 22;
+        cursor: pointer;
+        display: none;
+      }
+      #hamburger span {
+        display: block;
+        width: 100%;
+        height: 4px;
+        margin: 4px 0;
+        background: #fff;
+        border-radius: 2px;
+      }
+      /* 観戦情報バー */
+      #spectateBar {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 10px 15px;
+        border-radius: 8px;
+        z-index: 21;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+        display: none;
+        font-size: 16px;
+        color: #333;
+      }
+      /* ランキングオーバーレイ：ゲーム終了後に中央に表示（スクロール可能） */
+      #rankingOverlay {
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.85);
+        color: #fff;
+        padding: 20px;
+        border-radius: 10px;
+        z-index: 25;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+        width: 300px;
+      }
+      #rankingOverlay h2 {
+        text-align: center;
+        margin-top: 0;
+      }
+      #rankingOverlay ul {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0 0 0;
+      }
+      #rankingOverlay li {
+        padding: 5px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+      }
+    </style>
+    <script
+      src="https://cdn.socket.io/4.8.1/socket.io.min.js"
+      integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <canvas id="gameCanvas"></canvas>
+    <!-- ルーム一覧パネル -->
+    <div id="controlPanel">
+      <h2>ルーム一覧</h2>
+      <div id="roomList">読み込み中...</div>
+      <button id="refreshRooms">更新</button>
+    </div>
+    <!-- 観戦情報バー -->
+    <div id="spectateBar">
+      <span id="spectateInfo">観戦中...</span>
+    </div>
+    <!-- ハンバーガーアイコン：ルーム一覧に戻る -->
+    <div id="hamburger">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <!-- ゲーム終了後のランキングオーバーレイ -->
+    <div id="rankingOverlay">
+      <h2>ランキング</h2>
+      <p id="totalPlayers" style="text-align:center; margin: 5px 0 10px 0;"></p>
+      <ul id="rankingList"></ul>
+    </div>
+    <script>
+      // --- Canvas Setup ---
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener("resize", resizeCanvas);
+      resizeCanvas();
+      
+      // --- Socket.IO Connection ---
+      const socket = io("https://tetris.psannetwork.net");
+      let currentRoomId = null;
+      let boards = {}; // { userId: { board, username, isKO } }
+      let rankingData = null;
+      let overlayMessage = null;
+      let gameStarted = false;
+      let showRankingOverlay = false;
+      
+      // Reset state when beginning a new spectate session
+      function resetSpectate() {
+        boards = {};
+        rankingData = null;
+        overlayMessage = null;
+        gameStarted = false;
+        showRankingOverlay = false;
+        document.getElementById("rankingOverlay").style.display = "none";
+      }
+      
+      // --- Room List Fetch ---
+      function fetchRooms() {
+        fetch("https://tetris.psannetwork.net/rooms")
+          .then((res) => res.json())
+          .then((data) => {
+            const roomListDiv = document.getElementById("roomList");
+            roomListDiv.innerHTML = "";
+            if (data.rooms.length === 0) {
+              roomListDiv.textContent = "現在、ルームはありません。";
+              return;
+            }
+            data.rooms.forEach((room) => {
+              if (room.playersCount === 0) return;
+              const btn = document.createElement("button");
+              btn.textContent = `ルームID: ${room.roomId} | プレイヤー: ${room.playersCount} | ゲーム開始: ${room.isGameStarted}`;
+              btn.onclick = () => {
+                currentRoomId = room.roomId;
+                resetSpectate();
+                // ルーム一覧非表示、観戦バーとハンバーガー表示
+                document.getElementById("controlPanel").style.display = "none";
+                document.getElementById("spectateBar").style.display = "block";
+                document.getElementById("hamburger").style.display = "block";
+                document.getElementById("spectateInfo").textContent = `${room.roomId} を観戦中`;
+                socket.emit("spectateRoom", room.roomId);
+              };
+              roomListDiv.appendChild(btn);
+            });
+          })
+          .catch((err) => {
+            console.error("ルーム情報の取得エラー", err);
+            document.getElementById("roomList").textContent = "取得エラー";
+          });
+      }
+      document.getElementById("refreshRooms").addEventListener("click", fetchRooms);
+      fetchRooms();
+      
+      // ハンバーガーアイコンでルーム一覧に戻る
+      document.getElementById("hamburger").addEventListener("click", () => {
+        socket.disconnect();
+        location.reload();
+      });
+      
+      // --- Socket Events ---
+      socket.on("spectateRoomInfo", (data) => {
+        console.log(`観戦中: ${data.roomId}`);
+        gameStarted = data.isGameStarted;
+      });
+      socket.on("spectateError", (errMsg) => {
+        console.error(errMsg);
+        // エラー時はルーム一覧に戻す
+        document.getElementById("spectateBar").style.display = "none";
+        document.getElementById("hamburger").style.display = "none";
+        document.getElementById("controlPanel").style.display = "block";
+      });
+      // BoardStatus: username が存在すれば使用、なければ userId を表示
+      socket.on("BoardStatus", (data) => {
+        const userId = data.userId || data.UserID;
+        const name = data.username || userId;
+        boards[userId] = boards[userId] || { board: null, username: name, isKO: false };
+        boards[userId].board = data.board;
+      });
+      socket.on("BoardStatusBulk", (bulkBoards) => {
+        Object.keys(bulkBoards).forEach((userId) => {
+          const boardData = bulkBoards[userId];
+          const name = boardData.username || userId;
+          boards[userId] = boards[userId] || { board: null, username: name, isKO: false };
+          boards[userId].board = boardData.board;
+        });
+      });
+      socket.on("ranking", (data) => {
+        rankingData = data;
+      });
+      // カウントダウンは上書きするだけ
+      socket.on("CountDown", (data) => {
+        overlayMessage = `開始まで: ${data}`;
+        gameStarted = false;
+      });
+      socket.on("StartGame", () => {
+        overlayMessage = "ゲーム開始!";
+        gameStarted = true;
+        setTimeout(() => {
+          overlayMessage = null;
+        }, 2000);
+      });
+      // ゲーム終了時：全画面に「ゲーム終了」をオーバーレイし、3秒後に中央にランキングオーバーレイを表示
+      socket.on("GameOver", () => {
+        overlayMessage = "ゲーム終了";
+        gameStarted = false;
+        setTimeout(() => {
+          overlayMessage = null;
+          showRankingOverlay = true;
+          updateRankingOverlay();
+          document.getElementById("rankingOverlay").style.display = "block";
+        }, 3000);
+      });
+      socket.on("playerKO", (userId) => {
+        if (boards[userId]) {
+          boards[userId].isKO = true;
+        }
+      });
+      
+      // --- Update Ranking Overlay ---
+      function updateRankingOverlay() {
+        const rankingList = document.getElementById("rankingList");
+        rankingList.innerHTML = "";
+        const totalPlayers = Object.keys(boards).length;
+        document.getElementById("totalPlayers").textContent = `総人数: ${totalPlayers}`;
+        if (rankingData && rankingData.yourRankMap) {
+          let rankArr = [];
+          for (const id in rankingData.yourRankMap) {
+            const rank = rankingData.yourRankMap[id];
+            if (rank !== null) {
+              rankArr.push({ id, rank });
+            }
+          }
+          rankArr.sort((a, b) => a.rank - b.rank);
+          rankArr.forEach((item, idx) => {
+            const li = document.createElement("li");
+            li.textContent = `${idx + 1}. ${item.id} (ランク: ${item.rank})`;
+            rankingList.appendChild(li);
+          });
+        } else {
+          rankingList.innerHTML = "<li>ランキング情報がありません</li>";
+        }
+      }
+      
+      // --- Drawing ---
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+        // 描画するプレイヤーは最大100人
+        let playerIds = Object.keys(boards);
+        if (playerIds.length > 100) {
+          playerIds = playerIds.slice(0, 100);
+        }
+        const n = playerIds.length;
+        if (n > 0) {
+          const marginX = 10, marginY = 10;
+          // 横並びを優先：1～nの各候補について、セルサイズを計算し最大のものを採用
+          let bestCellSize = 0, bestColumns = 1;
+          for (let cols = 1; cols <= n; cols++) {
+            const rows = Math.ceil(n / cols);
+            const cellSizeCandidate = Math.min(
+              (canvas.width - (cols + 1) * marginX) / (cols * 10),
+              (canvas.height - (rows + 1) * marginY) / (rows * 22)
+            );
+            if (cellSizeCandidate > bestCellSize) {
+              bestCellSize = cellSizeCandidate;
+              bestColumns = cols;
+            }
+          }
+          const cellSize = bestCellSize;
+          const boardW = cellSize * 10;
+          const boardH = cellSize * 22;
+          // bestColumnsを用いて各ボードの描画位置を計算
+          playerIds.forEach((userId, index) => {
+            const col = index % bestColumns;
+            const row = Math.floor(index / bestColumns);
+            const x = marginX + col * (boardW + marginX);
+            const y = marginY + row * (boardH + marginY);
+            drawBoard(x, y, boardW, boardH, boards[userId], cellSize);
+          });
+        }
+      
+        // ランキング情報の描画（ゲーム中は右下に表示）
+        if (!showRankingOverlay && rankingData && rankingData.yourRankMap) {
+          let rankArr = [];
+          for (const id in rankingData.yourRankMap) {
+            const rank = rankingData.yourRankMap[id];
+            if (rank !== null) {
+              rankArr.push({ id, rank });
+            }
+          }
+          rankArr.sort((a, b) => a.rank - b.rank);
+          const maxNameLength = rankArr.reduce(
+            (max, item) => Math.max(max, item.id.length),
+            0
+          );
+          const fontSize = Math.max(12, 18 - (maxNameLength - 10));
+          const boxPadding = 10;
+          const lineHeight = fontSize + 6;
+          const boxW = 240;
+          const boxH = (rankArr.length + 3) * lineHeight + boxPadding;
+          const boxX = canvas.width - boxW - 20;
+          const boxY = canvas.height - boxH - 20;
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+          ctx.strokeStyle = "white";
+          ctx.strokeRect(boxX, boxY, boxW, boxH);
+          ctx.fillStyle = "white";
+          ctx.font = `${fontSize}px Arial`;
+          ctx.textAlign = "left";
+          // 総人数も表示
+          ctx.fillText(`総人数: ${Object.keys(boards).length}`, boxX + boxPadding, boxY + lineHeight);
+          ctx.fillText("ランキング", boxX + boxPadding, boxY + 2 * lineHeight);
+          rankArr.forEach((item, idx) => {
+            ctx.fillText(
+              `${idx + 1}. ${item.id} (ランク: ${item.rank})`,
+              boxX + boxPadding,
+              boxY + (idx + 3) * lineHeight
+            );
+          });
+        }
+      
+        // オーバーレイメッセージ（カウントダウン、開始、終了）は最上段に固定
+        if (overlayMessage) {
+          ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = "#fff";
+          ctx.font = "50px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(overlayMessage, canvas.width / 2, canvas.height / 2);
+        }
+      
+        requestAnimationFrame(draw);
+      }
+      requestAnimationFrame(draw);
+      
+      // --- 個別ボード描画 ---
+      function drawBoard(x, y, width, height, boardObj, cellSize) {
+        // ボード背景
+        ctx.fillStyle = "#333";
+        ctx.fillRect(x, y, width, height);
+        const cols = 10, rows = 22;
+        const cellW = width / cols, cellH = height / rows;
+        ctx.strokeStyle = "#555";
+        // グリッド描画
+        for (let i = 0; i <= cols; i++) {
+          ctx.beginPath();
+          ctx.moveTo(x + i * cellW, y);
+          ctx.lineTo(x + i * cellW, y + height);
+          ctx.stroke();
+        }
+        for (let j = 0; j <= rows; j++) {
+          ctx.beginPath();
+          ctx.moveTo(x, y + j * cellH);
+          ctx.lineTo(x + width, y + j * cellH);
+          ctx.stroke();
+        }
+        // ブロック描画
+        if (boardObj.board) {
+          for (let r = 0; r < boardObj.board.length; r++) {
+            for (let c = 0; c < boardObj.board[r].length; c++) {
+              const cell = boardObj.board[r][c];
+              if (cell && cell !== 0) {
+                ctx.fillStyle = getColor(cell);
+                ctx.fillRect(x + c * cellW, y + r * cellH, cellW, cellH);
+              }
+            }
+          }
+        }
+        // ユーザー名表示（undefined対策）
+        ctx.fillStyle = "#fff";
+        ctx.font = `${cellSize * 0.8}px Arial`;
+        ctx.textAlign = "left";
+        ctx.fillText(boardObj.username || "Unknown", x + 4, y + cellSize);
+      
+        // KO 表示：boardObj.isKO またはランキング情報によりランクがある場合
+        let effectiveKO = boardObj.isKO;
+        if (!effectiveKO && rankingData && rankingData.yourRankMap) {
+          if (rankingData.yourRankMap[boardObj.username] !== null) {
+            effectiveKO = true;
+          }
+        }
+        if (effectiveKO) {
+          ctx.strokeStyle = "red";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, width, height);
+          ctx.fillStyle = "rgba(0,0,0,0.7)";
+          ctx.fillRect(x, y, width, height);
+          ctx.fillStyle = "#fff";
+          ctx.font = `${cellSize * 2}px Arial`;
+          ctx.textAlign = "center";
+          ctx.fillText("KO", x + width / 2, y + height / 2);
+          ctx.lineWidth = 1;
+        }
+      }
+      
+      function getColor(letter) {
+        const colors = {
+          I: "#00f",
+          J: "#00a",
+          L: "#f80",
+          O: "#ff0",
+          S: "#0f0",
+          T: "#a0a",
+          Z: "#f00",
+          G: "#888",
+        };
+        return colors[letter] || "#999";
+      }
+    </script>
+  </body>
+</html>
