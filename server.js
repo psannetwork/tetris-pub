@@ -7,11 +7,15 @@ const cors = require("cors");
 const PORT = process.env.PORT || 6000;
 const MAX_PLAYERS = 99;
 const MIN_PLAYERS_TO_START = 2;
+const COUNTDOWN_START = 10; // カウントダウン初期値
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  pingInterval: 10000,
+  pingTimeout: 5000,
+  transports: ['websocket', 'polling']
 });
 
 app.use(cors());
@@ -39,7 +43,9 @@ function createRoom(playerId) {
     isGameStarted: false,
     isGameOver: false,
     totalPlayers: null,
-    boards: {} // 各プレイヤーの最新ボード状態を保持
+    boards: {}, // 各プレイヤーの最新ボード状態を保持
+    countdownCount: COUNTDOWN_START,
+    countdownInterval: null
   };
   rooms.set(roomId, room);
   return room;
@@ -66,28 +72,38 @@ function emitToSpectators(roomId, event, data) {
 function startCountdown(room) {
   if (!room || room.isCountingDown) return;
   room.isCountingDown = true;
-  let count = 10;
-  console.log(`⏳ Room ${room.roomId} countdown started.`);
+  room.countdownCount = COUNTDOWN_START;
 
-  const countdownInterval = setInterval(() => {
+  console.log(`⏳ Room ${room.roomId} countdown started.`);
+  room.countdownInterval = setInterval(() => {
+    // ルームが存在しない場合キャンセル
     if (!rooms.has(room.roomId)) {
-      clearInterval(countdownInterval);
-      console.log(`🛑 Room ${room.roomId} deleted, stopping countdown.`);
+      clearInterval(room.countdownInterval);
       return;
     }
+    // プレイヤーが最低人数未満なら待機メッセージ
     if (room.players.size < MIN_PLAYERS_TO_START) {
+      // カウントリセット: 1人になったときのみ
+      if (room.players.size === 1 && room.countdownCount !== COUNTDOWN_START) {
+        room.countdownCount = COUNTDOWN_START;
+        console.log(`🔄 Room ${room.roomId} countdown reset.`);
+      }
       const msg = "プレイヤーを待機中です...";
       io.to(room.roomId).emit("CountDown", msg);
       emitToSpectators(room.roomId, "CountDown", msg);
-      console.log(`⏳ Room ${room.roomId} waiting for players (${room.players.size} present).`);
       return;
     }
-    io.to(room.roomId).emit("CountDown", count);
-    emitToSpectators(room.roomId, "CountDown", count);
-    console.log(`⏳ Room ${room.roomId} countdown: ${count}`);
-    count--;
-    if (count < 0 || room.players.size >= MAX_PLAYERS) {
-      clearInterval(countdownInterval);
+
+    // カウント通知
+    io.to(room.roomId).emit("CountDown", room.countdownCount);
+    emitToSpectators(room.roomId, "CountDown", room.countdownCount);
+    console.log(`⏳ Room ${room.roomId} countdown: ${room.countdownCount}`);
+    room.countdownCount--;
+
+    // カウント終了または最大プレイヤー達成時にゲーム開始
+    if (room.countdownCount < 0 || room.players.size >= MAX_PLAYERS) {
+      clearInterval(room.countdownInterval);
+      room.isCountingDown = false;
       room.isGameStarted = true;
       room.totalPlayers = room.initialPlayers.size;
       io.to(room.roomId).emit("StartGame");
@@ -102,49 +118,31 @@ function handleGameOver(socket, reason) {
   if (!roomId || !rooms.has(roomId)) return;
   const room = rooms.get(roomId);
 
-  if (!playerRanks.has(roomId)) {
-    playerRanks.set(roomId, []);
-  }
+  // ランク登録
+  if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
   const ranks = playerRanks.get(roomId);
-  if (!ranks.includes(socket.id)) {
-    ranks.push(socket.id);
-    const totalPlayers = room.totalPlayers || room.initialPlayers.size;
-    const orderIndex = ranks.indexOf(socket.id) + 1;
-    const yourRank = totalPlayers - orderIndex + 1;
-    console.log(`💀 ${socket.id} in ${roomId} game over (order: ${orderIndex}, rank: ${yourRank}, reason: ${reason})`);
-  }
+  if (!ranks.includes(socket.id)) ranks.push(socket.id);
 
-  // KO時はプレイヤーからは削除するが、board 状態は room.boards に保持する
+  // プレイヤー部屋解除
   playerRoom.delete(socket.id);
 
-  // ランキングマップの再計算
   const totalPlayers = room.totalPlayers || room.initialPlayers.size;
-  const yourRankMap = Object.fromEntries(
-    Array.from(room.initialPlayers).map(playerId => {
-      if (ranks.includes(playerId)) {
-        const orderIndex = ranks.indexOf(playerId) + 1;
-        return [playerId, totalPlayers - orderIndex + 1];
-      } else {
-        // 残り一人なら自動的に 1 位
-        return [playerId, (ranks.length === totalPlayers - 1) ? 1 : null];
-      }
-    })
-  );
-
-  // 自動で1位を確定する処理
+  // 最終プレイヤー処理
   if (ranks.length === totalPlayers - 1) {
-    const remaining = Array.from(room.initialPlayers).find(id => !ranks.includes(id));
-    if (remaining) {
-      ranks.push(remaining);
-      yourRankMap[remaining] = 1;
-    }
-    console.log(`🏁 Room ${roomId} game ended automatically. Final ranking:`, yourRankMap);
+    const remaining = [...room.initialPlayers].find(id => !ranks.includes(id));
+    if (remaining) ranks.push(remaining);
+
+    const yourRankMap = Object.fromEntries(
+      [...room.initialPlayers].map(id => [id, totalPlayers - ranks.indexOf(id)])
+    );
+
     io.to(room.roomId).emit("ranking", { ranking: ranks, yourRankMap });
     emitToSpectators(room.roomId, "ranking", { ranking: ranks, yourRankMap });
     io.to(room.roomId).emit("GameOver");
     emitToSpectators(room.roomId, "GameOver");
+
     room.isGameOver = true;
-    // ルームは30秒間保持して、観戦者が最終ボードを確認できるようにする
+    // 30秒後にルーム削除
     setTimeout(() => {
       rooms.delete(roomId);
       playerRanks.delete(roomId);
@@ -153,7 +151,16 @@ function handleGameOver(socket, reason) {
     return;
   }
 
-  // 通常時は、ランキングとKO情報を送信
+  // 一般的なKO通知
+  const yourRankMap = Object.fromEntries(
+    [...room.initialPlayers].map(id => [
+      id,
+      ranks.includes(id)
+        ? totalPlayers - ranks.indexOf(id)
+        : (ranks.length === totalPlayers - 1 ? 1 : null)
+    ])
+  );
+
   io.to(room.roomId).emit("ranking", { ranking: ranks, yourRankMap });
   io.to(room.roomId).emit("playerKO", socket.id);
   emitToSpectators(room.roomId, "ranking", { ranking: ranks, yourRankMap });
@@ -162,8 +169,7 @@ function handleGameOver(socket, reason) {
 
 // --- API ---
 app.get("/rooms", (req, res) => {
-  // ゲーム終了済みのルームは一覧に表示しない
-  const roomInfo = Array.from(rooms.values())
+  const roomInfo = [...rooms.values()]
     .filter(room => room.players.size > 0 && !room.isGameOver)
     .map(room => ({
       roomId: room.roomId,
@@ -177,7 +183,6 @@ app.get("/rooms", (req, res) => {
 io.on("connection", (socket) => {
   console.log("🚀 User connected:", socket.id);
 
-  // プレイヤーとしてのマッチング
   socket.on("matching", () => {
     let room = getAvailableRoom();
     if (room) {
@@ -193,63 +198,51 @@ io.on("connection", (socket) => {
     socket.join(room.roomId);
     io.to(room.roomId).emit("roomInfo", {
       roomId: room.roomId,
-      members: Array.from(room.players)
+      members: [...room.players]
     });
   });
 
-  // 観戦用：もしプレイヤーとして参加中ならルームから離脱し、観戦者として登録
   socket.on("spectateRoom", (roomId) => {
     if (!rooms.has(roomId)) {
-      socket.emit("spectateError", `指定されたルーム (${roomId}) は存在しません。`);
-      return;
+      return socket.emit("spectateError", `指定されたルーム (${roomId}) は存在しません。`);
     }
     const room = rooms.get(roomId);
-    if (room.players.size === 0) {
-      socket.emit("spectateError", `指定されたルーム (${roomId}) は既に終了しています。`);
-      return;
+    if (room.players.size === 0 || room.isGameOver) {
+      return socket.emit("spectateError", `指定されたルーム (${roomId}) は終了しています。`);
     }
-    // もしプレイヤーとして登録されているなら、観戦者へ切り替える
     if (playerRoom.has(socket.id)) {
-      const prevRoomId = playerRoom.get(socket.id);
-      if (rooms.has(prevRoomId)) {
-        const prevRoom = rooms.get(prevRoomId);
-        prevRoom.players.delete(socket.id);
-        prevRoom.initialPlayers.delete(socket.id);
-      }
+      // プレイヤーから観戦者へ切り替え
+      const prev = playerRoom.get(socket.id);
+      const prevRoom = rooms.get(prev);
+      prevRoom.players.delete(socket.id);
+      prevRoom.initialPlayers.delete(socket.id);
       playerRoom.delete(socket.id);
-      socket.leave(roomId);
-      console.log(`🔄 ${socket.id} was converted from player to spectator for room ${roomId}`);
+      socket.leave(prev);
+      console.log(`🔄 ${socket.id} converted from player to spectator for ${roomId}`);
     }
-    if (!spectators.has(roomId)) {
-      spectators.set(roomId, new Set());
-    }
+    if (!spectators.has(roomId)) spectators.set(roomId, new Set());
     spectators.get(roomId).add(socket.id);
+
+    socket.join(roomId);
     socket.emit("spectateRoomInfo", {
       roomId: room.roomId,
       playersCount: room.players.size,
       isGameStarted: room.isGameStarted
     });
-    // 観戦者に対して、既存の全プレイヤーのボード情報を一括送信
     socket.emit("BoardStatusBulk", room.boards);
     console.log(`👀 ${socket.id} is spectating ${roomId}`);
   });
 
-  // プレイヤーからのボード更新（常に room.boards に保持）
   socket.on("BoardStatus", (board) => {
     const roomId = playerRoom.get(socket.id);
     if (!roomId) return;
     const room = rooms.get(roomId);
-    if (room) {
-      room.boards[socket.id] = board;
-    }
-    // 送信元以外のプレイヤーへおよび観戦者へ送信
+    room.boards[socket.id] = board;
     socket.to(roomId).emit("BoardStatus", board);
     emitToSpectators(roomId, "BoardStatus", board);
   });
 
   socket.on("PlayerGameStatus", (status) => {
-    const roomId = playerRoom.get(socket.id);
-    if (!roomId) return;
     if (status.includes("gameover")) {
       handleGameOver(socket, "normal");
     }
@@ -260,59 +253,45 @@ io.on("connection", (socket) => {
     if (!roomId) return;
     const room = rooms.get(roomId);
     if (!room || room.players.size <= 1) return;
-    const gameOverPlayers = playerRanks.get(roomId) || [];
-    let recipientId = targetId;
-    const members = Array.from(room.players);
-    if (!recipientId || !members.includes(recipientId) || gameOverPlayers.includes(recipientId)) {
-      const candidates = members.filter(id => id !== socket.id && !gameOverPlayers.includes(id));
-      if (candidates.length === 0) {
-        console.log(`💥 有効な送り先が見つからなかったため、${socket.id}の SendGarbage をスキップしました。`);
-        return;
-      }
-      recipientId = candidates[Math.floor(Math.random() * candidates.length)];
+    const gameOver = playerRanks.get(roomId) || [];
+    let recipient = targetId;
+    const members = [...room.players];
+    if (!recipient || !members.includes(recipient) || gameOver.includes(recipient)) {
+      const candidates = members.filter(id => id !== socket.id && !gameOver.includes(id));
+      if (!candidates.length) return;
+      recipient = candidates[Math.floor(Math.random() * candidates.length)];
     }
-    io.to(recipientId).emit("ReceiveGarbage", { from: socket.id, lines });
-    console.log(`💥 ${socket.id} sent ${lines} garbage lines to ${recipientId} in ${roomId}`);
-  });
-
-  socket.on("error", (err) => {
-    console.error(`⚠️ Socket error (${socket.id}):`, err);
-    handleGameOver(socket, "error");
+    io.to(recipient).emit("ReceiveGarbage", { from: socket.id, lines });
+    console.log(`💥 ${socket.id} sent ${lines} garbage to ${recipient} in ${roomId}`);
   });
 
   socket.on("disconnect", (reason) => {
-    // プレイヤー用の処理
     const roomId = playerRoom.get(socket.id);
     if (roomId && rooms.has(roomId)) {
       const room = rooms.get(roomId);
-      const errorReasons = ["ping timeout", "transport error", "transport close", "server disconnect"];
-      if (errorReasons.includes(reason)) {
-        console.log(`🚨 ${socket.id} encountered error (${reason}), treated as game over.`);
+      // 切断時はゲームオーバー扱い
+      if (room.isGameStarted) {
         handleGameOver(socket, reason);
+      } else if (room.isCountingDown) {
+        // カウント中の切断
+        room.players.delete(socket.id);
+        playerRoom.delete(socket.id);
+        console.log(`🔌 ${socket.id} disconnected during countdown (${reason}).`);
       } else {
         room.players.delete(socket.id);
         playerRoom.delete(socket.id);
-        console.log(`❌ ${socket.id} left ${roomId} voluntarily (${reason}).`);
-        if (room.players.size === 0) {
-          console.log(`🗑️ Room ${roomId} will be deleted in 5 seconds (empty).`);
-          setTimeout(() => {
-            if (rooms.has(roomId) && room.players.size === 0) {
-              rooms.delete(roomId);
-              console.log(`🗑️ Room ${roomId} deleted.`);
-            }
-          }, 5000);
-        }
+      }
+      // ルームが空なら削除
+      if (room.players.size === 0) {
+        clearInterval(room.countdownInterval);
+        setTimeout(() => rooms.delete(roomId), 5000);
       }
     }
-    // 観戦者用の処理
-    for (const [rId, specSet] of spectators.entries()) {
-      if (specSet.has(socket.id)) {
-        specSet.delete(socket.id);
-        if (specSet.size === 0) {
-          spectators.delete(rId);
-        }
-      }
+    // 観戦者のクリーンアップ
+    for (const [rId, set] of spectators.entries()) {
+      if (set.delete(socket.id) && set.size === 0) spectators.delete(rId);
     }
+    console.log(`❌ ${socket.id} disconnected (${reason}).`);
   });
 });
 
