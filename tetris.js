@@ -607,8 +607,9 @@ if (!isValidPosition(currentPiece, 0, 1) && currentPiece.y <= 1) {
 
 
 
-drawminiboardloop();    
-
+if (!isGameOver && !isGameClear) {
+    drawminiboardloop();
+}
 
     
   let ghost = Object.assign({}, currentPiece);
@@ -668,14 +669,14 @@ drawminiboardloop();
   ctx.fillStyle = "#fff";
   ctx.font = "bold 18px sans-serif";
   ctx.textAlign = "left";
-  ctx.fillText("HOLD", holdBoxX, holdBoxY - 10);
+  ctx.fillText("HOLD", holdBoxX, holdBoxY - 20);
   if (holdPiece) drawMiniPiece(holdPiece, holdBoxX, holdBoxY, previewSize);
   
   const nextBoxX = boardX + boardWidth + 20, nextBoxY = boardY;
   ctx.strokeStyle = "#FFF";
   ctx.lineWidth = 2;
   ctx.strokeRect(nextBoxX - 5, nextBoxY - 5, previewSize * 4 + 10, previewSize * 15 + 10);
-  ctx.fillText("NEXT", nextBoxX, nextBoxY - 10);
+  ctx.fillText("NEXT", nextBoxX, nextBoxY - 20);
   for (let i = 0; i < Math.min(5, nextPieces.length); i++) {
     drawMiniPiece(nextPieces[i], nextBoxX, nextBoxY + i * previewSize * 3, previewSize);
   }
