@@ -200,12 +200,12 @@ io.on("connection", (socket) => {
   // 観戦用：もしプレイヤーとして参加中ならルームから離脱し、観戦者として登録
   socket.on("spectateRoom", (roomId) => {
     if (!rooms.has(roomId)) {
-      socket.emit("spectateError", `指定されたルーム (${roomId}) は存在しません。`);
+  `); socket.emit("spectateError", `指定されたルーム (${roomId}) は存在しません 。
       return;
     }
     const room = rooms.get(roomId);
     if (room.players.size === 0) {
-      socket.emit("spectateError", `指定されたルーム (${roomId}) は既に終了しています。`);
+  ます。`);t.emit("spectateError", `指定されたルーム (${roomId}) は既に終了して い
       return;
     }
     // もしプレイヤーとして登録されているなら、観戦者へ切り替える
