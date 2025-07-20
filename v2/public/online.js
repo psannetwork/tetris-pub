@@ -1,4 +1,4 @@
-const socket = io("https://tetris.psannetwork.net/"); // サーバーのポートに合わせる
+const socket = io(CONFIG.serverUrl); // サーバーのポートに合わせる
 let isRanking = null;
         socket.on("connect", () => {
             console.log("✅ サーバーに接続:", socket.id);

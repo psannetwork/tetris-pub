@@ -23,14 +23,14 @@ app.use(express.static("public"));
 
 // --- ルーム管理 ---
 // rooms: roomId → プレイヤー用ルームオブジェクト
-// playerRoom: socket.id → roomId（プレイヤーのみ登録）
 const rooms = new Map();
+// playerRoom: socket.id → roomId（プレイヤーのみ登録）
 const playerRoom = new Map();
-const playerRanks = new Map(); // roomId → ゲームオーバー順のプレイヤーID配列
-let roomCounter = 0;
-
+// playerRanks: roomId → ゲームオーバー順のプレイヤーID配列
+const playerRanks = new Map();
 // spectators: roomId → Set(観戦者socket.id)
 const spectators = new Map();
+let roomCounter = 0;
 
 function createRoom(playerId) {
   roomCounter++;
@@ -70,7 +70,7 @@ function emitToSpectators(roomId, event, data) {
 }
 
 function startCountdown(room) {
-  if (!room || room.isCountingDown) return;
+  if (!room || room.isCountingDown || room.isGameStarted) return;
   room.isCountingDown = true;
   room.countdownCount = COUNTDOWN_START;
 
@@ -118,6 +118,9 @@ function handleGameOver(socket, reason) {
   if (!roomId || !rooms.has(roomId)) return;
   const room = rooms.get(roomId);
 
+  // 既にゲーム終了している場合は無視
+  if (room.isGameOver) return;
+
   // ランク登録
   if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
   const ranks = playerRanks.get(roomId);
@@ -127,6 +130,7 @@ function handleGameOver(socket, reason) {
   playerRoom.delete(socket.id);
 
   const totalPlayers = room.totalPlayers || room.initialPlayers.size;
+  
   // 最終プレイヤー処理
   if (ranks.length === totalPlayers - 1) {
     const remaining = [...room.initialPlayers].find(id => !ranks.includes(id));
@@ -144,6 +148,8 @@ function handleGameOver(socket, reason) {
     room.isGameOver = true;
     // 30秒後にルーム削除
     setTimeout(() => {
+      // 観戦者も削除
+      spectators.delete(roomId);
       rooms.delete(roomId);
       playerRanks.delete(roomId);
       console.log(`🗑️ Room ${roomId} deleted after game over.`);
@@ -192,7 +198,6 @@ io.on("connection", (socket) => {
     } else {
       room = createRoom(socket.id);
       console.log(`🏠 ${socket.id} created new room ${room.roomId}`);
-      startCountdown(room);
     }
     playerRoom.set(socket.id, room.roomId);
     socket.join(room.roomId);
@@ -200,6 +205,10 @@ io.on("connection", (socket) => {
       roomId: room.roomId,
       members: [...room.players]
     });
+    // ゲーム開始前のみカウントダウンを開始
+    if (!room.isGameStarted && !room.isCountingDown) {
+      startCountdown(room);
+    }
   });
 
   socket.on("spectateRoom", (roomId) => {
@@ -218,6 +227,12 @@ io.on("connection", (socket) => {
       prevRoom.initialPlayers.delete(socket.id);
       playerRoom.delete(socket.id);
       socket.leave(prev);
+      
+      // ゲーム中であればゲームオーバー処理
+      if (prevRoom.isGameStarted) {
+        handleGameOver(socket, "spectating");
+      }
+      
       console.log(`🔄 ${socket.id} converted from player to spectator for ${roomId}`);
     }
     if (!spectators.has(roomId)) spectators.set(roomId, new Set());
@@ -237,6 +252,8 @@ io.on("connection", (socket) => {
     const roomId = playerRoom.get(socket.id);
     if (!roomId) return;
     const room = rooms.get(roomId);
+    if (!room || room.isGameOver) return;
+    
     room.boards[socket.id] = board;
     socket.to(roomId).emit("BoardStatus", board);
     emitToSpectators(roomId, "BoardStatus", board);
@@ -252,7 +269,8 @@ io.on("connection", (socket) => {
     const roomId = playerRoom.get(socket.id);
     if (!roomId) return;
     const room = rooms.get(roomId);
-    if (!room || room.players.size <= 1) return;
+    if (!room || room.isGameOver || room.players.size <= 1) return;
+    
     const gameOver = playerRanks.get(roomId) || [];
     let recipient = targetId;
     const members = [...room.players];
@@ -275,15 +293,19 @@ io.on("connection", (socket) => {
       } else if (room.isCountingDown) {
         // カウント中の切断
         room.players.delete(socket.id);
+        room.initialPlayers.delete(socket.id);
         playerRoom.delete(socket.id);
         console.log(`🔌 ${socket.id} disconnected during countdown (${reason}).`);
       } else {
         room.players.delete(socket.id);
+        room.initialPlayers.delete(socket.id);
         playerRoom.delete(socket.id);
       }
       // ルームが空なら削除
       if (room.players.size === 0) {
         clearInterval(room.countdownInterval);
+        // 観戦者も削除
+        spectators.delete(roomId);
         setTimeout(() => rooms.delete(roomId), 5000);
       }
     }

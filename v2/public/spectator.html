@@ -124,6 +124,7 @@
         border-bottom: 1px solid rgba(255,255,255,0.2);
       }
     </style>
+    <script src="config.js"></script>
     <script
       src="https://cdn.socket.io/4.8.1/socket.io.min.js"
       integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
@@ -166,7 +167,7 @@
       resizeCanvas();
       
       // --- Socket.IO Connection ---
-      const socket = io("https://tetris.psannetwork.net");
+      const socket = io(CONFIG.serverUrl);
       let currentRoomId = null;
       let boards = {}; // { userId: { board, username, isKO } }
       let rankingData = null;
@@ -186,7 +187,7 @@
       
       // --- Room List Fetch ---
       function fetchRooms() {
-        fetch("https://tetris.psannetwork.net/rooms")
+        fetch(CONFIG.serverUrl + "/rooms")
           .then((res) => res.json())
           .then((data) => {
             const roomListDiv = document.getElementById("roomList");

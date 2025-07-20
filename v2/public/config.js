@@ -71,6 +71,7 @@ const CONFIG = {
     debug: {
       enableGarbage: true
     },
-    
+    serverUrl: 'http://localhost:6000' // サーバーのアドレス
   };
+
   

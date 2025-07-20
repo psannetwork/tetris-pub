@@ -4,11 +4,11 @@ const fs = require('fs');
 const path = require('path');
 
 const AUTO_REMATCH = true;
-const BOT_COUNT = 99;
+const BOT_COUNT = 30;
 const BOT_MOVE_DELAY = 400;
 const MOVE_ANIMATION_DELAY = 100;
 const SOFT_DROP_DELAY = 100;
-const SERVER_URL = 'https://tetris.psannetwork.net/';
+const SERVER_URL = 'http://localhost:6000';
 const dataDir = './data';
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
 
