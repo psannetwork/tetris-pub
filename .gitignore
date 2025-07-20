@@ -1,4 +1,23 @@
+# 環境変数ファイル
 .env
-node_modules/*
-node_modules
-package-lock.json
+
+# node_modules（すべてのディレクトリで無視）
+**/node_modules/
+
+# package-lock.json（すべてのディレクトリで無視）
+**/package-lock.json
+
+# .idea（すべてのディレクトリで無視）
+**/.idea/
+
+# .vscode（すべてのディレクトリで無視）
+**/.vscode/
+
+# .git（すべてのディレクトリで無視）
+**/.git/
+
+# .DS_Store（すべてのディレクトリで無視）
+**/.DS_Store
+
+# .env（すべてのディレクトリで無視）
+**/.env
