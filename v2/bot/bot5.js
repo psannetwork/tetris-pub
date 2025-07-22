@@ -25,6 +25,7 @@ const AI_PARAMS = {
   weightMaxHeight: -3.5,        // 最大高さ（厳重ペナルティ）
   weightHoles: -5.0,            // 穴（極度のペナルティ）
   weightBumpiness: -2.5,        // 凹凸（極度のペナルティ）
+  weightBottomHoles: -8.0,      // 底面近辺の穴（極端に重視）
 
   // ボード構造最適化
   weightColumnBalance: -1.2,    // 列バランス（強化）
@@ -35,6 +36,7 @@ const AI_PARAMS = {
   weightTSpinBonus: 10.0,       // T-Spin（適度）
   weightPerfectClearBonus: 2.0  // Perfect Clear（最小限）
 };
+
 // === ボード関数 ===
 function createEmptyBoard() {
   return Array.from({ length: 22 }, () => Array(10).fill(0));
