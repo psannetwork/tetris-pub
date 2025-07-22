@@ -22,17 +22,19 @@ const tetrominoes = {
 // === AIパラメータ ===
 const AI_PARAMS = {
   // 基本評価
-  weightAggregateHeight: -4.5,  // 総合高さ
-  weightBumpiness: -1.2,        // 凹凸
-  weightHoles: -2.0,            // 穴
-  weightMaxHeight: -4.0,        // 最大高さ
+  weightAggregateHeight: -3.0,  // 総合高さ（緩和）
+  weightBumpiness: -0.8,        // 凹凸（若干緩和）
+  weightHoles: -1.5,            // 穴（重要度維持）
+  weightMaxHeight: -2.5,        // 最大高さ（緩和）
+  
   // 攻撃関連
-  weightTSpinBonus: 10.0,       // T-Spin
-  weightPerfectClearBonus: 20.0,// Perfect Clear
+  weightTSpinBonus: 15.0,       // T-Spin（強化）
+  weightPerfectClearBonus: 10.0,// Perfect Clear（緩和）
+  
   // 位置関連
-  weightLowerPlacement: 0.3,    // 下部配置
-  weightMiddleOpen: 2.0,        // 中央開放
-  weightColumnBalance: -0.8     // 列バランス
+  weightLowerPlacement: 0.5,    // 下部配置（強調）
+  weightMiddleOpen: 1.5,        // 中央開放（維持）
+  weightColumnBalance: -0.5     // 列バランス（緩和）
 };
 
 // === ボード関数 ===
