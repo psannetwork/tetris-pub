@@ -20,20 +20,20 @@ const tetrominoes = {
 };
 
 const AI_PARAMS = {
-  // 基本評価（生存性強化）
-  weightAggregateHeight: -2.0,  // 総合高さ（緩和）
-  weightBumpiness: -1.5,        // 凹凸（強化）
-  weightHoles: -3.0,            // 穴（厳重ペナルティ）
-  weightMaxHeight: -3.0,        // 最大高さ（強化）
-  
-  // 攻撃関連（バランス調整）
-  weightTSpinBonus: 12.0,       // T-Spin（適度に維持）
-  weightPerfectClearBonus: 5.0, // Perfect Clear（控えめ）
-  
-  // 位置関連
-  weightLowerPlacement: 0.8,    // 下部配置（強調）
-  weightMiddleOpen: 1.0,        // 中央開放（やや控えめ）
-  weightColumnBalance: -1.0     // 列バランス（強化）
+  // 生存性最大化（最重要）
+  weightAggregateHeight: -1.5,  // 総合高さ（緩和）
+  weightMaxHeight: -4.0,        // 最大高さ（厳重ペナルティ）
+  weightHoles: -5.0,            // 穴（極度のペナルティ）
+  weightBumpiness: -2.0,        // 凹凸（厳重ペナルティ）
+
+  // ボード構造最適化
+  weightColumnBalance: -1.5,    // 列バランス（強化）
+  weightMiddleOpen: 1.2,        // 中央開放（適度維持）
+  weightLowerPlacement: 1.0,    // 下部配置（強調）
+
+  // 攻撃性（適度維持）
+  weightTSpinBonus: 10.0,       // T-Spin（適度）
+  weightPerfectClearBonus: 3.0  // Perfect Clear（控えめ）
 };
 
 // === ボード関数 ===
