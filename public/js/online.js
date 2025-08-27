@@ -1,8 +1,16 @@
-const socket = io(CONFIG.serverUrl); // サーバーのポートに合わせる
+import { CONFIG } from './config.js';
+import { board, currentPiece, triggerGameOver, isGameClear, initializePieces, setGameClear } from './game.js';
+import { update } from './main.js';
+import { gameCtx, overlayCtx, gameCanvas, overlayCanvas } from './draw.js';
+
+import { addAttackBar } from './garbage.js';
+
+export const socket = io(CONFIG.serverUrl); // サーバーのポートに合わせる
 let isRanking = null;
+let currentCountdown = null;
+const gameOverStatus = {};
         socket.on("connect", () => {
             console.log("✅ サーバーに接続:", socket.id);
-            draw();
             joinRoom();
         });
 
@@ -19,13 +27,15 @@ let isRanking = null;
         });
 
         socket.on("StartGame", () => {
+            currentCountdown = null; // Clear countdown once game starts
+            initializePieces(); // Call initializePieces
             update();
         });
 
 
 
         socket.on("ReceiveGarbage", ({ from, lines }) => {
-            addGarbagebar(lines);
+            addAttackBar(lines);
             
         });
 
@@ -48,7 +58,7 @@ socket.on("ranking", ({ ranking, yourRankMap }) => {
       triggerGameOver(myRank);
     }
     if (myRank === 1) {
-      isGameClear = true;
+      setGameClear(true);
     }
   } else {
     console.log("⌛ あなたの順位はまだ確定していません...");
@@ -61,42 +71,39 @@ socket.on("ranking", ({ ranking, yourRankMap }) => {
 });
 
 
-function drawGameOver() {
-  // 背景を半透明の黒で描画
-  ctx.fillStyle = "rgba(0,0,0,0.6)";
-  ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+export function drawGameOver() {
+  overlayCtx.fillStyle = "rgba(0,0,0,0.6)";
+  overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-  // GAME OVER と自分の順位の描画（isRankingがnullなら「ランキング取得中」と表示）
-  ctx.fillStyle = "#FF0000";
-  ctx.font = "bold 50px sans-serif";
-  ctx.textAlign = "center";
+  overlayCtx.fillStyle = "#FF0000";
+  overlayCtx.font = "bold 50px sans-serif";
+  overlayCtx.textAlign = "center";
   const rankDisplay = (isRanking !== null) ? isRanking : "ランキング取得中";
-  const centerX = canvasElement.width / 2;
-  const centerY = canvasElement.height / 2;
-  ctx.fillText("GAME OVER", centerX, centerY - 30);
-  ctx.fillText(`Rank: ${rankDisplay}`, centerX, centerY + 30);
+  const centerX = overlayCanvas.width / 2;
+  const centerY = overlayCanvas.height / 2;
+  overlayCtx.fillText("GAME OVER", centerX, centerY - 30);
+  overlayCtx.fillText(`Rank: ${rankDisplay}`, centerX, centerY + 30);
 
   // ゲームオーバー時に状態を送信
   socket.emit("PlayerGameStatus", "gameover");
 
   // リザルト（ランキング）パネルの描画
-  const panelX = canvasElement.width * 0.1;
-  const panelY = canvasElement.height * 0.1;
-  const panelWidth = canvasElement.width * 0.8;
-  const panelHeight = canvasElement.height * 0.7;
-  ctx.fillStyle = "rgba(0,0,0,0.8)";
-  ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+  const panelX = overlayCanvas.width * 0.1;
+  const panelY = overlayCanvas.height * 0.1;
+  const panelWidth = overlayCanvas.width * 0.8;
+  const panelHeight = overlayCanvas.height * 0.7;
+
 
   // タイトルの描画
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 30px sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText("Ranking", panelX + 20, panelY + 40);
+  overlayCtx.fillStyle = "#FFFFFF";
+  overlayCtx.font = "bold 30px sans-serif";
+  overlayCtx.textAlign = "left";
+  overlayCtx.fillText("Ranking", panelX + 20, panelY + 40);
 
   // 取得中かどうか判定して描画
   if (RankMap === null) {
-    ctx.font = "20px sans-serif";
-    ctx.fillText("ランキング取得中...", panelX + 20, panelY + 80);
+    overlayCtx.font = "20px sans-serif";
+    overlayCtx.fillText("ランキング取得中...", panelX + 20, panelY + 80);
   } else {
     // RankMap の各プレイヤーの順位情報を配列にまとめる
     // 例: { "player1": 8, "player2": 9, "player3": 7, "player4": null, ... }
@@ -120,7 +127,7 @@ function drawGameOver() {
     });
 
     // 各エントリーをリストとして描画
-    ctx.font = "20px sans-serif";
+    overlayCtx.font = "20px sans-serif";
     const lineHeight = 30;
     let currentY = panelY + 80;
     rankingEntries.forEach((entry, index) => {
@@ -128,11 +135,11 @@ function drawGameOver() {
       const displayRank = (entry.rank !== null) ? entry.rank : "取得中";
       // 自分のエントリーはハイライト（例：黄色）
       if (entry.playerId === myPlayerId) {
-        ctx.fillStyle = "#FFFF00";
+        overlayCtx.fillStyle = "#FFFF00";
       } else {
-        ctx.fillStyle = "#FFFFFF";
+        overlayCtx.fillStyle = "#FFFFFF";
       }
-      ctx.fillText(
+      overlayCtx.fillText(
         `${index + 1}. Player: ${entry.playerId} - Rank: ${displayRank}`,
         panelX + 20,
         currentY
@@ -164,38 +171,32 @@ function drawGameOver() {
 
 
 function drawCount(count) {
-    draw();
+    currentCountdown = count;
+    console.log("Received countdown: ", count);
+    drawCountdown();
+}
 
-  // 既存のキャンバスを半透明の黒でオーバーレイ（暗くする）
-  ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; // 50%透明の黒
-  ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-  
-  const attackBarWidth = 30, gap = 20;
-  const boardWidth = CONFIG.board.cols * CONFIG.board.cellSize;
-  const boardHeight = CONFIG.board.visibleRows * CONFIG.board.cellSize;
-  const totalWidth = attackBarWidth + gap + boardWidth;
-  const startX = (canvasElement.width - totalWidth) / 2;
-  const attackBarX = startX;
-  const boardX = startX + attackBarWidth + gap;
-  const boardY = (canvasElement.height - boardHeight) / 2;
-  
-  ctx.strokeStyle = '#000';
-  ctx.strokeRect(attackBarX, boardY, attackBarWidth, boardHeight);
+// This function will be called by the main draw loop in draw.js
+export function drawCountdown() {
+    if (currentCountdown !== null) {
+        console.log("drawCountdown called. currentCountdown:", currentCountdown);
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear the canvas before drawing
+        overlayCtx.fillStyle = "rgba(17, 16, 16, 0.7)"; // Semi-transparent black background
+        overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-  // カウントダウンの描画
-  ctx.fillStyle = "#FFF"; // 文字の色を白に
-  ctx.font = "bold 80px Arial"; // 大きくて太いフォント
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  // キャンバスの中央にカウントを描画
-  ctx.fillText(count, canvasElement.width / 2, canvasElement.height / 2);
+        overlayCtx.fillStyle = "#efececff"; // White text
+        overlayCtx.font = "bold 100px sans-serif";
+        overlayCtx.textAlign = "center";
+        overlayCtx.textBaseline = "middle";
+        overlayCtx.fillText(currentCountdown, overlayCanvas.width / 2, overlayCanvas.height / 2);
+    }
 }
 
 
 
 
 // ライン送信ボタンが押されたときに呼ばれる関数
-function sendGarbage(targetId, lines) {
+export function sendGarbage(targetId, lines) {
     // ターゲットIDが指定されていない場合はランダムな相手に送信
     if (!targetId) {
         socket.emit("SendGarbage", { targetId: null, lines });
@@ -206,26 +207,16 @@ function sendGarbage(targetId, lines) {
 }
 
 
-
-
-
-
-
-
-
-
-
 // グローバル変数
 const userMiniBoardMapping = {};
 let nextMiniBoardIndex = 0;
 const miniBoardsData = [];           // ミニボードのグリッド情報
 const lastBoardStates = {};          // ユーザーごとの最新の boardState を保存
 const miniCellSize = Math.floor(CONFIG.board.cellSize * 0.15);
-const gameOverStatus = {};
 
 
 // 毎フレーム呼ばれる描画ループ
-function drawminiboardloop() {
+export function drawminiboardloop() {
   // 既存のメイン描画などはそのまま…
 
   // miniBoardsData の再生成
@@ -249,10 +240,10 @@ function initMiniBoards() {
   const boardWidth = CONFIG.board.cols * CONFIG.board.cellSize;
   const boardHeight = CONFIG.board.visibleRows * CONFIG.board.cellSize;
   const totalWidth = attackBarWidth + gap + boardWidth;
-  const startX = (canvasElement.width - totalWidth) / 2;
+  const startX = (overlayCanvas.width - totalWidth) / 2;
   const attackBarX = startX;
   const boardX = startX + attackBarWidth + gap;
-  const boardY = (canvasElement.height - boardHeight) / 2;
+  const boardY = (overlayCanvas.height - boardHeight) / 2;
 
   // miniボードの設定（縦23×横10 のボード）
   const miniBoardWidth = 10 * miniCellSize;
@@ -285,9 +276,9 @@ function drawMiniBoardGrid(startX, startY, boardWidth, boardHeight, gap, positio
 
 function drawMiniBoard(x, y, boardWidth, boardHeight, boardID) {
   // 枠線を描画
-  ctx.strokeStyle = "#FFF";
-  ctx.lineWidth = 0.1;
-  ctx.strokeRect(x, y, boardWidth, boardHeight);
+  overlayCtx.strokeStyle = "#FFF";
+  overlayCtx.lineWidth = 0.1;
+  overlayCtx.strokeRect(x, y, boardWidth, boardHeight);
   
   // miniBoardsData に位置情報を保存
   miniBoardsData.push({ x, y, width: boardWidth, height: boardHeight, id: boardID });
@@ -303,20 +294,20 @@ function drawSpecificMiniBoard(userID, boardID, boardState) {
   const { x, y, width, height } = boardData;
   
   // Clear board area and draw the border.
-  ctx.clearRect(x, y, width, height);
-  ctx.strokeStyle = "#FF0000";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, width, height);
+  overlayCtx.clearRect(x, y, width, height);
+  overlayCtx.strokeStyle = "#FF0000";
+  overlayCtx.lineWidth = 1;
+  overlayCtx.strokeRect(x, y, width, height);
   
   // If the user has reached game over, clear the board (skip drawing blocks) and simply display the "KO" overlay.
   if (gameOverStatus[userID]) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    ctx.fillRect(x, y, width, height);
-    ctx.fillStyle = "#FF0000";
-    ctx.font = "bold 20px Arial";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("KO", x + width / 2, y + height / 2);
+    overlayCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    overlayCtx.fillRect(x, y, width, height);
+    overlayCtx.fillStyle = "#FF0000";
+    overlayCtx.font = "bold 20px Arial";
+    overlayCtx.textAlign = "center";
+    overlayCtx.textBaseline = "middle";
+    overlayCtx.fillText("KO", x + width / 2, y + height / 2);
     return;
   }
   
@@ -340,8 +331,8 @@ for (let row = 0; row < boardState.length; row++) {
       const blockY = y + row * miniCellSize;
       // Fallback color is now gray (#808080) instead of black.
       const blockColor = blockColors[block] || "#808080";
-      ctx.fillStyle = blockColor;
-      ctx.fillRect(blockX, blockY, miniCellSize, miniCellSize);
+      overlayCtx.fillStyle = blockColor;
+      overlayCtx.fillRect(blockX, blockY, miniCellSize, miniCellSize);
     }
   }
 }
@@ -370,15 +361,10 @@ socket.on("BoardStatus", (data) => {
   // 次回の描画ループで反映される
 });
 
-// 初回の描画開始（例：サーバー接続時など）
-socket.on("connect", () => {
-  console.log("✅ サーバーに接続:", socket.id);
-  joinRoom();   // ルーム参加などの初期処理
-  draw();       // 描画ループ開始
-});
 
 
-let connectionError = false;
+
+export let connectionError = false;
 
 // (b) In the window blur event listener, set the new flag and call drawConnectError:
 window.addEventListener("blur", () => {
@@ -391,27 +377,56 @@ window.addEventListener("blur", () => {
     }
 });
 
-function drawConnectError() {
+export function drawConnectError() {
   // Do not call draw() here so that the error message remains visible.
   // Draw an overlay on the existing canvas:
-  ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; // 50% transparent black
-  ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+  overlayCtx.fillStyle = "rgba(0, 0, 0, 0.5)"; // 50% transparent black
+  overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   
   const attackBarWidth = 30, gap = 20;
   const boardWidth = CONFIG.board.cols * CONFIG.board.cellSize;
   const boardHeight = CONFIG.board.visibleRows * CONFIG.board.cellSize;
   const totalWidth = attackBarWidth + gap + boardWidth;
-  const startX = (canvasElement.width - totalWidth) / 2;
+  const startX = (overlayCanvas.width - totalWidth) / 2;
   const attackBarX = startX;
-  const boardY = (canvasElement.height - boardHeight) / 2;
+  const boardY = (overlayCanvas.height - boardHeight) / 2;
   
-  ctx.strokeStyle = '#000';
-  ctx.strokeRect(attackBarX, boardY, attackBarWidth, boardHeight);
+  overlayCtx.strokeStyle = '#000';
+  overlayCtx.strokeRect(attackBarX, boardY, attackBarWidth, boardHeight);
   
   // Draw error message
-  ctx.fillStyle = "#FFF"; // White text
-  ctx.font = "bold 40px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("通信エラーが発生しました", canvasElement.width / 2, canvasElement.height / 2);
+  overlayCtx.fillStyle = "#FFF"; // White text
+  overlayCtx.font = "bold 40px Arial";
+  overlayCtx.textAlign = "center";
+  overlayCtx.textBaseline = "middle";
+  overlayCtx.fillText("通信エラーが発生しました", overlayCanvas.width / 2, overlayCanvas.height / 2);
+}
+
+function getBoardWithCurrentPiece() {
+  const boardCopy = board.map(row => row.slice());
+  const shape = currentPiece.shape[currentPiece.rotation];
+  shape.forEach(([dx, dy]) => {
+    const x = currentPiece.x + dx;
+    const y = currentPiece.y + dy;
+    if (y >= 0 && y < boardCopy.length && x >= 0 && x < boardCopy[0].length) {
+      boardCopy[y][x] = currentPiece.type;
+    }
+  });
+  return boardCopy;
+}
+
+function getGameStateJSON() {
+  const state = {
+    board: getBoardWithCurrentPiece(),
+  };
+  return JSON.stringify(state);
+}
+
+export function sendBoardStatus() {
+  const state = getGameStateJSON();
+  const stateWithUserId = {
+    UserID: socket.id,
+    ...JSON.parse(state)
+  };
+  socket.emit("BoardStatus", stateWithUserId);
 }
