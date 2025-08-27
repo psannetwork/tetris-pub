@@ -213,6 +213,19 @@ let nextMiniBoardIndex = 0;
 const miniBoardsData = [];           // ミニボードのグリッド情報
 const lastBoardStates = {};          // ユーザーごとの最新の boardState を保存
 const miniCellSize = Math.floor(CONFIG.board.cellSize * 0.15);
+let lastSentBoard = Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0));
+
+function getBoardDiff(oldBoard, newBoard) {
+  const diff = [];
+  for (let r = 0; r < newBoard.length; r++) {
+    for (let c = 0; c < newBoard[r].length; c++) {
+      if (oldBoard[r][c] !== newBoard[r][c]) {
+        diff.push({ r: r, c: c, val: newBoard[r][c] });
+      }
+    }
+  }
+  return diff;
+}
 
 
 // 毎フレーム呼ばれる描画ループ
@@ -342,11 +355,25 @@ for (let row = 0; row < boardState.length; row++) {
 
 // socket.io 側の処理
 socket.on("BoardStatus", (data) => {
-  // 受信データは { UserID, board } を想定
-  const { UserID, board } = data;
+  // 受信データは { UserID, board } または { UserID, diff } を想定
+  const { UserID, board: fullBoard, diff } = data;
   
-  // 最新の boardState を保存
-  lastBoardStates[UserID] = board;
+  if (!lastBoardStates[UserID]) {
+    // If this is the first time we're seeing this user, or if we need a full sync
+    lastBoardStates[UserID] = Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0));
+  }
+
+  if (fullBoard) {
+    // Full board update
+    lastBoardStates[UserID] = fullBoard;
+  } else if (diff) {
+    // Apply diff to the existing board state
+    diff.forEach(({ r, c, val }) => {
+      if (lastBoardStates[UserID][r] && lastBoardStates[UserID][r][c] !== undefined) {
+        lastBoardStates[UserID][r][c] = val;
+      }
+    });
+  }
   
   // 初回の場合は、miniBoard を割り当てる
   if (!userMiniBoardMapping[UserID]) {
@@ -423,10 +450,15 @@ function getGameStateJSON() {
 }
 
 export function sendBoardStatus() {
-  const state = getGameStateJSON();
-  const stateWithUserId = {
-    UserID: socket.id,
-    ...JSON.parse(state)
-  };
-  socket.emit("BoardStatus", stateWithUserId);
+  const currentBoard = getBoardWithCurrentPiece();
+  const diff = getBoardDiff(lastSentBoard, currentBoard);
+
+  if (diff.length > 0) { // Only send if there are changes
+    const stateWithUserId = {
+      UserID: socket.id,
+      diff: diff
+    };
+    socket.emit("BoardStatus", stateWithUserId);
+    lastSentBoard = currentBoard.map(row => row.slice()); // Update lastSentBoard
+  }
 }
