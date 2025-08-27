@@ -1,32 +1,29 @@
 'use strict';
 const io = require('socket.io-client');
-const fs = require('fs');
-const path = require('path');
-
 const AUTO_REMATCH = true;
 const BOT_COUNT = 30;
 const BOT_MOVE_DELAY = 400;
 const MOVE_ANIMATION_DELAY = 100;
 const SOFT_DROP_DELAY = 100;
 const SERVER_URL = 'http://localhost:6000';
-const dataDir = './data';
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir);
+
+let lastPieceType = null;
 
 const BASE_AI_PARAMETERS = {
-  weightAggregateHeight: -0.8,
-  weightBumpiness: -0.2,
-  weightHoles: -3.0,
-  weightUpperRisk: -1.0,
-  weightMiddleOpen: 1.9,
-  weightLowerPlacement: 0.7,
-  weightUpperPlacement: -0.5,
-  weightEdgePenalty: -0.2,
-  holeDepthFactor: 0.3,
-  lowerHoleFactor: 0.5,
-  contiguousHoleFactor: 0.5,
-  maxHeightPenaltyFactor: 0.1,
-  bumpinessFactor: 1.0,
-  wellFactor: -0.7
+  weightAggregateHeight: -1.0,
+  weightBumpiness: -0.5,
+  weightHoles: -5.0,
+  weightUpperRisk: -2.0,
+  weightMiddleOpen: 2.5,
+  weightLowerPlacement: 1.0,
+  weightUpperPlacement: -1.0,
+  weightEdgePenalty: -0.5,
+  holeDepthFactor: 0.5,
+  lowerHoleFactor: 0.7,
+  contiguousHoleFactor: 0.7,
+  maxHeightPenaltyFactor: 0.2,
+  bumpinessFactor: 1.5,
+  wellFactor: -1.0
 };
 
 const tetrominoes = {
@@ -68,7 +65,14 @@ function createEmptyBoard() {
 
 function spawnPiece() {
   const types = Object.keys(tetrominoes);
-  const t = types[Math.floor(Math.random() * types.length)];
+  let t = types[Math.floor(Math.random() * types.length)];
+
+  // Prevent consecutive identical pieces
+  while (t === lastPieceType) {
+    t = types[Math.floor(Math.random() * types.length)];
+  }
+  lastPieceType = t; // Update the last piece type
+
   return { type: t, base: tetrominoes[t].base, ...tetrominoes[t].spawn, orientation: 0, rotated: false };
 }
 
