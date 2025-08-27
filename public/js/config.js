@@ -71,7 +71,7 @@ export const CONFIG = {
     debug: {
       enableGarbage: true
     },
-    serverUrl: 'https://special-doodle-ggq6qrpxpgjhvp45-6000.app.github.dev/', // サーバーのアドレス
+    serverUrl: 'https://special-doodle-ggq6qrpxpgjhvp45-6000.app.github.dev', // サーバーのアドレス
 
   TETROMINOES: {
     I: {
