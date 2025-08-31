@@ -8,22 +8,7 @@ const SERVER_URL = 'http://localhost:6000';
 
 let lastPieceType = null;
 
-const BASE_AI_PARAMETERS = {
-  weightAggregateHeight: -1.0,
-  weightBumpiness: -0.5,
-  weightHoles: -5.0,
-  weightUpperRisk: -2.0,
-  weightMiddleOpen: 2.5,
-  weightLowerPlacement: 1.0,
-  weightUpperPlacement: -1.0,
-  weightEdgePenalty: -0.5,
-  holeDepthFactor: 0.5,
-  lowerHoleFactor: 0.7,
-  contiguousHoleFactor: 0.7,
-  maxHeightPenaltyFactor: 0.2,
-  bumpinessFactor: 1.5,
-  wellFactor: -1.0
-};
+const { BASE_AI_PARAMETERS } = require('./parameters.js');
 
 const tetrominoes = {
   I: { base: [[0,0],[1,0],[2,0],[3,0]], spawn: { x:3,y:0 } },
@@ -331,6 +316,7 @@ class TetrisBot {
     this.socket = socket;
     this.isLocal = !!socket;
     this.matched = false;
+    this.isGameOver = false;
     this.connect();
   }
 
@@ -349,9 +335,13 @@ class TetrisBot {
         this.pendingGarbage = (this.pendingGarbage || 0) + (parseInt(lines, 10) || 0);
     });
     this.socket.on('StartGame', () => this.startGame());
+    this.socket.on('GameOver', () => {
+        this.isGameOver = true;
+    });
   }
 
   startGame() {
+    this.isGameOver = false;
     this.board=createEmptyBoard();
     this.currentPiece=spawnPiece();
     this.pendingGarbage=0;
@@ -360,12 +350,13 @@ class TetrisBot {
   }
 
   async playLoop() {
-    while(isValidPosition(this.currentPiece,this.board,0,0)) {
+    while(isValidPosition(this.currentPiece,this.board,0,0) && !this.isGameOver) {
       const best=this.findBestMove();
       if(best) await this.animateMove(best);
       else hardDrop(this.currentPiece,this.board);
       mergePiece(this.currentPiece,this.board);
       const cleared=clearLines(this.board);
+      this.gameStats.totalCleared += cleared;
       this.gameStats.renChain=cleared?this.gameStats.renChain+1:0;
       const boardCopy=this.board.map(r=>r.slice());
       const sendG=computeSendGarbage(this.currentPiece,cleared,this.gameStats.renChain,boardCopy);
@@ -377,11 +368,6 @@ class TetrisBot {
       await delay(BOT_MOVE_DELAY);
     }
     this.socket.emit('PlayerGameStatus','gameover');
-    if (this.isLocal) {
-        this.socket.emit('disconnect', 'game over');
-    } else {
-        this.socket.disconnect();
-    }
     if(AUTO_REMATCH) {
         setTimeout(() => {
             if (this.isLocal) {

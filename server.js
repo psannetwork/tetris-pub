@@ -8,7 +8,7 @@ const { rooms } = require("./server/room.js");
 const EventEmitter = require('events');
 
 // --- Bot Configuration ---
-const ENABLE_BOTS = true;
+const ENABLE_BOTS = false;
 const BOT_COUNT = 30;
 // -------------------------
 

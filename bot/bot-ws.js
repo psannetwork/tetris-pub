@@ -9,22 +9,7 @@ const SERVER_URL = 'http://localhost:6000';
 
 let lastPieceType = null;
 
-const BASE_AI_PARAMETERS = {
-  weightAggregateHeight: -1.0,
-  weightBumpiness: -0.5,
-  weightHoles: -5.0,
-  weightUpperRisk: -2.0,
-  weightMiddleOpen: 2.5,
-  weightLowerPlacement: 1.0,
-  weightUpperPlacement: -1.0,
-  weightEdgePenalty: -0.5,
-  holeDepthFactor: 0.5,
-  lowerHoleFactor: 0.7,
-  contiguousHoleFactor: 0.7,
-  maxHeightPenaltyFactor: 0.2,
-  bumpinessFactor: 1.5,
-  wellFactor: -1.0
-};
+const { BASE_AI_PARAMETERS } = require('./parameters.js');
 
 const tetrominoes = {
   I: { base: [[0,0],[1,0],[2,0],[3,0]], spawn: { x:3,y:0 } },
@@ -325,12 +310,15 @@ function computeSendGarbage(piece,linesCleared,renChain,boardAfterClear) {
 }
 
 class TetrisBot {
-  constructor(index,strength,aiParams) {
+  constructor(index,strength,aiParams, onGameOver = null, enableAnimation = true, moveDelay = BOT_MOVE_DELAY) {
     this.index=index;
     this.strength=strength;
     this.aiParams={...aiParams};
     this.socket=null;
     this.matched=false;
+    this.onGameOver = onGameOver;
+    this.enableAnimation = enableAnimation;
+    this.moveDelay = moveDelay;
     this.connect();
   }
 
@@ -347,6 +335,12 @@ class TetrisBot {
       this.pendingGarbage = (this.pendingGarbage||0) + (parseInt(lines,10)||0);
     });
     this.socket.on('StartGame',()=>this.startGame());
+    this.socket.on('GameOver',()=>{
+        if (this.onGameOver) {
+            this.onGameOver(this.gameStats.totalCleared);
+        }
+        this.socket.disconnect();
+    });
   }
 
   startGame() {
@@ -364,6 +358,7 @@ class TetrisBot {
       else hardDrop(this.currentPiece,this.board);
       mergePiece(this.currentPiece,this.board);
       const cleared=clearLines(this.board);
+      this.gameStats.totalCleared += cleared;
       this.gameStats.renChain=cleared?this.gameStats.renChain+1:0;
       const boardCopy=this.board.map(r=>r.slice());
       const sendG=computeSendGarbage(this.currentPiece,cleared,this.gameStats.renChain,boardCopy);
@@ -372,11 +367,15 @@ class TetrisBot {
       if(this.pendingGarbage>0) this.applyGarbage();
       this.currentPiece=spawnPiece();
       if(!isValidPosition(this.currentPiece,this.board,0,0)) break;
-      await delay(BOT_MOVE_DELAY);
+      await delay(this.moveDelay);
     }
     this.socket.emit('PlayerGameStatus','gameover');
     this.socket.disconnect();
-    if(AUTO_REMATCH) setTimeout(()=>this.connect(),10000);
+    if (this.onGameOver) {
+        this.onGameOver(this.gameStats.totalCleared);
+    } else if(AUTO_REMATCH) {
+        setTimeout(()=>this.connect(),10000);
+    }
   }
 
   applyGarbage() {
@@ -400,7 +399,9 @@ class TetrisBot {
       else if(mv==='CCW') next=moveRotateCCW(this.currentPiece,this.board);
       if(next) Object.assign(this.currentPiece,next);
       this.socket.emit('BoardStatus',{UserID:this.socket.id,board:drawBoard(this.board,this.currentPiece)});
-      await delay(MOVE_ANIMATION_DELAY);
+      if (this.enableAnimation) {
+        await delay(MOVE_ANIMATION_DELAY);
+      }
     }
     hardDrop(this.currentPiece,this.board);
   }
@@ -421,4 +422,4 @@ class TetrisBot {
   }
 }
 
-for(let i=1;i<=BOT_COUNT;i++) new TetrisBot(i,Math.floor(Math.random()*101),BASE_AI_PARAMETERS);
+module.exports = { TetrisBot };
