@@ -109,12 +109,15 @@ function handleGameOver(io, socket, reason) {
         ranks.push(socket.id);
     }
 
+    // Ensure the player is removed from active players immediately
+    // The player is now ranked, so they are no longer "active" in the game.
+    // We can remove them from playerRoom here, as it's no longer needed for active player count.
     playerRoom.delete(socket.id);
 
-    const totalPlayers = room.totalPlayers || room.initialPlayers.size;
-    const activePlayers = [...room.players].filter(p => playerRoom.has(p));
+    // Calculate active players based on initial players minus those already ranked
+    const activePlayersCount = room.initialPlayers.size - ranks.length;
 
-    if (activePlayers.length <= 1) {
+    if (activePlayersCount <= 1) {
         const allPlayersInRankOrder = [...ranks];
         const remaining = [...room.initialPlayers].find(id => !allPlayersInRankOrder.includes(id));
         if (remaining) {
@@ -129,7 +132,27 @@ function handleGameOver(io, socket, reason) {
 
         const rankingData = { ranking: finalRanks, yourRankMap };
         emitToRoom(io, room, "ranking", rankingData);
-        emitToRoom(io, room, "GameOver");
+
+        const winnerId = finalRanks[0]; // The first player in finalRanks is the winner
+
+        // Emit "YouWin" to the winner
+        if (bots.has(winnerId)) {
+            bots.get(winnerId).emit("YouWin");
+        } else {
+            io.to(winnerId).emit("YouWin");
+        }
+
+        // Emit "GameOver" to all other players (losers)
+        for (const playerId of room.initialPlayers) { // Iterate through initialPlayers to ensure all participants get a message
+            if (playerId !== winnerId) {
+                if (bots.has(playerId)) {
+                    bots.get(playerId).emit("GameOver");
+                } else {
+                    io.to(playerId).emit("GameOver");
+                }
+            }
+        }
+        emitToSpectators(io, room.roomId, "GameOver"); // Spectators still get generic GameOver
 
         room.isGameOver = true;
         setTimeout(() => {
@@ -145,7 +168,7 @@ function handleGameOver(io, socket, reason) {
     const yourRankMap = Object.fromEntries(
         [...room.initialPlayers].map(id => {
             const rankIndex = tempRanks.indexOf(id);
-            return [id, rankIndex !== -1 ? rankIndex + activePlayers.length + 1 : null];
+            return [id, rankIndex !== -1 ? rankIndex + activePlayersCount + 1 : null];
         })
     );
 
