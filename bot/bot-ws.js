@@ -310,7 +310,7 @@ function computeSendGarbage(piece,linesCleared,renChain,boardAfterClear) {
 }
 
 class TetrisBot {
-  constructor(index,strength,aiParams, onGameOver = null, enableAnimation = true, moveDelay = BOT_MOVE_DELAY) {
+  constructor(index,strength,aiParams, onGameOver = null, enableAnimation = true, moveDelay = BOT_MOVE_DELAY, noReconnect = false) {
     this.index=index;
     this.strength=strength;
     this.aiParams={...aiParams};
@@ -319,12 +319,14 @@ class TetrisBot {
     this.onGameOver = onGameOver;
     this.enableAnimation = enableAnimation;
     this.moveDelay = moveDelay;
+    this.noReconnect = noReconnect;
     this.connect();
   }
 
   connect() {
     this.matched=false;
-    this.socket=io(SERVER_URL,{reconnection:true});
+    const opts = this.noReconnect ? { reconnection: false } : { reconnection: true };
+    this.socket=io(SERVER_URL, opts);
     this.socket.on('connect',()=>{
       if(!this.matched) {
         this.socket.emit('matching');

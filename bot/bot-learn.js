@@ -5,7 +5,7 @@ const { TetrisBot } = require('./bot-ws.js');
 const { BASE_AI_PARAMETERS } = require('./parameters.js');
 
 // --- Learning Parameters ---
-const POPULATION_SIZE = 50;
+const POPULATION_SIZE = 5;
 const GENERATIONS = 5;
 const MUTATION_RATE = 0.1;
 const MUTATION_AMOUNT = 0.2;
@@ -41,20 +41,25 @@ class BotTrainer {
     }
 
     async evaluatePopulation() {
-        console.log('🤖 Evaluating population...');
-        const gamePromises = this.population.map(individual => this.runGame(individual));
-        const results = await Promise.all(gamePromises);
-        for (let i = 0; i < this.population.length; i++) {
-            this.population[i].fitness = results[i];
-            console.log(`  - Bot ${this.population[i].id} | Fitness: ${this.population[i].fitness.toFixed(2)}`);
-        }
+        console.log(`🤖 Evaluating population... (Playing ${GAMES_PER_BOT} games per bot)`);
+        const evaluationPromises = this.population.map(async (individual) => {
+            const gamePromises = [];
+            for (let i = 0; i < GAMES_PER_BOT; i++) {
+                gamePromises.push(this.runGame(individual));
+            }
+            const scores = await Promise.all(gamePromises);
+            const totalScore = scores.reduce((a, b) => a + b, 0);
+            individual.fitness = totalScore / GAMES_PER_BOT;
+            console.log(`  - Bot ${individual.id} | Average Fitness: ${individual.fitness.toFixed(2)}`);
+        });
+        await Promise.all(evaluationPromises);
     }
 
     async runGame(individual) {
         return new Promise(resolve => {
             new TetrisBot(individual.id, 100, individual.params, (score) => {
                 resolve(score);
-            }, false, 100);
+            }, false, 100, true);
         });
     }
 
@@ -86,11 +91,14 @@ class BotTrainer {
         this.initializePopulation();
 
         for (let i = 0; i < GENERATIONS; i++) {
-            console.log(`\n--- Generation ${i + 1}/${GENERATIONS} ---
-`);
+            console.log(`\n--- Generation ${i + 1}/${GENERATIONS} ---\n`);
             await this.evaluatePopulation();
 
             const parents = this.selection();
+            const bestOfGeneration = this.population[0].params;
+            console.log(`🏆 Best of Generation ${i + 1}:`, bestOfGeneration);
+            saveParameters(bestOfGeneration);
+
             const newPopulation = [...parents];
 
             for (let j = 0; j < POPULATION_SIZE / 2; j++) {
@@ -108,6 +116,7 @@ class BotTrainer {
         const bestParams = this.population[0].params;
         console.log('🏆 Best parameters:', bestParams);
         saveParameters(bestParams);
+        process.exit(0);
     }
 }
 
