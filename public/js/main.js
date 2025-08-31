@@ -59,9 +59,8 @@ export function update(time = performance.now()) {
             requestAnimationFrame(update);
             return;
         }
-    } else {
-        currentPiece.lockDelay = 0;
     }
+    
 
     updateEffects();
     sendBoardStatus();

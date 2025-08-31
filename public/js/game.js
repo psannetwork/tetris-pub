@@ -6,6 +6,7 @@ import { attackBarSegments, getAttackBarSum, removeAttackBar, processFlashingGar
 
 export const LOCK_DELAY = 500;
 export const MAX_FLOOR_KICKS = 15;
+export const MAX_LOCK_DELAY_RESETS = 15;
 
 export let board;
 export let currentPiece;
@@ -57,7 +58,8 @@ export function createPiece(type) {
     floorKickCount: 0,
     lastKick: [0, 0],
     lastSRS: 0,
-    combo: 0
+    combo: 0,
+    lockDelayResets: 0
   };
 }
 
@@ -178,7 +180,12 @@ export function rotatePiece(piece, dir) {
 
     if (piece.type === 'O') {
         piece.rotation = newRotation;
-        piece.lockDelay = 0;
+        if (!isValidPosition(piece, 0, 1)) { // If piece is on the ground
+            if (piece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
+                piece.lockDelay = 0;
+                piece.lockDelayResets++;
+            }
+        }
         return;
     }
 
@@ -190,11 +197,19 @@ export function rotatePiece(piece, dir) {
 
         for (const [dx, dy] of offsets) {
             if (isValidPosition(piece, dx, dy, newRotation)) {
+                if (dx !== 0 || dy !== 0) { // Only count as a kick if there's an actual offset
+                    piece.floorKickCount++;
+                }
                 piece.x += dx;
                 piece.y += dy;
                 piece.rotation = newRotation;
                 piece.isRotation = true;
-                piece.lockDelay = 0;
+                if (!isValidPosition(piece, 0, 1)) { // If piece is on the ground
+                    if (piece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
+                        piece.lockDelay = 0;
+                        piece.lockDelayResets++;
+                    }
+                }
                 return;
             }
         }
@@ -204,9 +219,21 @@ export function rotatePiece(piece, dir) {
 
     if (isValidPosition(piece, 0, 0, newRotation)) {
         piece.rotation = newRotation;
-        piece.lockDelay = 0;
+        if (!isValidPosition(piece, 0, 1)) { // If piece is on the ground
+            if (piece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
+                piece.lockDelay = 0;
+                piece.lockDelayResets++;
+            }
+        }
         piece.isRotation = true;
         return;
+    }
+
+    // If we reach here, it means a direct rotation (0,0 offset) was not possible.
+    // Now try wall kicks.
+    if (piece.floorKickCount >= MAX_FLOOR_KICKS) {
+        piece.isRotation = false;
+        return; // Prevent further kicks if limit reached
     }
 
     switch (piece.rotation) {
@@ -218,11 +245,19 @@ export function rotatePiece(piece, dir) {
 
     for (const [dx, dy] of offsets) {
         if (isValidPosition(piece, dx, dy, newRotation)) {
+            if (dx !== 0 || dy !== 0) { // Only count as a kick if there's an actual offset
+                piece.floorKickCount++;
+            }
             piece.x += dx;
             piece.y += dy;
             piece.rotation = newRotation;
             piece.isRotation = true;
-            piece.lockDelay = 0;
+            if (!isValidPosition(piece, 0, 1)) { // If piece is on the ground
+                if (piece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
+                    piece.lockDelay = 0;
+                    piece.lockDelayResets++;
+                }
+            }
             return;
         }
     }
@@ -233,7 +268,12 @@ export function movePiece(offset) {
     if (isValidPosition(currentPiece, offset.x, offset.y)) {
         currentPiece.x += offset.x;
         currentPiece.y += offset.y;
-        currentPiece.lockDelay = 0;
+        if (!isValidPosition(currentPiece, 0, 1)) { // If piece is on the ground
+            if (currentPiece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
+                currentPiece.lockDelay = 0;
+                currentPiece.lockDelayResets++;
+            }
+        }
         currentPiece.isRotation = false;
     }
 }
