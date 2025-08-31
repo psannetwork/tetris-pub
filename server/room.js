@@ -1,4 +1,3 @@
-
 const MAX_PLAYERS = 99;
 const MIN_PLAYERS_TO_START = 2;
 const COUNTDOWN_START = 10;
@@ -8,6 +7,8 @@ const playerRoom = new Map();
 const playerRanks = new Map();
 const spectators = new Map();
 let roomCounter = 0;
+
+const { bots } = require('./bots.js');
 
 function createRoom(playerId) {
     roomCounter++;
@@ -45,6 +46,20 @@ function emitToSpectators(io, roomId, event, data) {
     }
 }
 
+// Unified function to emit to all players in a room (bots and real)
+function emitToRoom(io, room, event, data) {
+    // Create a temporary set of players to avoid issues if the set is modified during iteration
+    const playersToEmit = new Set(room.players);
+    for (const playerId of playersToEmit) {
+        if (bots.has(playerId)) {
+            bots.get(playerId).emit(event, data);
+        } else {
+            io.to(playerId).emit(event, data);
+        }
+    }
+    emitToSpectators(io, room.roomId, event, data);
+}
+
 function startCountdown(io, room) {
     if (!room || room.isCountingDown || room.isGameStarted) return;
     room.isCountingDown = true;
@@ -57,18 +72,16 @@ function startCountdown(io, room) {
             return;
         }
         if (room.players.size < MIN_PLAYERS_TO_START) {
-            if (room.players.size === 1 && room.countdownCount !== COUNTDOWN_START) {
+            if (room.players.size >= 1 && room.countdownCount !== COUNTDOWN_START) {
                 room.countdownCount = COUNTDOWN_START;
                 console.log(`🔄 Room ${room.roomId} countdown reset.`);
             }
             const msg = "プレイヤーを待機中です...";
-            io.to(room.roomId).emit("CountDown", msg);
-            emitToSpectators(io, room.roomId, "CountDown", msg);
+            emitToRoom(io, room, "CountDown", msg);
             return;
         }
 
-        io.to(room.roomId).emit("CountDown", room.countdownCount);
-        emitToSpectators(io, room.roomId, "CountDown", room.countdownCount);
+        emitToRoom(io, room, "CountDown", room.countdownCount);
         console.log(`⏳ Room ${room.roomId} countdown: ${room.countdownCount}`);
         room.countdownCount--;
 
@@ -77,8 +90,7 @@ function startCountdown(io, room) {
             room.isCountingDown = false;
             room.isGameStarted = true;
             room.totalPlayers = room.initialPlayers.size;
-            io.to(room.roomId).emit("StartGame");
-            emitToSpectators(io, room.roomId, "StartGame");
+            emitToRoom(io, room, "StartGame");
             console.log(`🎮 Room ${room.roomId} game started (totalPlayers: ${room.totalPlayers}).`);
         }
     }, 1000);
@@ -93,24 +105,31 @@ function handleGameOver(io, socket, reason) {
 
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
-    if (!ranks.includes(socket.id)) ranks.push(socket.id);
+    if (!ranks.includes(socket.id)) {
+        ranks.push(socket.id);
+    }
 
     playerRoom.delete(socket.id);
 
     const totalPlayers = room.totalPlayers || room.initialPlayers.size;
+    const activePlayers = [...room.players].filter(p => playerRoom.has(p));
 
-    if (ranks.length === totalPlayers - 1) {
-        const remaining = [...room.initialPlayers].find(id => !ranks.includes(id));
-        if (remaining) ranks.push(remaining);
+    if (activePlayers.length <= 1) {
+        const allPlayersInRankOrder = [...ranks];
+        const remaining = [...room.initialPlayers].find(id => !allPlayersInRankOrder.includes(id));
+        if (remaining) {
+            allPlayersInRankOrder.unshift(remaining);
+        }
+
+        const finalRanks = allPlayersInRankOrder.reverse();
 
         const yourRankMap = Object.fromEntries(
-            [...room.initialPlayers].map(id => [id, totalPlayers - ranks.indexOf(id)])
+            [...room.initialPlayers].map(id => [id, finalRanks.indexOf(id) + 1])
         );
 
-        io.to(room.roomId).emit("ranking", { ranking: ranks, yourRankMap });
-        emitToSpectators(io, room.roomId, "ranking", { ranking: ranks, yourRankMap });
-        io.to(room.roomId).emit("GameOver");
-        emitToSpectators(io, room.roomId, "GameOver");
+        const rankingData = { ranking: finalRanks, yourRankMap };
+        emitToRoom(io, room, "ranking", rankingData);
+        emitToRoom(io, room, "GameOver");
 
         room.isGameOver = true;
         setTimeout(() => {
@@ -122,19 +141,17 @@ function handleGameOver(io, socket, reason) {
         return;
     }
 
+    const tempRanks = [...ranks].reverse();
     const yourRankMap = Object.fromEntries(
-        [...room.initialPlayers].map(id => [
-            id,
-            ranks.includes(id)
-                ? totalPlayers - ranks.indexOf(id)
-                : (ranks.length === totalPlayers - 1 ? 1 : null)
-        ])
+        [...room.initialPlayers].map(id => {
+            const rankIndex = tempRanks.indexOf(id);
+            return [id, rankIndex !== -1 ? rankIndex + activePlayers.length + 1 : null];
+        })
     );
 
-    io.to(room.roomId).emit("ranking", { ranking: ranks, yourRankMap });
-    io.to(room.roomId).emit("playerKO", socket.id);
-    emitToSpectators(io, room.roomId, "ranking", { ranking: ranks, yourRankMap });
-    emitToSpectators(io, room.roomId, "playerKO", socket.id);
+    const rankingData = { ranking: ranks, yourRankMap };
+    emitToRoom(io, room, "ranking", rankingData);
+    emitToRoom(io, room, "playerKO", socket.id);
 }
 
 module.exports = {
@@ -146,5 +163,6 @@ module.exports = {
     getAvailableRoom,
     emitToSpectators,
     startCountdown,
-    handleGameOver
+    handleGameOver,
+    emitToRoom
 };

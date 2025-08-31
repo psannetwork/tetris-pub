@@ -3,8 +3,14 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const { initializeSocket } = require("./server/socket.js");
+const { initializeSocket, handleSocketConnection } = require("./server/socket.js");
 const { rooms } = require("./server/room.js");
+const EventEmitter = require('events');
+
+// --- Bot Configuration ---
+const ENABLE_BOTS = true;
+const BOT_COUNT = 30;
+// -------------------------
 
 const PORT = process.env.PORT || 6000;
 
@@ -32,6 +38,40 @@ app.get("/rooms", (req, res) => {
 });
 
 initializeSocket(io);
+
+// --- Bot Initialization ---
+if (ENABLE_BOTS) {
+    const { bots } = require('./server/bots.js');
+    const { TetrisBot, BASE_AI_PARAMETERS } = require('./bot/bot.js');
+
+    console.log(`🤖 Initializing ${BOT_COUNT} bots...`);
+
+    for (let i = 0; i < BOT_COUNT; i++) {
+        const botSocket = new EventEmitter();
+        botSocket.id = `bot_${i}`;
+        botSocket.isBot = true; // Flag to identify bot sockets
+
+        botSocket.join = (roomId) => {
+            if (!botSocket.rooms) botSocket.rooms = new Set();
+            botSocket.rooms.add(roomId);
+        };
+        botSocket.leave = (roomId) => {
+            if (botSocket.rooms) botSocket.rooms.delete(roomId);
+        };
+        
+        bots.set(botSocket.id, botSocket);
+
+        new TetrisBot(i, Math.floor(Math.random() * 101), BASE_AI_PARAMETERS, botSocket);
+
+        handleSocketConnection(io, botSocket);
+
+        setImmediate(() => {
+            botSocket.emit('matching');
+        });
+    }
+    console.log('🤖 All bots initialized.');
+}
+// --------------------------
 
 server.listen(PORT, () => {
   console.log(`🔥 Server running: http://localhost:${PORT}`);

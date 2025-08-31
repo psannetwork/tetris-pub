@@ -1,6 +1,7 @@
 'use strict';
 const io = require('socket.io-client');
 const AUTO_REMATCH = true;
+const BOT_COUNT = 30;
 const BOT_MOVE_DELAY = 400;
 const MOVE_ANIMATION_DELAY = 100;
 const SOFT_DROP_DELAY = 100;
@@ -324,31 +325,28 @@ function computeSendGarbage(piece,linesCleared,renChain,boardAfterClear) {
 }
 
 class TetrisBot {
-  constructor(index, strength, aiParams, socket) {
-    this.index = index;
-    this.strength = strength;
-    this.aiParams = { ...aiParams };
-    this.socket = socket;
-    this.isLocal = !!socket;
-    this.matched = false;
+  constructor(index,strength,aiParams) {
+    this.index=index;
+    this.strength=strength;
+    this.aiParams={...aiParams};
+    this.socket=null;
+    this.matched=false;
     this.connect();
   }
 
   connect() {
-    this.matched = false;
-    if (!this.isLocal) {
-        this.socket = io(SERVER_URL, { reconnection: true });
-    }
-    this.socket.on('connect', () => {
-        if (!this.matched) {
-            this.socket.emit('matching');
-            this.matched = true;
-        }
+    this.matched=false;
+    this.socket=io(SERVER_URL,{reconnection:true});
+    this.socket.on('connect',()=>{
+      if(!this.matched) {
+        this.socket.emit('matching');
+        this.matched=true;
+      }
     });
-    this.socket.on('ReceiveGarbage', ({ lines }) => {
-        this.pendingGarbage = (this.pendingGarbage || 0) + (parseInt(lines, 10) || 0);
+    this.socket.on('ReceiveGarbage',({lines})=>{
+      this.pendingGarbage = (this.pendingGarbage||0) + (parseInt(lines,10)||0);
     });
-    this.socket.on('StartGame', () => this.startGame());
+    this.socket.on('StartGame',()=>this.startGame());
   }
 
   startGame() {
@@ -377,20 +375,8 @@ class TetrisBot {
       await delay(BOT_MOVE_DELAY);
     }
     this.socket.emit('PlayerGameStatus','gameover');
-    if (this.isLocal) {
-        this.socket.emit('disconnect', 'game over');
-    } else {
-        this.socket.disconnect();
-    }
-    if(AUTO_REMATCH) {
-        setTimeout(() => {
-            if (this.isLocal) {
-                this.socket.emit('matching');
-            } else {
-                this.connect();
-            }
-        }, 10000);
-    }
+    this.socket.disconnect();
+    if(AUTO_REMATCH) setTimeout(()=>this.connect(),10000);
   }
 
   applyGarbage() {
@@ -435,14 +421,4 @@ class TetrisBot {
   }
 }
 
-module.exports = {
-    TetrisBot,
-    BASE_AI_PARAMETERS
-};
-
-if (require.main === module) {
-    const BOT_COUNT = process.env.BOT_COUNT || 1;
-    for (let i = 1; i <= BOT_COUNT; i++) {
-        new TetrisBot(i, Math.floor(Math.random() * 101), BASE_AI_PARAMETERS);
-    }
-}
+for(let i=1;i<=BOT_COUNT;i++) new TetrisBot(i,Math.floor(Math.random()*101),BASE_AI_PARAMETERS);
