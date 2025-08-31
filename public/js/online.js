@@ -377,12 +377,24 @@ socket.on("BoardStatus", (data) => {
   
   // 初回の場合は、miniBoard を割り当てる
   if (!userMiniBoardMapping[UserID]) {
+    // Ensure miniBoardsData is populated before trying to use it
+    if (miniBoardsData.length === 0) {
+      initMiniBoards(); // Populate miniBoardsData if it's empty
+    }
+
     if (nextMiniBoardIndex < miniBoardsData.length) {
       userMiniBoardMapping[UserID] = miniBoardsData[nextMiniBoardIndex].id;
       nextMiniBoardIndex++;
     } else {
       console.warn("利用可能なミニボードが足りません。最初のボードを再利用します。");
-      userMiniBoardMapping[UserID] = miniBoardsData[0].id;
+      // This line caused the error if miniBoardsData was empty
+      if (miniBoardsData.length > 0) { // Add a check here as well
+        userMiniBoardMapping[UserID] = miniBoardsData[0].id;
+      } else {
+        console.error("Error: miniBoardsData is still empty after initialization attempt.");
+        // Potentially handle this more robustly, e.g., by not assigning a mini-board
+        // or by retrying initialization. For now, just log the error.
+      }
     }
   }
   // 次回の描画ループで反映される

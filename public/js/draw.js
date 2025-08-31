@@ -20,6 +20,43 @@ export function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+// Helper to convert hex to RGB
+function hexToRgb(hex) {
+    const bigint = parseInt(hex.slice(1), 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return { r, g, b };
+}
+
+// Helper to lighten/darken a color
+function lightenDarkenColor(col, amt) {
+    let usePound = false;
+    if (col[0] === "#") {
+        col = col.slice(1);
+        usePound = true;
+    }
+    const num = parseInt(col, 16);
+    let r = (num >> 16) + amt;
+    if (r > 255) r = 255;
+    else if (r < 0) r = 0;
+    let b = ((num >> 8) & 0x00FF) + amt;
+    if (b > 255) b = 255;
+    else if (b < 0) b = 0;
+    let g = (num & 0x0000FF) + amt;
+    if (g > 255) g = 255;
+    else if (g < 0) g = 0;
+    return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16).padStart(6, '0');
+}
+
+// Helper to get a gradient for a block
+function getGradientColor(ctx, baseColor, x, y, width, height) {
+    const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
+    gradient.addColorStop(0, lightenDarkenColor(baseColor, 30)); // Lighter at top-left
+    gradient.addColorStop(1, lightenDarkenColor(baseColor, -30)); // Darker at bottom-right
+    return gradient;
+}
+
 function tetrominoTypeToIndex(type) {
     switch (type) {
         case 'I': return 1;
@@ -48,9 +85,11 @@ function drawMiniPiece(ctx, piece, posX, posY, cs) {
     shape.forEach(([x, y]) => {
         const drawX = posX + (x + offsetX) * cs;
         const drawY = posY + (y + offsetY) * cs;
-        ctx.fillStyle = piece.color;
+        const gradient = getGradientColor(ctx, piece.color, drawX, drawY, cs, cs);
+        ctx.fillStyle = gradient;
         ctx.fillRect(drawX, drawY, cs, cs);
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = '#FFF'; // Lighter border color
+        ctx.lineWidth = CONFIG.tetromino.borderWidth; // Use configurable border width
         ctx.strokeRect(drawX, drawY, cs, cs);
     });
 }
@@ -98,11 +137,21 @@ export function drawGame() {
         for (let c = 0; c < CONFIG.board.cols; c++) {
             const cell = board[r][c];
             if (cell !== 0) {
-                gameCtx.fillStyle = cell === 'G' ? '#555' : CONFIG.colors.tetromino[tetrominoTypeToIndex(cell)];
+                if (cell !== 'G') {
+                    const baseColor = CONFIG.colors.tetromino[tetrominoTypeToIndex(cell)];
+                    const gradient = getGradientColor(gameCtx, baseColor,
+                        boardX + c * CONFIG.board.cellSize,
+                        boardY + (r - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CONFIG.board.cellSize,
+                        CONFIG.board.cellSize, CONFIG.board.cellSize);
+                    gameCtx.fillStyle = gradient;
+                } else {
+                    gameCtx.fillStyle = '#555'; // Garbage blocks remain solid
+                }
                 gameCtx.fillRect(boardX + c * CONFIG.board.cellSize,
                     boardY + (r - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CONFIG.board.cellSize,
                     CONFIG.board.cellSize, CONFIG.board.cellSize);
-                gameCtx.strokeStyle = '#000';
+                gameCtx.strokeStyle = '#FFF'; // Lighter border color
+                gameCtx.lineWidth = CONFIG.tetromino.borderWidth; // Use configurable border width
                 gameCtx.strokeRect(boardX + c * CONFIG.board.cellSize,
                     boardY + (r - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CONFIG.board.cellSize,
                     CONFIG.board.cellSize, CONFIG.board.cellSize);
@@ -130,10 +179,16 @@ export function drawGame() {
         currentPiece.shape[currentPiece.rotation].forEach(([dx, dy]) => {
             const x = currentPiece.x + dx, y = currentPiece.y + dy;
             if (y >= 0) {
+                const gradient = getGradientColor(gameCtx, currentPiece.color,
+                    boardX + x * CONFIG.board.cellSize,
+                    boardY + (y - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CONFIG.board.cellSize,
+                    CONFIG.board.cellSize, CONFIG.board.cellSize);
+                gameCtx.fillStyle = gradient;
                 gameCtx.fillRect(boardX + x * CONFIG.board.cellSize,
                     boardY + (y - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CONFIG.board.cellSize,
                     CONFIG.board.cellSize, CONFIG.board.cellSize);
-                gameCtx.strokeStyle = '#000';
+                gameCtx.strokeStyle = '#FFF'; // Lighter border color
+                gameCtx.lineWidth = CONFIG.tetromino.borderWidth; // Use configurable border width
                 gameCtx.strokeRect(boardX + x * CONFIG.board.cellSize,
                     boardY + (y - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CONFIG.board.cellSize,
                     CONFIG.board.cellSize, CONFIG.board.cellSize);

@@ -1,18 +1,18 @@
 const BASE_AI_PARAMETERS = {
-  "weightAggregateHeight": -0.0023898858365009107,
-  "weightBumpiness": -0.08694760351155076,
-  "weightHoles": -14.729225607524917,
-  "weightUpperRisk": -5.558982706775383,
-  "weightMiddleOpen": 0.6156777439022475,
-  "weightLowerPlacement": 0.00007882663453159237,
-  "weightUpperPlacement": -0.0858374155813912,
-  "weightEdgePenalty": -0.37684529847362624,
-  "holeDepthFactor": 0.054228906218292065,
-  "lowerHoleFactor": 0.007435928195929443,
-  "contiguousHoleFactor": 2.03219045347795,
-  "maxHeightPenaltyFactor": 0.013286585765184168,
-  "bumpinessFactor": 11.421315577229617,
-  "wellFactor": -1.1755637067833866
+  "weightAggregateHeight": -0.00400167300736504,
+  "weightBumpiness": -0.11472032141563306,
+  "weightHoles": -11.232296738589264,
+  "weightUpperRisk": -2.8404450288547336,
+  "weightMiddleOpen": 0.6528075787196873,
+  "weightLowerPlacement": 0.00006432898422159379,
+  "weightUpperPlacement": -0.12268101146801394,
+  "weightEdgePenalty": -0.2229612413624879,
+  "holeDepthFactor": 0.07599490991737926,
+  "lowerHoleFactor": 0.009725769640196606,
+  "contiguousHoleFactor": 3.2437440284965926,
+  "maxHeightPenaltyFactor": 0.025423061156899813,
+  "bumpinessFactor": 13.099911247704439,
+  "wellFactor": -1.9304921298690974
 };
 
 module.exports = { BASE_AI_PARAMETERS };

@@ -27,18 +27,18 @@ export const CONFIG = {
   },
     // パレット（tetrominoの色、ゴースト、エフェクト色）
     colors: {
-      background: "#222",
-      boardBackground: "#111",
+      background: "#333",
+      boardBackground: "#222",
       // インデックス： 1:I, 2:J, 3:L, 4:O, 5:S, 6:T, 7:Z
       tetromino: [
         null,
-        "#00f0f0", // I
-        "#0000f0", // J
-        "#f0a000", // L
-        "#f0f000", // O
-        "#00f000", // S
-        "#a000f0", // T
-        "#f00000"  // Z
+        "#00FFFF", // I (Aqua)
+        "#0000FF", // J (Blue)
+        "#FFA500", // L (Orange)
+        "#FFFF00", // O (Yellow)
+        "#00FF00", // S (Lime)
+        "#800080", // T (Purple)
+        "#FF0000"  // Z (Red)
       ],
       ghost: "rgba(255,255,255,0.3)",
       lineClear: "rgba(0, 255, 255, 0.7)"
@@ -81,7 +81,7 @@ export const CONFIG = {
         [[-1, 1], [0, 1], [1, 1], [2, 1]],
         [[0, -1], [0, 0], [0, 1], [0, 2]]
       ],
-      color: "#00f0f0"
+      color: "#00FFFF"
     },
     J: {
       shape: [
@@ -90,7 +90,7 @@ export const CONFIG = {
         [[-1, 0], [0, 0], [1, 0], [1, 1]],
         [[-1, 1], [0, -1], [0, 0], [0, 1]]
       ],
-      color: "#0000f0"
+      color: "#0000FF"
     },
     L: {
       shape: [
@@ -99,7 +99,7 @@ export const CONFIG = {
         [[-1, 0], [0, 0], [1, 0], [-1, 1]],
         [[-1, -1], [0, -1], [0, 0], [0, 1]]
       ],
-      color: "#f0a000"
+      color: "#FFA500"
     },
     O: {
       shape: [
@@ -108,7 +108,7 @@ export const CONFIG = {
         [[0, 0], [1, 0], [0, 1], [1, 1]],
         [[0, 0], [1, 0], [0, 1], [1, 1]]
       ],
-      color: "#f0f000"
+      color: "#FFFF00"
     },
     S: {
       shape: [
@@ -117,7 +117,7 @@ export const CONFIG = {
         [[0, 0], [1, 0], [-1, 1], [0, 1]],
         [[-1, -1], [-1, 0], [0, 0], [0, 1]]
       ],
-      color: "#00f000"
+      color: "#00FF00"
     },
     T: {
       shape: [
@@ -126,7 +126,7 @@ export const CONFIG = {
         [[-1, 0], [0, 0], [1, 0], [0, 1]],
         [[0, -1], [-1, 0], [0, 0], [0, 1]]
       ],
-      color: "#a000f0"
+      color: "#800080"
     },
     Z: {
       shape: [
@@ -135,7 +135,7 @@ export const CONFIG = {
         [[-1, 0], [0, 0], [0, 1], [1, 1]],
         [[0, -1], [-1, 0], [0, 0], [-1, 1]]
       ],
-      color: "#f00000"
+      color: "#FF0000"
     }
   }
   };
