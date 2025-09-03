@@ -1,13 +1,16 @@
 
 import { CONFIG } from './config.js';
-import { triggerLineClearEffect, triggerTspinEffect } from './effects.js';
-import { sendGarbage } from './online.js';
+import { triggerLineClearEffect, triggerTspinEffect, triggerLockPieceEffect, triggerScoreUpdateEffect } from './effects.js';
+import { sendGarbage, socket } from './online.js'; // Import socket
 import { attackBarSegments, getAttackBarSum, removeAttackBar, processFlashingGarbage } from './garbage.js';
+import { showGameEndScreen } from './ui.js';
+import { triggerScreenShake, CELL_SIZE, tetrominoTypeToIndex } from './draw.js';
 
 export const LOCK_DELAY = 500;
 export const MAX_FLOOR_KICKS = 15;
 export const MAX_LOCK_DELAY_RESETS = 15;
 
+export let gameState = 'LOBBY'; // LOBBY, PLAYING, GAME_OVER
 export let board;
 export let currentPiece;
 export let holdPiece = null;
@@ -19,9 +22,12 @@ export let isGameOver = false;
 export let isGameClear = false;
 export let previousClearWasB2B = false;
 export let isClearing = false;
-export let isGameStarted = false;
 export let pieceBag = [];
 export let nextPieces = [];
+
+export function setGameState(newState) {
+    gameState = newState;
+}
 
 export function createBoard() {
   const b = [];
@@ -51,7 +57,7 @@ export function createPiece(type) {
     shape: t.shape,
     rotation: 0,
     x: Math.floor(CONFIG.board.cols / 2),
-    y: -1,
+    y: 0,
     color: t.color,
     isRotation: false,
     lockDelay: 0,
@@ -83,14 +89,10 @@ export function getNextPieceFromBag() {
 export function initializePieces() {
     refillBag(); // Ensure pieceBag is populated
     currentPiece = getNextPieceFromBag();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < CONFIG.game.nextPiecesCount; i++) {
         nextPieces.push(getNextPieceFromBag());
     }
-    isGameStarted = true;
 }
-
-
-
 
 export function mergePiece(piece) {
   const shape = piece.shape[piece.rotation];
@@ -121,7 +123,7 @@ export function clearLines() {
         case 3: pts = CONFIG.scoring.triple; break;
         case 4: pts = CONFIG.scoring.tetris; break;
       }
-      score += pts;
+      if (pts > 0) triggerScoreUpdateEffect();
       linesCleared += lines.length;
       removeAttackBar(lines.length);
     }, CONFIG.effects.lineClearDuration);
@@ -285,6 +287,8 @@ export function hardDrop() {
         d++;
     }
     score += d * CONFIG.scoring.drop;
+    if (d > 0) triggerScoreUpdateEffect();
+    triggerScreenShake(4, 150);
     lockPiece();
 }
 
@@ -302,14 +306,52 @@ export function hold() {
     currentPiece.rotation = 0;
     currentPiece.isRotation = false;
     currentPiece.x = Math.floor(CONFIG.board.cols / 2);
-    currentPiece.y = -1;
+    currentPiece.y = 0;
     currentPiece.lockDelay = 0;
     holdUsed = true;
+
+    // Check for game over after hold
+    if (!isValidPosition(currentPiece, 0, 0)) {
+        console.log("Game Over condition: Piece blocked immediately after hold.");
+        const shape = currentPiece.shape[currentPiece.rotation];
+        const isBlockedInSpawn = shape.some(([dx, dy]) => {
+            const y = currentPiece.y + dy;
+            return y < CONFIG.board.rows - CONFIG.board.visibleRows;
+        });
+
+        if (isBlockedInSpawn) {
+            console.log("Game Over reason: Piece blocked in spawn area after hold.");
+            triggerGameOver();
+        }
+    }
 }
 
 export function triggerGameOver() {
+    console.log("triggerGameOver() called.");
+    setGameState('GAME_OVER');
     isGameOver = true;
     console.log("Game Over!");
+    socket.emit('PlayerGameStatus', 'gameover');
+    showGameEndScreen('Game Over');
+}
+
+export function resetGame() {
+    board = createBoard();
+    currentPiece = null;
+    holdPiece = null;
+    holdUsed = false;
+    score = 0;
+    level = 1;
+    linesCleared = 0;
+    isGameOver = false;
+    isGameClear = false;
+    previousClearWasB2B = false;
+    isClearing = false;
+    pieceBag = [];
+    nextPieces = [];
+    attackBarSegments.length = 0; // Clear attack bar
+    // Game state is NOT reset here, it's handled by the caller
+    initializePieces(); // Re-initialize pieces for a new game
 }
 
 export function isBoardEmpty(b) {
@@ -322,11 +364,21 @@ export function lockPiece() {
     const lockedPiece = currentPiece;
     mergePiece(lockedPiece);
 
+    const shape = lockedPiece.shape[lockedPiece.rotation];
+    const color = CONFIG.colors.tetromino[tetrominoTypeToIndex(lockedPiece.type)];
+    shape.forEach(([dx, dy]) => {
+        const x = (lockedPiece.x + dx) * CELL_SIZE;
+        const y = (lockedPiece.y + dy - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CELL_SIZE;
+        triggerLockPieceEffect(x + CELL_SIZE / 2, y + CELL_SIZE / 2, color);
+    });
+
     let tSpin = { detected: false, mini: false };
     if (lockedPiece.type === 'T') {
         tSpin = detectTSpin(lockedPiece);
         if (tSpin.detected) {
-            score += tSpin.mini ? CONFIG.scoring.tspinMini : CONFIG.scoring.tspin;
+            const tSpinScore = tSpin.mini ? CONFIG.scoring.tspinMini : CONFIG.scoring.tspin;
+            score += tSpinScore;
+            if (tSpinScore > 0) triggerScoreUpdateEffect();
             triggerTspinEffect(lockedPiece.x, lockedPiece.y);
         }
     }
@@ -358,6 +410,7 @@ export function lockPiece() {
                 case 4: pts = CONFIG.scoring.tetris; break;
             }
             score += pts;
+      if (pts > 0) triggerScoreUpdateEffect();
             linesCleared += lines.length;
 
             let clearType;
@@ -379,7 +432,17 @@ export function lockPiece() {
 
             // Check for game over after a new piece is spawned
             if (!isValidPosition(currentPiece, 0, 0)) {
-                triggerGameOver();
+                console.log("Game Over condition: Piece blocked immediately after spawn (after line clear).");
+                const shape = currentPiece.shape[currentPiece.rotation];
+                const isBlockedInSpawn = shape.some(([dx, dy]) => {
+                    const y = currentPiece.y + dy;
+                    return y < CONFIG.board.rows - CONFIG.board.visibleRows;
+                });
+
+                if (isBlockedInSpawn) {
+                    console.log("Game Over reason: Piece blocked in spawn area after line clear.");
+                    triggerGameOver();
+                }
             }
         }, CONFIG.effects.lineClearDuration);
     } else {
@@ -395,7 +458,17 @@ export function lockPiece() {
 
         // Check for game over after a new piece is spawned
         if (!isValidPosition(currentPiece, 0, 0)) {
-            triggerGameOver();
+            console.log("Game Over condition: Piece blocked immediately after spawn (no line clear).");
+            const shape = currentPiece.shape[currentPiece.rotation];
+            const isBlockedInSpawn = shape.some(([dx, dy]) => {
+                const y = currentPiece.y + dy;
+                return y < CONFIG.board.rows - CONFIG.board.visibleRows;
+            });
+
+            if (isBlockedInSpawn) {
+                console.log("Game Over reason: Piece blocked in spawn area (no line clear).");
+                triggerGameOver();
+            }
         }
     }
 }
@@ -445,6 +518,7 @@ function getTargetBonus(targetCount) {
 export function sendFirepower(clearType, btb, ren, perfectClear, targetCount) {
     const total = calculateFirepower(clearType, btb, ren, perfectClear, targetCount);
     console.log(`Calculated firepower: ${total} (Clear: ${clearType}, B2B: ${btb ? '+1' : '0'}, REN Bonus applied, Target Bonus: +${getTargetBonus(targetCount || 0)})`);
+    console.log(`DEBUG: sendFirepower - clearType: ${clearType}, btb: ${btb}, ren: ${ren}, perfectClear: ${perfectClear}, targetCount: ${targetCount}, total: ${total}`);
     return total;
 }
 

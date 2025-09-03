@@ -126,6 +126,18 @@ function handleSocketConnection(io, socket) {
         console.log(`💥 ${socket.id} sent ${lines} garbage to ${recipient} in ${roomId}`);
     });
 
+    socket.on("requestRoomInfo", () => {
+        const roomId = playerRoom.get(socket.id);
+        if (roomId && rooms.has(roomId)) {
+            const room = rooms.get(roomId);
+            socket.join(roomId); // Re-join the room
+            emitToRoom(io, room, "roomInfo", {
+                roomId: room.roomId,
+                members: [...room.players]
+            });
+        }
+    });
+
     socket.on("disconnect", (reason) => {
         const roomId = playerRoom.get(socket.id);
         if (roomId && rooms.has(roomId)) {
