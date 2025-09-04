@@ -11,24 +11,32 @@
 <body>
 
   <div id="game-container">
+    <div class="game-panel-left">
+      <div id="hold-box"></div>
+      <div id="attack-bar"></div>
+    </div>
     <div id="main-game-board"></div>
-    <div id="attack-bar"></div>
-    <div id="hold-box"></div>
-    <div id="next-box"></div>
-    <div id="score-display"></div>
+    <div class="game-panel-right">
+      <div id="next-box"></div>
+      <div id="score-display"></div>
+    </div>
     <div id="miniboards-container"></div>
   </div>
 
   <div id="lobby-overlay">
-    <h1 class="lobby-title">Tetris Battle</h1>
-    <button id="start-button" class="lobby-button">Start Game</button>
+    <div class="overlay-content">
+      <h1 class="lobby-title">Tetris Battle</h1>
+      <button id="start-button" class="lobby-button">Start Game</button>
+    </div>
   </div>
 
   <div id="game-end-overlay">
-    <div id="game-end-message"></div>
-    <div class="game-end-buttons">
-      <button id="retry-button" aria-label="もう一度プレイ" tabindex="0">Retry</button>
-      <button id="lobby-button" aria-label="ロビーへ戻る" tabindex="0">Back to Lobby</button>
+    <div class="overlay-content">
+      <div id="game-end-message"></div>
+      <div class="game-end-buttons">
+        <button id="retry-button" aria-label="もう一度プレイ" tabindex="0">Retry</button>
+        <button id="lobby-button" aria-label="ロビーへ戻る" tabindex="0">Back to Lobby</button>
+      </div>
     </div>
   </div>
 

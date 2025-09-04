@@ -28,16 +28,24 @@ html, body {
 }
 
 #game-container {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,0.1);
-    border: 2px solid rgba(255,255,255,0.1);
+    display: flex;
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+    gap: 10px; /* Add some gap between main sections */
+    width: 100vw; /* Use viewport width */
+    height: 100vh; /* Use viewport height */
+    overflow: hidden; /* Hide overflow */
     box-sizing: border-box;
 }
 
 #game-container > div {
-    position: absolute;
+    /* Removed position: absolute; */
+}
+
+.game-panel-left, .game-panel-right {
+    display: flex;
+    flex-direction: row; /* Changed to row */
+    gap: 10px; /* Gap between elements inside the panel */
 }
 
 canvas {
@@ -46,7 +54,7 @@ canvas {
 
 #score-display {
     color: white;
-    font-size: 20px;
+    /* font-size will be set by JS */
     font-family: var(--font-family);
 }
 
@@ -70,8 +78,20 @@ canvas {
   opacity: 1;
   transition: opacity 0.5s ease-in-out;
   text-align: center;
-  padding: 1rem;
+  padding: 0; /* Removed padding from here, moved to .overlay-content */
   box-sizing: border-box;
+}
+
+.overlay-content {
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1rem; /* Added padding here */
 }
 
 #lobby-overlay.hidden, #game-end-overlay.hidden {
@@ -80,9 +100,9 @@ canvas {
 }
 
 .lobby-title, #game-end-message {
-  font-size: 2.5rem;
+  font-size: 5vh; /* Changed to vh */
   font-weight: bold;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2vh; /* Changed to vh */
   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
@@ -90,9 +110,9 @@ canvas {
   background-color: var(--button-primary-bg);
   color: var(--button-primary-text);
   border: 2px solid var(--panel-border-color);
-  padding: 0.8rem 1.5rem;
-  margin: 0.5rem;
-  font-size: 1.2rem;
+  padding: 1vh 2vh; /* Changed to vh */
+  margin: 1vh; /* Changed to vh */
+  font-size: 1.5vh; /* Changed to vh */
   font-family: var(--font-family);
   cursor: pointer;
   border-radius: 8px;
@@ -106,7 +126,7 @@ canvas {
 }
 
 #countdown-overlay {
-  font-size: 5rem;
+  font-size: 10vh; /* Changed to vh */
   font-weight: bold;
 }
 

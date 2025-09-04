@@ -1,3 +1,4 @@
+'use strict';
 import { CONFIG } from './config.js';
 import { board, currentPiece, holdPiece, nextPieces, isValidPosition } from './game.js';
 import { getStats } from './main.js';
@@ -5,20 +6,21 @@ import { effects } from './effects.js';
 import { attackBarSegments, MAX_ATTACK } from './garbage.js';
 
 // --- Layout Constants ---
-export const CELL_SIZE = 40;
-const BOARD_WIDTH = CONFIG.board.cols * CELL_SIZE;
-const BOARD_HEIGHT = CONFIG.board.visibleRows * CELL_SIZE;
-const ATTACK_BAR_WIDTH = 30;
-const ATTACK_BAR_GAP = 20;
-const HOLD_BOX_WIDTH = 80;
-const HOLD_BOX_HEIGHT = 80;
-const HOLD_BOX_GAP = 20;
-const NEXT_BOX_WIDTH = 80;
-const NEXT_BOX_HEIGHT = 400;
-const NEXT_BOX_GAP = 20;
-const SCORE_AREA_HEIGHT = 100;
+export let CELL_SIZE;
+export let BOARD_WIDTH;
+export let BOARD_HEIGHT;
+export let ATTACK_BAR_WIDTH;
+export let ATTACK_BAR_GAP;
+export let HOLD_BOX_WIDTH;
+export let HOLD_BOX_HEIGHT;
+export let HOLD_BOX_GAP;
+export let NEXT_BOX_WIDTH;
+export let NEXT_BOX_HEIGHT;
+export let NEXT_BOX_GAP;
+export let SCORE_AREA_HEIGHT;
+export let TOTAL_WIDTH;
 
-const TOTAL_WIDTH = HOLD_BOX_WIDTH + HOLD_BOX_GAP + ATTACK_BAR_WIDTH + ATTACK_BAR_GAP + BOARD_WIDTH + NEXT_BOX_GAP + NEXT_BOX_WIDTH;
+
 
 // --- Canvas & Context Creation ---
 function createCanvas(containerId, width, height) {
@@ -38,29 +40,65 @@ let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 
 // --- Main Setup Function ---
 export function setupCanvases() {
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
+    const gameContainer = document.getElementById('game-container');
+    const screenWidth = gameContainer.offsetWidth;
+    const screenHeight = gameContainer.offsetHeight;
 
-    const startX = (screenWidth - TOTAL_WIDTH) / 2;
-    const startY = (screenHeight - BOARD_HEIGHT) / 2;
+    // Define relative sizes for elements based on board cell units
+    const BOARD_COLS = CONFIG.board.cols;
+    const BOARD_VISIBLE_ROWS = CONFIG.board.visibleRows;
 
-    const boardX = startX + HOLD_BOX_WIDTH + HOLD_BOX_GAP + ATTACK_BAR_WIDTH + ATTACK_BAR_GAP;
-    positionElement('main-game-board', boardX, startY);
-    const attackBarX = boardX - ATTACK_BAR_GAP - ATTACK_BAR_WIDTH;
-    positionElement('attack-bar', attackBarX, startY);
-    const holdBoxX = attackBarX - HOLD_BOX_GAP - HOLD_BOX_WIDTH;
-    positionElement('hold-box', holdBoxX, startY);
-    const nextBoxX = boardX + BOARD_WIDTH + NEXT_BOX_GAP;
-    positionElement('next-box', nextBoxX, startY);
-    const scoreY = startY + BOARD_HEIGHT + 20;
-    positionElement('score-display', boardX, scoreY);
+    const HOLD_BOX_COLS = 4; // Estimated
+    const HOLD_BOX_ROWS = 4; // Estimated
+    const NEXT_BOX_COLS = 4; // Estimated
+    const NEXT_PIECE_HEIGHT_IN_CELLS = 4; // Each next piece takes about 4 cells vertically
+    const ATTACK_BAR_COLS = 1;
+    const SCORE_AREA_ROWS = 3; // Estimated for score display
+
+    const GAP_COLS = 1; // Gap between elements in cell units
+    const GAP_ROWS = 1; // Gap between elements in cell units
+
+    // Calculate potential CELL_SIZE based on width constraints
+    const totalColsNeeded = HOLD_BOX_COLS + GAP_COLS + ATTACK_BAR_COLS + GAP_COLS + BOARD_COLS + GAP_COLS + NEXT_BOX_COLS;
+    const cellSizeFromWidth = screenWidth / totalColsNeeded;
+
+    // Calculate potential CELL_SIZE based on height constraints
+    const totalRowsNeeded = BOARD_VISIBLE_ROWS + GAP_ROWS + SCORE_AREA_ROWS; // Board + gap + score
+    const cellSizeFromHeight = screenHeight / totalRowsNeeded;
+
+    CELL_SIZE = Math.floor(Math.min(cellSizeFromWidth, cellSizeFromHeight));
+
+    // Ensure a minimum CELL_SIZE to prevent elements from becoming too small
+    CELL_SIZE = Math.max(CELL_SIZE, 10); // Minimum 10px cell size
+
+    // Recalculate all dimensions based on the new CELL_SIZE
+    BOARD_WIDTH = BOARD_COLS * CELL_SIZE;
+    BOARD_HEIGHT = BOARD_VISIBLE_ROWS * CELL_SIZE;
+    ATTACK_BAR_WIDTH = ATTACK_BAR_COLS * CELL_SIZE;
+    HOLD_BOX_WIDTH = HOLD_BOX_COLS * CELL_SIZE;
+    HOLD_BOX_HEIGHT = HOLD_BOX_ROWS * CELL_SIZE;
+    NEXT_BOX_WIDTH = NEXT_BOX_COLS * CELL_SIZE;
+    NEXT_BOX_HEIGHT = CONFIG.game.nextPiecesCount * NEXT_PIECE_HEIGHT_IN_CELLS * CELL_SIZE;
+    SCORE_AREA_HEIGHT = SCORE_AREA_ROWS * CELL_SIZE; // Define SCORE_AREA_HEIGHT here
+
+    TOTAL_WIDTH = HOLD_BOX_WIDTH + HOLD_BOX_GAP + ATTACK_BAR_WIDTH + ATTACK_BAR_GAP + BOARD_WIDTH + NEXT_BOX_GAP + NEXT_BOX_WIDTH;
 
     gameCtx = createCanvas('main-game-board', BOARD_WIDTH, BOARD_HEIGHT).ctx;
     holdCtx = createCanvas('hold-box', HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT).ctx;
     nextCtx = createCanvas('next-box', NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT).ctx;
     attackBarCtx = createCanvas('attack-bar', ATTACK_BAR_WIDTH, BOARD_HEIGHT).ctx;
     scoreDisplay = document.getElementById('score-display');
-    
+
+    // Update the font size and dimensions for scoreDisplay based on CELL_SIZE
+    scoreDisplay.style.fontSize = `${CELL_SIZE * 0.5}px`; // Example: half of cell size
+    scoreDisplay.style.width = `${NEXT_BOX_WIDTH}px`; // Give it a width
+    scoreDisplay.style.height = `${SCORE_AREA_ROWS * CELL_SIZE}px`; // Give it a height
+    scoreDisplay.style.textAlign = 'center'; // Center text
+    scoreDisplay.style.display = 'flex'; // Use flexbox for vertical centering
+    scoreDisplay.style.flexDirection = 'column';
+    scoreDisplay.style.justifyContent = 'center';
+    scoreDisplay.style.alignItems = 'center';
+
     window.dispatchEvent(new CustomEvent('layout-changed'));
 }
 
@@ -191,7 +229,6 @@ function drawScore() {
     if (!scoreDisplay) return;
     const stats = getStats();
     scoreDisplay.innerHTML = `Time: ${stats.time}<br>Score: ${stats.score}<br>Lines: ${stats.lines}<br>Level: ${stats.level}<br>PPS: ${stats.pps}<br>APM: ${stats.apm}`;
-    scoreDisplay.style.fontSize = '18px';
 }
 
 // --- Helper Functions ---
@@ -212,9 +249,9 @@ function drawUITitledBox(ctx, x, y, w, h, title) {
     ctx.strokeStyle = '#ecf0f1';
     ctx.strokeRect(x, y, w, h);
     ctx.fillStyle = '#ecf0f1';
-    ctx.font = 'bold 18px Exo 2';
+    ctx.font = `bold ${CELL_SIZE * 0.6}px Exo 2`; // Dynamic font size
     ctx.textAlign = 'center';
-    ctx.fillText(title, x + w / 2, y + 25);
+    ctx.fillText(title, x + w / 2, y + CELL_SIZE * 0.7);
     ctx.textAlign = 'left';
 }
 

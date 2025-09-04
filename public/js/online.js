@@ -52,8 +52,12 @@ function positionMiniboards() {
     const nextBoxGap = 20;
     const totalWidth = holdBoxWidth + holdBoxGap + attackBarWidth + attackBarGap + boardWidth + nextBoxGap + nextBoxWidth;
 
-    const startX = (window.innerWidth - totalWidth) / 2;
-    const startY = (window.innerHeight - boardHeight) / 2;
+    const gameContainer = document.getElementById('game-container');
+    const gameContainerWidth = gameContainer.offsetWidth;
+    const gameContainerHeight = gameContainer.offsetHeight;
+
+    const startX = (gameContainerWidth - totalWidth) / 2;
+    const startY = (gameContainerHeight - boardHeight) / 2;
 
     const leftStartX = startX - MINIBOARD_GAP;
     const rightStartX = startX + totalWidth + MINIBOARD_GAP;

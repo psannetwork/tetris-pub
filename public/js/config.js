@@ -1,3 +1,4 @@
+'use strict';
 // ゲーム内で使用する各種設定パラメータ
 export const CONFIG = {
     board: {
