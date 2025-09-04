@@ -40,70 +40,73 @@ let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 
 // --- Main Setup Function ---
 export function setupCanvases() {
-    const gameContainer = document.getElementById('game-container');
-    const screenWidth = gameContainer.offsetWidth;
-    const screenHeight = gameContainer.offsetHeight;
+    // Use viewport dimensions for reliable sizing
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
 
     // Define relative sizes for elements based on board cell units
     const BOARD_COLS = CONFIG.board.cols;
     const BOARD_VISIBLE_ROWS = CONFIG.board.visibleRows;
-
-    const HOLD_BOX_COLS = 4; // Estimated
-    const HOLD_BOX_ROWS = 4; // Estimated
-    const NEXT_BOX_COLS = 4; // Estimated
-    const NEXT_PIECE_HEIGHT_IN_CELLS = 4; // Each next piece takes about 4 cells vertically
+    const HOLD_BOX_COLS = 4;
+    const NEXT_BOX_COLS = 4;
     const ATTACK_BAR_COLS = 1;
-    const SCORE_AREA_ROWS = 3; // Estimated for score display
+    const GAP_COLS = 1; // Gap between main game elements
 
-    const GAP_COLS = 1; // Gap between elements in cell units
-    const GAP_ROWS = 1; // Gap between elements in cell units
+    // --- Calculate CELL_SIZE based on available space ---
 
-    // Calculate potential CELL_SIZE based on width constraints
-    const totalColsNeeded = HOLD_BOX_COLS + GAP_COLS + ATTACK_BAR_COLS + GAP_COLS + BOARD_COLS + GAP_COLS + NEXT_BOX_COLS;
-    const cellSizeFromWidth = screenWidth / totalColsNeeded;
+    // 1. Calculate width-based CELL_SIZE
+    // Total columns needed for the central game area + miniboards
+    const MINIBOARDS_PER_ROW = 7;
+    const MINIBOARD_COLS = CONFIG.board.cols;
+    const MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO = 1/4;
+    const MINIBOARD_GAP_TO_CELL_SIZE_RATIO = 1/4;
+    const miniboardGridWidthInCellUnits =
+        (MINIBOARDS_PER_ROW * MINIBOARD_COLS * MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO) +
+        ((MINIBOARDS_PER_ROW - 1) * MINIBOARD_GAP_TO_CELL_SIZE_RATIO);
 
-    // Calculate potential CELL_SIZE based on height constraints
-    const totalRowsNeeded = BOARD_VISIBLE_ROWS + GAP_ROWS + SCORE_AREA_ROWS; // Board + gap + score
-    const cellSizeFromHeight = screenHeight / totalRowsNeeded;
+    const mainAreaColsNeeded = HOLD_BOX_COLS + GAP_COLS + ATTACK_BAR_COLS + GAP_COLS + BOARD_COLS + GAP_COLS + NEXT_BOX_COLS;
+    // Add space for two miniboard grids and gaps to separate them from the main area
+    const totalHorizontalUnits = mainAreaColsNeeded + (2 * miniboardGridWidthInCellUnits) + (2 * GAP_COLS);
+    const cellSizeFromWidth = screenWidth / totalHorizontalUnits;
 
+    // 2. Calculate height-based CELL_SIZE
+    // Estimate total vertical units needed
+    const totalVerticalUnits = BOARD_VISIBLE_ROWS + 4; // Board height + some padding for elements above/below
+    const cellSizeFromHeight = screenHeight / totalVerticalUnits;
+
+    // 3. Determine the final CELL_SIZE
     CELL_SIZE = Math.floor(Math.min(cellSizeFromWidth, cellSizeFromHeight));
+    CELL_SIZE = Math.max(CELL_SIZE, 8); // Set a reasonable minimum size
 
-    // Ensure a minimum CELL_SIZE to prevent elements from becoming too small
-    CELL_SIZE = Math.max(CELL_SIZE, 10); // Minimum 10px cell size
-
-    // Recalculate all dimensions based on the new CELL_SIZE
+    // --- Recalculate all dimensions based on the final CELL_SIZE ---
     BOARD_WIDTH = BOARD_COLS * CELL_SIZE;
     BOARD_HEIGHT = BOARD_VISIBLE_ROWS * CELL_SIZE;
     ATTACK_BAR_WIDTH = ATTACK_BAR_COLS * CELL_SIZE;
     HOLD_BOX_WIDTH = HOLD_BOX_COLS * CELL_SIZE;
-    HOLD_BOX_HEIGHT = HOLD_BOX_ROWS * CELL_SIZE;
+    HOLD_BOX_HEIGHT = 4 * CELL_SIZE; // Standard 4-cell height
     NEXT_BOX_WIDTH = NEXT_BOX_COLS * CELL_SIZE;
-    NEXT_BOX_HEIGHT = CONFIG.game.nextPiecesCount * NEXT_PIECE_HEIGHT_IN_CELLS * CELL_SIZE;
-    SCORE_AREA_HEIGHT = SCORE_AREA_ROWS * CELL_SIZE; // Define SCORE_AREA_HEIGHT here
+    NEXT_BOX_HEIGHT = CONFIG.game.nextPiecesCount * 4 * CELL_SIZE;
+    const SCORE_AREA_ROWS = 3;
+    SCORE_AREA_HEIGHT = SCORE_AREA_ROWS * CELL_SIZE;
 
-    // Define gaps based on CELL_SIZE
-    HOLD_BOX_GAP = Math.round(CELL_SIZE * 0.5);
-    ATTACK_BAR_GAP = Math.round(CELL_SIZE * 0.5);
-    NEXT_BOX_GAP = Math.round(CELL_SIZE * 0.5);
-
-    TOTAL_WIDTH = HOLD_BOX_WIDTH + HOLD_BOX_GAP + ATTACK_BAR_WIDTH + ATTACK_BAR_GAP + BOARD_WIDTH + NEXT_BOX_GAP + NEXT_BOX_WIDTH;
-
+    // --- Create Canvases and Set Element Sizes ---
     gameCtx = createCanvas('main-game-board', BOARD_WIDTH, BOARD_HEIGHT).ctx;
     holdCtx = createCanvas('hold-box', HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT).ctx;
     nextCtx = createCanvas('next-box', NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT).ctx;
     attackBarCtx = createCanvas('attack-bar', ATTACK_BAR_WIDTH, BOARD_HEIGHT).ctx;
     scoreDisplay = document.getElementById('score-display');
 
-    // Update the font size and dimensions for scoreDisplay based on CELL_SIZE
-    scoreDisplay.style.fontSize = `${CELL_SIZE * 0.5}px`; // Example: half of cell size
-    scoreDisplay.style.width = `${NEXT_BOX_WIDTH}px`; // Give it a width
-    scoreDisplay.style.height = `${SCORE_AREA_ROWS * CELL_SIZE}px`; // Give it a height
-    scoreDisplay.style.textAlign = 'center'; // Center text
-    scoreDisplay.style.display = 'flex'; // Use flexbox for vertical centering
-    scoreDisplay.style.flexDirection = 'column';
-    scoreDisplay.style.justifyContent = 'center';
-    scoreDisplay.style.alignItems = 'center';
+    scoreDisplay.style.width = `${NEXT_BOX_WIDTH}px`;
+    scoreDisplay.style.height = `${SCORE_AREA_HEIGHT}px`;
+    scoreDisplay.style.fontSize = `${CELL_SIZE * 0.6}px`;
 
+    // Set panel heights to match the board for alignment
+    const leftPanel = document.querySelector('.game-panel-left');
+    if (leftPanel) leftPanel.style.height = `${BOARD_HEIGHT}px`;
+    const rightPanel = document.querySelector('.game-panel-right');
+    if (rightPanel) rightPanel.style.height = `${BOARD_HEIGHT}px`;
+
+    // Notify other components that layout has changed
     window.dispatchEvent(new CustomEvent('layout-changed'));
 }
 

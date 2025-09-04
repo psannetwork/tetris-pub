@@ -327,12 +327,12 @@ export function hold() {
 }
 
 export function triggerGameOver() {
-    console.log("triggerGameOver() called.");
+    // Don't show screen here. Wait for ranking event from server.
+    if (gameState === 'GAME_OVER') return; // Prevent multiple triggers
+    console.log("triggerGameOver() called. Notifying server.");
     setGameState('GAME_OVER');
     isGameOver = true;
-    console.log("Game Over!");
     socket.emit('PlayerGameStatus', 'gameover');
-    showGameEndScreen('Game Over');
 }
 
 export function resetGame() {
@@ -566,6 +566,9 @@ export function setGameOver(over) {
 
 export function setGameClear(clear) {
     isGameClear = clear;
+    if (clear) {
+        setGameState('GAME_OVER');
+    }
 }
 
 export function setPreviousClearWasB2B(btb) {

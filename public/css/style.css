@@ -28,13 +28,13 @@ html, body {
 }
 
 #game-container {
+    position: fixed; /* Use fixed positioning for robust centering */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
-    justify-content: center; /* Center horizontally */
-    align-items: center; /* Center vertically */
-    gap: 10px; /* Add some gap between main sections */
-    width: 100vw; /* Use viewport width */
-    height: 100vh; /* Use viewport height */
-    overflow: hidden; /* Hide overflow */
+    gap: 10px;
+    /* width and height will be determined by content, or set by JS */
     box-sizing: border-box;
 }
 
@@ -44,8 +44,10 @@ html, body {
 
 .game-panel-left, .game-panel-right {
     display: flex;
-    flex-direction: row; /* Changed to row */
+    flex-direction: column; /* Align items vertically */
     gap: 10px; /* Gap between elements inside the panel */
+    align-items: center; /* Center items horizontally */
+    justify-content: flex-start; /* Align content to the top */
 }
 
 canvas {
@@ -60,6 +62,15 @@ canvas {
 
 .miniboard {
     position: absolute;
+}
+
+#miniboards-container {
+    width: 0;
+    height: 0;
+    flex-shrink: 0;
+    flex-grow: 0;
+    margin: 0;
+    padding: 0;
 }
 
 /* Overlays */
@@ -106,7 +117,7 @@ canvas {
   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
-.lobby-button, .game-end-buttons button {
+.game-end-buttons button {
   background-color: var(--button-primary-bg);
   color: var(--button-primary-text);
   border: 2px solid var(--panel-border-color);
@@ -136,4 +147,34 @@ canvas {
 
 #game-end-overlay.visible {
   display: flex;
+}
+
+.final-ranks {
+  margin-top: 20px;
+  text-align: left;
+  max-width: 300px;
+  width: 80%;
+}
+
+.final-ranks h2 {
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.final-ranks ol {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.final-ranks li {
+  background-color: rgba(0,0,0,0.2);
+  padding: 8px;
+  margin-bottom: 5px;
+  border-radius: 4px;
+}
+
+.my-rank {
+  background-color: var(--button-primary-bg) !important;
+  font-weight: bold;
 }

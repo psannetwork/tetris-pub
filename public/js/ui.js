@@ -10,11 +10,28 @@ const countdownOverlay = document.getElementById('countdown-overlay');
  * @param {string} message - The message to display (e.g., "Game Over").
  * @param {boolean} isWin - True if it's a win screen.
  */
-export function showGameEndScreen(message, isWin = false) {
+export function showGameEndScreen(title, isWin, rankingMap, myId) {
   if (gameEndOverlay && gameEndMessage) {
-      gameEndMessage.textContent = message;
-      gameEndMessage.style.color = isWin ? CONFIG.colors.win : CONFIG.colors.lose;
-      gameEndOverlay.classList.add('visible');
+    let fullMessage = `<h1 style="color: ${isWin ? CONFIG.colors.win : CONFIG.colors.lose};">${title}</h1>`;
+
+    if (rankingMap) {
+      const sortedRanks = Object.entries(rankingMap)
+        .filter(([, rank]) => rank !== null) // Filter out any players who might not have a rank yet
+        .sort(([, rankA], [, rankB]) => rankA - rankB);
+
+      fullMessage += '<div class="final-ranks"><h2>Results</h2><ol>';
+      for (const [userId, rank] of sortedRanks) {
+        const isMe = userId === myId;
+        // Simplified display name
+        const displayName = isMe ? 'You' : `Player...${userId.substring(userId.length - 4)}`;
+        const myRankClass = isMe ? 'my-rank' : '';
+        fullMessage += `<li class="${myRankClass}"><b>#${rank}</b> - ${displayName}</li>`;
+      }
+      fullMessage += '</ol></div>';
+    }
+
+    gameEndMessage.innerHTML = fullMessage;
+    gameEndOverlay.classList.add('visible');
   }
 }
 
