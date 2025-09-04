@@ -112,7 +112,7 @@ function handleSocketConnection(io, socket) {
         const members = [...room.players];
 
         if (!recipient || !members.includes(recipient) || ranks.includes(recipient)) {
-            const candidates = members.filter(id => id !== socket.id && !ranks.includes(id) && playerRoom.has(id));
+            const candidates = members.filter(id => id !== socket.id && !ranks.includes(id));
             if (!candidates.length) return;
             recipient = candidates[Math.floor(Math.random() * candidates.length)];
         }

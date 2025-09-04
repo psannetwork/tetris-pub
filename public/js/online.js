@@ -1,10 +1,10 @@
 import { CONFIG } from './config.js';
-import { triggerGameOver, setGameClear, setGameState, initializePieces } from './game.js';
-import { showGameEndScreen, showCountdown } from './ui.js';
+import { tetrominoTypeToIndex, CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './draw.js';
+import { showCountdown, showGameEndScreen } from './ui.js';
+import { initializePieces, setGameState, gameState, triggerGameOver, setGameClear } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { tetrominoTypeToIndex, CELL_SIZE } from './draw.js';
 
-export const socket = io(CONFIG.serverUrl, { 
+export const socket = io(CONFIG.serverUrl, {
     autoConnect: false,
     reconnection: true
 });
@@ -15,15 +15,39 @@ export let currentCountdown = null;
 export const miniboardSlots = [];
 const miniboardsContainer = document.getElementById('miniboards-container');
 
-const MINIBOARD_CELL_SIZE = 6;
-const MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE;
-const MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE;
-const MINIBOARD_GAP = 10;
+export let MINIBOARD_CELL_SIZE;
+export let MINIBOARD_WIDTH;
+export let MINIBOARD_HEIGHT;
+export let MINIBOARD_GAP = 10;
+
+function setupMiniboardDimensions() {
+    const gameContainer = document.getElementById('game-container');
+    const screenWidth = gameContainer.offsetWidth;
+
+    // Calculate available width for miniboards
+    // totalWidth is the width of the main game area (board + hold + next + attack bars)
+    const availableWidth = screenWidth - TOTAL_WIDTH - (MINIBOARD_GAP * 2); // Subtract main game area and two gaps
+
+    // We have two grids, each 7 columns wide
+    const totalMiniboardCols = 7 * 2; // 7 columns per grid, 2 grids
+    const totalMiniboardGaps = (7 - 1) * 2; // Gaps within each grid
+
+    // Calculate a potential MINIBOARD_CELL_SIZE based on width
+    let potentialMiniboardCellSize = (availableWidth - (totalMiniboardGaps * MINIBOARD_GAP)) / (totalMiniboardCols * CONFIG.board.cols);
+
+    // Ensure a minimum size and maximum size
+    potentialMiniboardCellSize = Math.max(potentialMiniboardCellSize, 4); // Minimum 4px cell size
+    potentialMiniboardCellSize = Math.min(potentialMiniboardCellSize, 8); // Maximum 8px cell size to keep them small
+
+    MINIBOARD_CELL_SIZE = Math.floor(potentialMiniboardCellSize);
+    MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE;
+    MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE;
+}
 
 function setupMiniboardSlots() {
     miniboardsContainer.innerHTML = '';
     miniboardSlots.length = 0;
-    for (let i = 0; i < CONFIG.MAX_MINIBOARDS_PER_SIDE * 2; i++) {
+    for (let i = 0; i < 99; i++) {
         const canvas = document.createElement('canvas');
         canvas.width = MINIBOARD_WIDTH;
         canvas.height = MINIBOARD_HEIGHT;
@@ -38,19 +62,12 @@ function setupMiniboardSlots() {
             ctx: canvas.getContext('2d')
         });
     }
-    positionMiniboards();
 }
 
 function positionMiniboards() {
     const boardWidth = CONFIG.board.cols * CELL_SIZE;
     const boardHeight = CONFIG.board.visibleRows * CELL_SIZE;
-    const attackBarWidth = 30;
-    const attackBarGap = 20;
-    const holdBoxWidth = 80;
-    const holdBoxGap = 20;
-    const nextBoxWidth = 80;
-    const nextBoxGap = 20;
-    const totalWidth = holdBoxWidth + holdBoxGap + attackBarWidth + attackBarGap + boardWidth + nextBoxGap + nextBoxWidth;
+    const totalWidth = HOLD_BOX_WIDTH + HOLD_BOX_GAP + ATTACK_BAR_WIDTH + ATTACK_BAR_GAP + BOARD_WIDTH + NEXT_BOX_GAP + NEXT_BOX_WIDTH;
 
     const gameContainer = document.getElementById('game-container');
     const gameContainerWidth = gameContainer.offsetWidth;
@@ -59,35 +76,51 @@ function positionMiniboards() {
     const startX = (gameContainerWidth - totalWidth) / 2;
     const startY = (gameContainerHeight - boardHeight) / 2;
 
-    const leftStartX = startX - MINIBOARD_GAP;
-    const rightStartX = startX + totalWidth + MINIBOARD_GAP;
+    const miniboardsPerRow = 7; // 7 columns
+    const miniboardsPerColumn = 7; // 7 rows
+    const totalMiniboardsPerSide = miniboardsPerRow * miniboardsPerColumn; // 49
+
+    const leftGridWidth = miniboardsPerRow * MINIBOARD_WIDTH + (miniboardsPerRow - 1) * MINIBOARD_GAP;
+    const rightGridWidth = miniboardsPerRow * MINIBOARD_WIDTH + (miniboardsPerRow - 1) * MINIBOARD_GAP;
+
+    // Calculate the starting X for the left grid, so its right edge is MINIBOARD_GAP away from main game area's left edge
+    const leftGridStartX = startX - MINIBOARD_GAP - leftGridWidth;
+
+    // Calculate the starting X for the right grid, so its left edge is MINIBOARD_GAP away from main game area's right edge
+    const rightGridStartX = startX + totalWidth + MINIBOARD_GAP;
 
     let leftCount = 0;
     let rightCount = 0;
-    const maxPerSide = 7;
 
     miniboardSlots.forEach((slot, i) => {
-        if (i % 2 === 0) { // Left
-            const row = Math.floor(leftCount / maxPerSide);
-            const col = leftCount % maxPerSide;
-            slot.canvas.style.left = `${leftStartX - MINIBOARD_WIDTH - (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
+        if (i < totalMiniboardsPerSide) { // Left side miniboards
+            const row = Math.floor(leftCount / miniboardsPerRow);
+            const col = leftCount % miniboardsPerRow;
+            slot.canvas.style.left = `${leftGridStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
             slot.canvas.style.top = `${startY + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
             leftCount++;
-        } else { // Right
-            const row = Math.floor(rightCount / maxPerSide);
-            const col = rightCount % maxPerSide;
-            slot.canvas.style.left = `${rightStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
+        } else if (i < 99) { // Right side miniboards
+            const row = Math.floor(rightCount / miniboardsPerRow);
+            const col = rightCount % miniboardsPerRow;
+            slot.canvas.style.left = `${rightGridStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
             slot.canvas.style.top = `${startY + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
             rightCount++;
+        } else {
+            // Hide any extra miniboards if CONFIG.MAX_MINIBOARDS_PER_SIDE * 2 is more than 98
+            slot.canvas.style.display = 'none';
         }
     });
+    drawAllMiniBoards();
 }
 
-window.addEventListener('layout-changed', positionMiniboards);
+window.addEventListener('layout-changed', () => {
+    setupMiniboardDimensions();
+    setupMiniboardSlots();
+    positionMiniboards();
+});
 
 export function connectToServer() {
     socket.connect();
-    setupMiniboardSlots();
 }
 
 function addOpponent(userId) {
@@ -123,11 +156,14 @@ function updateSlotBoard(slot, boardData, diffData) {
 function drawMiniBoard(slot) {
     const { ctx, canvas, boardState, isGameOver, userId } = slot;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = 'block'; // Always display the canvas
+
+    // If no user, draw an empty board
     if (userId === null) {
-        canvas.style.display = 'none';
+        ctx.fillStyle = 'rgba(0,0,0,0.1)'; // A lighter background for empty slots
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         return;
     }
-    canvas.style.display = 'block';
 
     if (isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
@@ -200,10 +236,13 @@ socket.on("ranking", ({ yourRankMap }) => {
   if (gameState !== 'PLAYING') return; // Ignore ranking if not in a game
 
   const myRank = yourRankMap[socket.id];
-  if (myRank != null) {
-    if (myRank !== 1) triggerGameOver();
-    else { setGameClear(true); showGameEndScreen('You Win', true); }
+  if (myRank === 1) {
+    setGameClear(true);
+    showGameEndScreen('You Win', true);
+  } else if (myRank !== null) {
+    triggerGameOver();
   }
+
   for (const userId in yourRankMap) {
       const slot = miniboardSlots.find(s => s.userId === userId);
       if (slot && yourRankMap[userId] !== null) slot.isGameOver = true;

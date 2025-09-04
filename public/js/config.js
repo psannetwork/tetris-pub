@@ -68,7 +68,7 @@ export const CONFIG = {
     debug: {
         enableGarbage: true
     },
-    MAX_MINIBOARDS_PER_SIDE: 49,
+    MAX_MINIBOARDS_PER_SIDE: 50,
     serverUrl: 'https://special-doodle-ggq6qrpxpgjhvp45-6000.app.github.dev',
 
     // テトリミノの形状定義

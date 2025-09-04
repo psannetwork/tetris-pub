@@ -81,6 +81,11 @@ export function setupCanvases() {
     NEXT_BOX_HEIGHT = CONFIG.game.nextPiecesCount * NEXT_PIECE_HEIGHT_IN_CELLS * CELL_SIZE;
     SCORE_AREA_HEIGHT = SCORE_AREA_ROWS * CELL_SIZE; // Define SCORE_AREA_HEIGHT here
 
+    // Define gaps based on CELL_SIZE
+    HOLD_BOX_GAP = Math.round(CELL_SIZE * 0.5);
+    ATTACK_BAR_GAP = Math.round(CELL_SIZE * 0.5);
+    NEXT_BOX_GAP = Math.round(CELL_SIZE * 0.5);
+
     TOTAL_WIDTH = HOLD_BOX_WIDTH + HOLD_BOX_GAP + ATTACK_BAR_WIDTH + ATTACK_BAR_GAP + BOARD_WIDTH + NEXT_BOX_GAP + NEXT_BOX_WIDTH;
 
     gameCtx = createCanvas('main-game-board', BOARD_WIDTH, BOARD_HEIGHT).ctx;
