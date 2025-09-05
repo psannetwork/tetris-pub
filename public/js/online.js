@@ -27,155 +27,81 @@ const NUM_GAPS_PER_COLUMN = MINIBOARDS_PER_COLUMN - 1;
 class MiniboardEntryEffect {
     constructor(ctx, width, height) {
         this.ctx = ctx;
-        this.width = width;
-        this.height = height;
-        this.centerX = this.width / 2;
-        this.centerY = this.height / 2;
-        this.startTime = Date.now();
-        this.isDisappearing = false;
-        this.totalTime = 1500; // 1.5 seconds
-        this.active = true; // Renamed from barrierActive to active for consistency with new Barrier class
-        this.time = 0; // Initialize this.time
-
+        this.x = width / 2;
+        this.y = height / 2;
+        this.startTime = performance.now();
+        this.lifeTime = 1500; // 1.5秒
         this.particles = [];
-        this.particleCount = 50; // Reduced count for lightweight animation
+        this.particleCount = 30; // パーティクル数をさらに減らす
+        this.active = true;
 
-        this.initParticles();
-
-        // Automatically start disappearance after totalTime
-        setTimeout(() => {
-            this.startDisappear();
-        }, this.totalTime);
-    }
-
-    initParticles() {
+        // パーティクル初期化
         for (let i = 0; i < this.particleCount; i++) {
             this.particles.push({
-                x: this.centerX,
-                y: this.centerY,
-                size: Math.random() * 2 + 1,
-                speed: Math.random() * 1.5 + 0.5,
                 angle: Math.random() * Math.PI * 2,
-                distance: Math.random() * 50 + 25,
-                offset: Math.random() * Math.PI * 2,
-                targetX: 0,
-                targetY: 0,
-                active: false,
-                appearDelay: Math.random() * 600,
-                disappearDelay: Math.random() * 600
+                distance: Math.random() * 40 + 20,
+                size: Math.random() * 2 + 1,
+                speed: Math.random() * 0.02 + 0.01,
+                phase: Math.random() * Math.PI * 2,
+                opacity: 1
             });
         }
-
-        this.particles.forEach(particle => {
-            const orbitRadius = particle.distance;
-            particle.targetX = this.centerX + Math.cos(particle.angle) * orbitRadius;
-            particle.targetY = this.centerY + Math.sin(particle.angle) * orbitRadius;
-        });
     }
 
-    startDisappear() { // Renamed from startDisappearEffect
-        this.isDisappearing = true;
-        this.startTime = Date.now(); // Reset start time for disappearance phase
+    update(currentTime) {
+        if (!this.active) return; // 既に非アクティブなら何もしない
+        
+        const elapsed = currentTime - this.startTime;
+        const progress = Math.min(1, elapsed / this.lifeTime);
 
-        this.particles.forEach(particle => {
-            if (particle.active) {
-                particle.startX = particle.x;
-                particle.startY = particle.y;
-            }
-        });
-    }
-
-    update(currentTime) { // Takes currentTime as argument
-        if (!this.active) return; // Use this.active
-
-        if (!this.isDisappearing) {
-            const elapsed = currentTime - this.startTime;
-            const progress = Math.min(1, elapsed / this.totalTime);
-
-            this.particles.forEach(particle => {
-                const activationTime = this.startTime + particle.appearDelay;
-
-                if (!particle.active && currentTime >= activationTime) {
-                    particle.active = true;
-                }
-
-                if (particle.active) {
-                    const particleElapsed = currentTime - activationTime;
-                    const moveProgress = Math.min(1, particleElapsed / 300); // 300ms for particle movement
-                    const easeProgress = 1 - Math.pow(1 - moveProgress, 3);
-
-                    particle.x = this.centerX + (particle.targetX - this.centerX) * easeProgress;
-                    particle.y = this.centerY + (particle.targetY - this.centerY) * easeProgress;
-
-                    if (moveProgress >= 1) {
-                        const orbitRadius = particle.distance + Math.sin(this.time * 0.02 + particle.offset) * 10;
-                        particle.x = this.centerX + Math.cos(this.time * 0.01 * particle.speed + particle.angle) * orbitRadius;
-                        particle.y = this.centerY + Math.sin(this.time * 0.01 * particle.speed + particle.angle) * orbitRadius;
-                    }
-                }
-            });
-        } else {
-            const elapsed = currentTime - this.startTime;
-            const progress = Math.min(1, elapsed / this.totalTime);
-
-            this.particles.forEach(particle => {
-                if (particle.active) {
-                    const disappearTime = this.startTime + particle.disappearDelay;
-
-                    if (currentTime >= disappearTime) {
-                        const particleElapsed = currentTime - disappearTime;
-                        const moveProgress = Math.min(1, particleElapsed / 300);
-                        const easeProgress = 1 - Math.pow(1 - moveProgress, 3);
-
-                        particle.x = particle.startX + (this.centerX - particle.startX) * easeProgress;
-                        particle.y = particle.startY + (this.centerY - this.startY) * easeProgress;
-
-                        if (moveProgress >= 1) {
-                            particle.active = false;
-                        }
-                    }
-                }
-            });
-
-            if (progress >= 1) {
-                const allInactive = this.particles.every(particle => !particle.active);
-                if (allInactive) {
-                    this.active = false; // Use this.active
-                }
-            }
+        // 終了チェック
+        if (progress >= 1) {
+            this.active = false;
+            return;
         }
-        this.time++; // Use this.time instead of globalTime
+
+        // パーティクル更新
+        this.particles.forEach(particle => {
+            particle.phase += particle.speed;
+            particle.currentDistance = particle.distance * (0.3 + 0.7 * Math.sin(progress * Math.PI));
+        });
     }
 
-    draw(currentTime) { // Takes currentTime as argument
-        if (!this.active) return; // Use this.active
+    draw(currentTime) {
+        if (!this.active) return;
 
-        this.particles.forEach((particle, index) => {
-            if (particle.active) {
-                this.ctx.beginPath();
-                this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        const elapsed = currentTime - this.startTime;
+        const progress = Math.min(1, elapsed / this.lifeTime);
+        const time = elapsed * 0.001;
 
-                if (!this.isDisappearing && (currentTime - (this.startTime + particle.appearDelay)) < 300) {
-                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                } else {
-                    const alpha = 0.7 + Math.sin(this.time * 0.03 + index) * 0.3; // Use this.time
-                    this.ctx.fillStyle = `rgba(0, 200, 255, ${alpha})`;
-                }
-                this.ctx.fill();
-            }
-        });
-
-        let coreSize = this.isDisappearing ? 8 : 15;
-        const pulsingSize = coreSize + Math.sin(this.time * 0.1) * 3; // Use this.time
-
+        // 中心の光
+        const centerSize = 8 + Math.sin(time * 10) * 3;
+        const centerAlpha = 0.7 * (1 - progress * 0.5);
         this.ctx.beginPath();
-        this.ctx.arc(this.centerX, this.centerY, pulsingSize, 0, Math.PI * 2);
-        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        this.ctx.arc(this.x, this.y, centerSize, 0, Math.PI * 2);
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${centerAlpha})`;
         this.ctx.fill();
+
+        // パーティクル描画
+        this.particles.forEach((particle, index) => {
+            const angle = particle.angle + particle.phase;
+            const distance = particle.currentDistance || particle.distance;
+            const px = this.x + Math.cos(angle) * distance;
+            const py = this.y + Math.sin(angle) * distance;
+
+            // 透明度調整
+            const particleAlpha = particle.opacity * (0.7 + 0.3 * Math.sin(time * 5 + index));
+            const fadeAlpha = particleAlpha * (1 - progress * 0.8);
+
+            this.ctx.beginPath();
+            this.ctx.arc(px, py, particle.size, 0, Math.PI * 2);
+            this.ctx.fillStyle = `rgba(0, 200, 255, ${fadeAlpha})`;
+            this.ctx.fill();
+        });
     }
 
     isActive() {
-        return this.active; // Use this.active
+        return this.active;
     }
 }
 
@@ -280,13 +206,14 @@ function positionMiniboards() {
             slot.canvas.style.display = 'none';
         }
     });
-    drawAllMiniBoards();
 }
 
 window.addEventListener('layout-changed', () => {
     setupMiniboardDimensions();
     setupMiniboardSlots();
     positionMiniboards();
+    // 必要に応じてアニメーションを開始
+    startAnimationIfNeeded();
 });
 
 export function connectToServer() {
@@ -314,6 +241,7 @@ function addOpponent(userId) {
         // Only start the effect if the game is not yet playing
         if (gameState !== 'PLAYING') { // Check gameState here
             emptySlot.effect = new MiniboardEntryEffect(emptySlot.ctx, emptySlot.canvas.width, emptySlot.canvas.height);
+            startAnimationIfNeeded(); // アニメーション開始
         }
     }
 }
@@ -388,10 +316,32 @@ function drawMiniBoard(slot, currentTime) {
     }
 }
 
-export function drawAllMiniBoards() {
-    const currentTime = performance.now(); // Get current time once
-    miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime)); // Pass currentTime
+let animationFrameId = null;
+
+function drawAllMiniBoards() {
+    const currentTime = performance.now();
+    miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
+    
+    // アニメーションが必要なエフェクトがあるかチェック
+    const hasActiveEffects = miniboardSlots.some(slot => slot.effect && slot.effect.isActive());
+    
+    // アクティブなエフェクトがある場合のみ次のフレームを要求
+    if (hasActiveEffects) {
+        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
+    } else {
+        animationFrameId = null;
+    }
 }
+
+// アニメーションを開始する関数
+function startAnimationIfNeeded() {
+    if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
+    }
+}
+
+// exportされたdrawAllMiniBoardsを削除し、代わりに以下を追加
+export { drawAllMiniBoards as drawAllMiniBoardsInternal }; // 内部用
 
 let finalRanking = {}; // To store all player ranks
 
@@ -572,7 +522,7 @@ export function sendGarbage(targetId, lines) {
     socket.emit("SendGarbage", { targetId, lines });
 }
 
-export let connectionError = false;
+let connectionError = false;
 const errorOverlay = document.createElement('div');
 errorOverlay.style.position = 'fixed';
 errorOverlay.style.top = '0';
@@ -613,3 +563,5 @@ socket.on("reconnect_failed", () => {
     console.error("再接続に失敗しました");
     showConnectionError();
 });
+
+export { connectionError, startAnimationIfNeeded };
