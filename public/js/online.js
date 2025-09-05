@@ -151,7 +151,8 @@ function setupMiniboardSlots() {
             canvas: canvas,
             ctx: canvas.getContext('2d'),
             isNew: false,
-            effect: null // Add this property
+            effect: null, // Add this property
+            dirty: true
         });
     }
 }
@@ -237,12 +238,13 @@ function addOpponent(userId) {
         emptySlot.isGameOver = false;
         emptySlot.boardState.forEach(row => row.fill(0));
         emptySlot.isNew = true; // Add this flag for the effect
+        emptySlot.dirty = true;
 
         // Only start the effect if the game is not yet playing
         if (gameState !== 'PLAYING') { // Check gameState here
             emptySlot.effect = new MiniboardEntryEffect(emptySlot.ctx, emptySlot.canvas.width, emptySlot.canvas.height);
-            startAnimationIfNeeded(); // アニメーション開始
         }
+        startAnimationIfNeeded();
     }
 }
 
@@ -250,6 +252,8 @@ function removeOpponent(userId) {
     const slot = miniboardSlots.find(slot => slot.userId === userId);
     if (slot) {
         slot.userId = null;
+        slot.dirty = true;
+        startAnimationIfNeeded();
     }
 }
 
@@ -261,11 +265,14 @@ function updateSlotBoard(slot, boardData, diffData) {
             if (slot.boardState[r]) slot.boardState[r][c] = val;
         });
     }
-    drawMiniBoard(slot);
+    slot.dirty = true;
+    startAnimationIfNeeded();
 }
 
 function drawMiniBoard(slot, currentTime) {
     const { ctx, canvas, boardState, isGameOver, userId, effect } = slot;
+    if (!slot.dirty && !(effect && effect.isActive())) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas.style.display = 'block';
 
@@ -275,6 +282,7 @@ function drawMiniBoard(slot, currentTime) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         // If there was an effect, clear it
         if (effect) slot.effect = null;
+        slot.dirty = false;
         return;
     }
 
@@ -288,6 +296,7 @@ function drawMiniBoard(slot, currentTime) {
         ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
         // If there was an effect, clear it
         if (effect) slot.effect = null;
+        slot.dirty = false;
         return;
     }
 
@@ -314,6 +323,7 @@ function drawMiniBoard(slot, currentTime) {
     } else if (effect && !effect.isActive()) {
         slot.effect = null; // Clean up inactive effect
     }
+    slot.dirty = false;
 }
 
 let animationFrameId = null;
@@ -348,14 +358,20 @@ let finalRanking = {}; // To store all player ranks
 // --- Socket Event Handlers ---
 socket.on("connect", () => {
     console.log("✅ サーバーに接続:", socket.id);
-    miniboardSlots.forEach(slot => slot.userId = null);
-    drawAllMiniBoards();
+    miniboardSlots.forEach(slot => {
+        slot.userId = null;
+        slot.dirty = true;
+    });
+    startAnimationIfNeeded();
     finalRanking = {}; // Reset on new connection
 });
 
 export function startMatching() {
-    miniboardSlots.forEach(slot => slot.userId = null); // Clear miniboards
-    drawAllMiniBoards(); // Redraw to show them empty
+    miniboardSlots.forEach(slot => {
+        slot.userId = null;
+        slot.dirty = true;
+    }); // Clear miniboards
+    startAnimationIfNeeded(); // Redraw to show them empty
     socket.emit("matching");
 }
 
@@ -372,7 +388,6 @@ socket.on("roomInfo", (data) => {
     currentOpponents.forEach(id => {
         if (!newOpponentIds.has(id)) removeOpponent(id);
     });
-    drawAllMiniBoards();
 });
 
 socket.on("StartGame", () => {
@@ -380,8 +395,11 @@ socket.on("StartGame", () => {
     showCountdown(null);
     resetGame(); // Changed to resetGame()
     setGameState('PLAYING');
-    miniboardSlots.forEach(slot => slot.isGameOver = false);
-    drawAllMiniBoards();
+    miniboardSlots.forEach(slot => {
+        slot.isGameOver = false;
+        slot.dirty = true;
+    });
+    startAnimationIfNeeded();
     finalRanking = {}; // Reset for new game
 });
 
@@ -404,9 +422,10 @@ socket.on("ranking", ({ yourRankMap }) => {
       const slot = miniboardSlots.find(s => s.userId === userId);
       if (slot && finalRanking[userId] !== null) {
           slot.isGameOver = true;
+          slot.dirty = true;
       }
   }
-  drawAllMiniBoards();
+  startAnimationIfNeeded();
 
   const myRank = finalRanking[socket.id];
 
@@ -462,7 +481,6 @@ socket.on("BoardStatusBulk", (boards) => {
 
 socket.on("PlayerDisconnected", ({ userId }) => {
     removeOpponent(userId);
-    drawAllMiniBoards();
 });
 
 // --- Rest of the file is the same as before (sending data, error handling) ---

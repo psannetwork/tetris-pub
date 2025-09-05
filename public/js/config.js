@@ -12,7 +12,7 @@ export const CONFIG = {
     scoring: {
         single: 100, double: 300, triple: 500, tetris: 800,
         tspin: 400, tspinSingle: 800, tspinDouble: 1200, tspinTriple: 1600,
-        tspinMini: 100, perfectClearSingle: 800, perfectClearDouble: 1000,
+        tspinMini: 100, perfectClear: 1000, perfectClearSingle: 800, perfectClearDouble: 1000,
         perfectClearTriple: 1800, perfectClearTetris: 2000, drop: 2
     },
     // 色設定
