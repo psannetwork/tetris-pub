@@ -21,17 +21,29 @@ export let MINIBOARD_HEIGHT;
 export let MINIBOARD_GAP;
 
 function setupMiniboardDimensions() {
-    // Base miniboard cell size on the main game's CELL_SIZE for consistency.
-    let potentialMiniboardCellSize = CELL_SIZE / 4;
+    const screenHeight = window.innerHeight;
+    const miniboardsPerColumn = 7;
+    const numGaps = miniboardsPerColumn - 1;
+    const fixedGap = 4; // pixels for the gap between miniboards
 
-    // Ensure a minimum size and maximum size
-    potentialMiniboardCellSize = Math.max(potentialMiniboardCellSize, 4); // Minimum 4px cell size
-    potentialMiniboardCellSize = Math.min(potentialMiniboardCellSize, 8); // Maximum 8px cell size to keep them small
+    // Calculate MINIBOARD_HEIGHT such that all miniboards + fixed gaps fit within screenHeight
+    MINIBOARD_HEIGHT = (screenHeight - (numGaps * fixedGap)) / miniboardsPerColumn;
 
-    MINIBOARD_CELL_SIZE = Math.floor(potentialMiniboardCellSize);
-    MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE;
+    // Ensure a minimum size for MINIBOARD_HEIGHT
+    MINIBOARD_HEIGHT = Math.max(MINIBOARD_HEIGHT, CONFIG.board.visibleRows * 4); // Minimum height for 4px cell size
+
+    // Calculate MINIBOARD_CELL_SIZE based on the new MINIBOARD_HEIGHT
+    MINIBOARD_CELL_SIZE = MINIBOARD_HEIGHT / CONFIG.board.visibleRows;
+
+    // Ensure a minimum size for MINIBOARD_CELL_SIZE
+    MINIBOARD_CELL_SIZE = Math.max(MINIBOARD_CELL_SIZE, 4); // Minimum 4px cell size
+
+    // Recalculate MINIBOARD_HEIGHT based on the final MINIBOARD_CELL_SIZE to ensure integer values
     MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE;
-    MINIBOARD_GAP = Math.round(CELL_SIZE * 0.25); // Make gap relative to CELL_SIZE
+
+    MINIBOARD_GAP = fixedGap; // Use the fixed gap
+
+    MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE;
 }
 
 function setupMiniboardSlots() {
@@ -56,11 +68,8 @@ function setupMiniboardSlots() {
 }
 
 function positionMiniboards() {
-    // Use the main board height for vertical alignment.
-    const boardHeight = CONFIG.board.visibleRows * CELL_SIZE;
-    const gameContainer = document.getElementById('game-container');
-    const gameContainerHeight = gameContainer.offsetHeight;
-    const startY = (gameContainerHeight - boardHeight) / 2;
+    // No explicit topMargin needed if we calculate MINIBOARD_HEIGHT to fill the screen
+    const topMargin = -(MINIBOARD_HEIGHT + MINIBOARD_GAP);
 
     // Get the actual positions of the side panels from the DOM.
     const leftPanel = document.querySelector('.game-panel-left');
@@ -73,7 +82,7 @@ function positionMiniboards() {
 
     const leftRect = leftPanel.getBoundingClientRect();
     const rightRect = rightPanel.getBoundingClientRect();
-    const containerRect = gameContainer.getBoundingClientRect();
+    const containerRect = document.getElementById('game-container').getBoundingClientRect();
 
     // Calculate positions relative to the game-container.
     const gameAreaLeft = leftRect.left - containerRect.left;
@@ -97,13 +106,13 @@ function positionMiniboards() {
             const row = Math.floor(leftCount / miniboardsPerRow);
             const col = leftCount % miniboardsPerRow;
             slot.canvas.style.left = `${leftGridStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
-            slot.canvas.style.top = `${startY + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
+            slot.canvas.style.top = `${topMargin + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
             leftCount++;
         } else if (i < totalMiniboardsPerSide * 2) { // Right side: 49-97
             const row = Math.floor(rightCount / miniboardsPerRow);
             const col = rightCount % miniboardsPerRow;
             slot.canvas.style.left = `${rightGridStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
-            slot.canvas.style.top = `${startY + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
+            slot.canvas.style.top = `${topMargin + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
             rightCount++;
         } else {
             slot.canvas.style.display = 'none';

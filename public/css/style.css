@@ -31,7 +31,7 @@ html, body {
     position: fixed; /* Use fixed positioning for robust centering */
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -52%);
     display: flex;
     gap: 10px;
     /* width and height will be determined by content, or set by JS */
