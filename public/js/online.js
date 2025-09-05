@@ -27,7 +27,7 @@ function setupMiniboardDimensions() {
     const fixedGap = 4; // pixels for the gap between miniboards
 
     // Calculate MINIBOARD_HEIGHT such that all miniboards + fixed gaps fit within screenHeight
-    MINIBOARD_HEIGHT = (screenHeight - (numGaps * fixedGap)) / miniboardsPerColumn;
+    MINIBOARD_HEIGHT = ((screenHeight - (numGaps * fixedGap)) / miniboardsPerColumn) * 0.95;
 
     // Ensure a minimum size for MINIBOARD_HEIGHT
     MINIBOARD_HEIGHT = Math.max(MINIBOARD_HEIGHT, CONFIG.board.visibleRows * 4); // Minimum height for 4px cell size
@@ -69,7 +69,7 @@ function setupMiniboardSlots() {
 
 function positionMiniboards() {
     // No explicit topMargin needed if we calculate MINIBOARD_HEIGHT to fill the screen
-    const topMargin = -(MINIBOARD_HEIGHT + MINIBOARD_GAP);
+    const topMargin = -(MINIBOARD_HEIGHT * 1.25 + MINIBOARD_GAP);
 
     // Get the actual positions of the side panels from the DOM.
     const leftPanel = document.querySelector('.game-panel-left');
