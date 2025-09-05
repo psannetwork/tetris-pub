@@ -46,6 +46,14 @@ export function showCountdown(count) {
         } else {
             countdownOverlay.textContent = count;
             countdownOverlay.style.display = 'flex';
+            countdownOverlay.style.position = 'absolute';
+            countdownOverlay.style.top = '50%';
+            countdownOverlay.style.left = '50%';
+            countdownOverlay.style.transform = 'translate(-50%, -50%)';
+            countdownOverlay.style.backgroundColor = 'rgba(0,0,0,0)'; // Fully transparent background
+            countdownOverlay.style.zIndex = '1000'; // Ensure it's on top
+            countdownOverlay.style.fontSize = '5em'; // Make the text large
+            countdownOverlay.style.color = 'white'; // Ensure text is visible
         }
     }
 }
