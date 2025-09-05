@@ -1,8 +1,9 @@
 import { CONFIG } from './config.js';
 import { tetrominoTypeToIndex, CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './draw.js';
 import { showCountdown, showGameEndScreen } from './ui.js';
-import { initializePieces, setGameState, gameState, triggerGameOver, setGameClear } from './game.js';
+import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
+import { drawUI } from './draw.js';
 
 export const socket = io(CONFIG.serverUrl, {
     autoConnect: false,
@@ -20,14 +21,174 @@ export let MINIBOARD_WIDTH;
 export let MINIBOARD_HEIGHT;
 export let MINIBOARD_GAP;
 
+const MINIBOARDS_PER_COLUMN = 7;
+const NUM_GAPS_PER_COLUMN = MINIBOARDS_PER_COLUMN - 1;
+
+class MiniboardEntryEffect {
+    constructor(ctx, width, height) {
+        this.ctx = ctx;
+        this.width = width;
+        this.height = height;
+        this.centerX = this.width / 2;
+        this.centerY = this.height / 2;
+        this.startTime = Date.now();
+        this.isDisappearing = false;
+        this.totalTime = 1500; // 1.5 seconds
+        this.active = true; // Renamed from barrierActive to active for consistency with new Barrier class
+        this.time = 0; // Initialize this.time
+
+        this.particles = [];
+        this.particleCount = 50; // Reduced count for lightweight animation
+
+        this.initParticles();
+
+        // Automatically start disappearance after totalTime
+        setTimeout(() => {
+            this.startDisappear();
+        }, this.totalTime);
+    }
+
+    initParticles() {
+        for (let i = 0; i < this.particleCount; i++) {
+            this.particles.push({
+                x: this.centerX,
+                y: this.centerY,
+                size: Math.random() * 2 + 1,
+                speed: Math.random() * 1.5 + 0.5,
+                angle: Math.random() * Math.PI * 2,
+                distance: Math.random() * 50 + 25,
+                offset: Math.random() * Math.PI * 2,
+                targetX: 0,
+                targetY: 0,
+                active: false,
+                appearDelay: Math.random() * 600,
+                disappearDelay: Math.random() * 600
+            });
+        }
+
+        this.particles.forEach(particle => {
+            const orbitRadius = particle.distance;
+            particle.targetX = this.centerX + Math.cos(particle.angle) * orbitRadius;
+            particle.targetY = this.centerY + Math.sin(particle.angle) * orbitRadius;
+        });
+    }
+
+    startDisappear() { // Renamed from startDisappearEffect
+        this.isDisappearing = true;
+        this.startTime = Date.now(); // Reset start time for disappearance phase
+
+        this.particles.forEach(particle => {
+            if (particle.active) {
+                particle.startX = particle.x;
+                particle.startY = particle.y;
+            }
+        });
+    }
+
+    update(currentTime) { // Takes currentTime as argument
+        if (!this.active) return; // Use this.active
+
+        if (!this.isDisappearing) {
+            const elapsed = currentTime - this.startTime;
+            const progress = Math.min(1, elapsed / this.totalTime);
+
+            this.particles.forEach(particle => {
+                const activationTime = this.startTime + particle.appearDelay;
+
+                if (!particle.active && currentTime >= activationTime) {
+                    particle.active = true;
+                }
+
+                if (particle.active) {
+                    const particleElapsed = currentTime - activationTime;
+                    const moveProgress = Math.min(1, particleElapsed / 300); // 300ms for particle movement
+                    const easeProgress = 1 - Math.pow(1 - moveProgress, 3);
+
+                    particle.x = this.centerX + (particle.targetX - this.centerX) * easeProgress;
+                    particle.y = this.centerY + (particle.targetY - this.centerY) * easeProgress;
+
+                    if (moveProgress >= 1) {
+                        const orbitRadius = particle.distance + Math.sin(this.time * 0.02 + particle.offset) * 10;
+                        particle.x = this.centerX + Math.cos(this.time * 0.01 * particle.speed + particle.angle) * orbitRadius;
+                        particle.y = this.centerY + Math.sin(this.time * 0.01 * particle.speed + particle.angle) * orbitRadius;
+                    }
+                }
+            });
+        } else {
+            const elapsed = currentTime - this.startTime;
+            const progress = Math.min(1, elapsed / this.totalTime);
+
+            this.particles.forEach(particle => {
+                if (particle.active) {
+                    const disappearTime = this.startTime + particle.disappearDelay;
+
+                    if (currentTime >= disappearTime) {
+                        const particleElapsed = currentTime - disappearTime;
+                        const moveProgress = Math.min(1, particleElapsed / 300);
+                        const easeProgress = 1 - Math.pow(1 - moveProgress, 3);
+
+                        particle.x = particle.startX + (this.centerX - particle.startX) * easeProgress;
+                        particle.y = particle.startY + (this.centerY - this.startY) * easeProgress;
+
+                        if (moveProgress >= 1) {
+                            particle.active = false;
+                        }
+                    }
+                }
+            });
+
+            if (progress >= 1) {
+                const allInactive = this.particles.every(particle => !particle.active);
+                if (allInactive) {
+                    this.active = false; // Use this.active
+                }
+            }
+        }
+        this.time++; // Use this.time instead of globalTime
+    }
+
+    draw(currentTime) { // Takes currentTime as argument
+        if (!this.active) return; // Use this.active
+
+        this.particles.forEach((particle, index) => {
+            if (particle.active) {
+                this.ctx.beginPath();
+                this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+
+                if (!this.isDisappearing && (currentTime - (this.startTime + particle.appearDelay)) < 300) {
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                } else {
+                    const alpha = 0.7 + Math.sin(this.time * 0.03 + index) * 0.3; // Use this.time
+                    this.ctx.fillStyle = `rgba(0, 200, 255, ${alpha})`;
+                }
+                this.ctx.fill();
+            }
+        });
+
+        let coreSize = this.isDisappearing ? 8 : 15;
+        const pulsingSize = coreSize + Math.sin(this.time * 0.1) * 3; // Use this.time
+
+        this.ctx.beginPath();
+        this.ctx.arc(this.centerX, this.centerY, pulsingSize, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        this.ctx.fill();
+    }
+
+    isActive() {
+        return this.active; // Use this.active
+    }
+}
+
 function setupMiniboardDimensions() {
     const screenHeight = window.innerHeight;
-    const miniboardsPerColumn = 7;
-    const numGaps = miniboardsPerColumn - 1;
     const fixedGap = 4; // pixels for the gap between miniboards
+    const verticalPadding = 20; // pixels for top and bottom padding
 
-    // Calculate MINIBOARD_HEIGHT such that all miniboards + fixed gaps fit within screenHeight
-    MINIBOARD_HEIGHT = ((screenHeight - (numGaps * fixedGap)) / miniboardsPerColumn) * 0.95;
+    // Calculate available height for miniboards and gaps
+    const availableHeight = screenHeight - (2 * verticalPadding);
+
+    // Calculate MINIBOARD_HEIGHT such that all miniboards + fixed gaps fit within availableHeight
+    MINIBOARD_HEIGHT = (availableHeight - (NUM_GAPS_PER_COLUMN * fixedGap)) / MINIBOARDS_PER_COLUMN;
 
     // Ensure a minimum size for MINIBOARD_HEIGHT
     MINIBOARD_HEIGHT = Math.max(MINIBOARD_HEIGHT, CONFIG.board.visibleRows * 4); // Minimum height for 4px cell size
@@ -62,7 +223,9 @@ function setupMiniboardSlots() {
             boardState: Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0)),
             isGameOver: false,
             canvas: canvas,
-            ctx: canvas.getContext('2d')
+            ctx: canvas.getContext('2d'),
+            isNew: false,
+            effect: null // Add this property
         });
     }
 }
@@ -88,9 +251,8 @@ function positionMiniboards() {
     const gameAreaLeft = leftRect.left - containerRect.left;
     const gameAreaRight = rightRect.right - containerRect.left;
 
-    const miniboardsPerRow = 7;
-    const miniboardsPerColumn = 7;
-    const totalMiniboardsPerSide = miniboardsPerRow * miniboardsPerColumn; // 49
+    const miniboardsPerRow = MINIBOARDS_PER_COLUMN;
+    const totalMiniboardsPerSide = miniboardsPerRow * MINIBOARDS_PER_COLUMN; // 49
 
     const leftGridWidth = miniboardsPerRow * MINIBOARD_WIDTH + (miniboardsPerRow - 1) * MINIBOARD_GAP;
 
@@ -135,11 +297,24 @@ function addOpponent(userId) {
     if (userId === socket.id) return;
     const existingSlot = miniboardSlots.find(slot => slot.userId === userId);
     if (existingSlot) return;
-    const emptySlot = miniboardSlots.find(slot => slot.userId === null);
-    if (emptySlot) {
+
+    // Find all empty slots
+    const emptySlots = miniboardSlots.filter(slot => slot.userId === null);
+
+    if (emptySlots.length > 0) {
+        // Pick a random empty slot
+        const randomIndex = Math.floor(Math.random() * emptySlots.length);
+        const emptySlot = emptySlots[randomIndex];
+
         emptySlot.userId = userId;
         emptySlot.isGameOver = false;
         emptySlot.boardState.forEach(row => row.fill(0));
+        emptySlot.isNew = true; // Add this flag for the effect
+
+        // Only start the effect if the game is not yet playing
+        if (gameState !== 'PLAYING') { // Check gameState here
+            emptySlot.effect = new MiniboardEntryEffect(emptySlot.ctx, emptySlot.canvas.width, emptySlot.canvas.height);
+        }
     }
 }
 
@@ -161,15 +336,17 @@ function updateSlotBoard(slot, boardData, diffData) {
     drawMiniBoard(slot);
 }
 
-function drawMiniBoard(slot) {
-    const { ctx, canvas, boardState, isGameOver, userId } = slot;
+function drawMiniBoard(slot, currentTime) {
+    const { ctx, canvas, boardState, isGameOver, userId, effect } = slot;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    canvas.style.display = 'block'; // Always display the canvas
+    canvas.style.display = 'block';
 
     // If no user, draw an empty board
     if (userId === null) {
         ctx.fillStyle = 'rgba(0,0,0,0.1)'; // A lighter background for empty slots
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // If there was an effect, clear it
+        if (effect) slot.effect = null;
         return;
     }
 
@@ -181,9 +358,12 @@ function drawMiniBoard(slot) {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
+        // If there was an effect, clear it
+        if (effect) slot.effect = null;
         return;
     }
 
+    // Draw the actual miniboard content
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -198,10 +378,19 @@ function drawMiniBoard(slot) {
             }
         }
     }
+
+    // Update and draw the effect if active
+    if (effect && effect.isActive()) {
+        effect.update(currentTime);
+        effect.draw(currentTime);
+    } else if (effect && !effect.isActive()) {
+        slot.effect = null; // Clean up inactive effect
+    }
 }
 
-function drawAllMiniBoards() {
-    miniboardSlots.forEach(drawMiniBoard);
+export function drawAllMiniBoards() {
+    const currentTime = performance.now(); // Get current time once
+    miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime)); // Pass currentTime
 }
 
 let finalRanking = {}; // To store all player ranks
@@ -215,6 +404,8 @@ socket.on("connect", () => {
 });
 
 export function startMatching() {
+    miniboardSlots.forEach(slot => slot.userId = null); // Clear miniboards
+    drawAllMiniBoards(); // Redraw to show them empty
     socket.emit("matching");
 }
 
@@ -237,7 +428,7 @@ socket.on("roomInfo", (data) => {
 socket.on("StartGame", () => {
     currentCountdown = null;
     showCountdown(null);
-    initializePieces();
+    resetGame(); // Changed to resetGame()
     setGameState('PLAYING');
     miniboardSlots.forEach(slot => slot.isGameOver = false);
     drawAllMiniBoards();
@@ -250,6 +441,13 @@ socket.on("ranking", ({ yourRankMap }) => {
 
   // Merge new ranking info
   Object.assign(finalRanking, yourRankMap);
+
+  // Ensure all active players are in finalRanking with null if their rank is not yet determined
+  miniboardSlots.forEach(slot => {
+      if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
+          finalRanking[slot.userId] = null; // Mark as active/undetermined rank
+      }
+  });
 
   // Update miniboards based on the comprehensive finalRanking map
   for (const userId in finalRanking) {
@@ -319,7 +517,15 @@ socket.on("PlayerDisconnected", ({ userId }) => {
 
 // --- Rest of the file is the same as before (sending data, error handling) ---
 
-socket.on("CountDown", (count) => { currentCountdown = count; showCountdown(count); });
+socket.on("CountDown", (count) => {
+    currentCountdown = count;
+    showCountdown(count);
+    if (count === 5) { // Assuming 5 is the start of the countdown
+        setHoldPiece(null);
+        setNextPieces([]);
+        drawUI(); // Update the UI to reflect empty Next/Hold
+    }
+});
 socket.on("ReceiveGarbage", ({ from, lines }) => { addAttackBar(lines); });
 
 let lastSentBoard = null;

@@ -544,6 +544,10 @@ export function setHoldPiece(piece) {
     holdPiece = piece;
 }
 
+export function setNextPieces(pieces) {
+    nextPieces = pieces;
+}
+
 export function setHoldUsed(used) {
     holdUsed = used;
 }

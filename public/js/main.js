@@ -7,7 +7,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements ---
@@ -92,6 +92,7 @@ function update(now = performance.now()) {
     // Drawing is now separated and happens every frame regardless of state
     drawGame();
     drawUI();
+    drawAllMiniBoards();
 
     requestAnimationFrame(update);
 }
