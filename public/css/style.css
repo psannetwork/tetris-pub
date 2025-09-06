@@ -158,7 +158,7 @@ canvas {
 .final-ranks {
   margin: 20px auto; /* Center the block horizontally */
   text-align: left;
-  max-width: 400px; /* Increased width for better readability */
+  max-width: 600px; /* Increased width for better readability */
   width: 80%;
 }
 

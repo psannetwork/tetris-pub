@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { tetrominoTypeToIndex, CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './draw.js';
+import { tetrominoTypeToIndex, MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './draw.js';
 import { showCountdown, showGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
@@ -106,31 +106,19 @@ class MiniboardEntryEffect {
 }
 
 function setupMiniboardDimensions() {
-    const screenHeight = window.innerHeight;
-    const fixedGap = 4; // pixels for the gap between miniboards
-    const verticalPadding = 20; // pixels for top and bottom padding
-
-    // Calculate available height for miniboards and gaps
-    const availableHeight = screenHeight - (2 * verticalPadding);
-
-    // Calculate MINIBOARD_HEIGHT such that all miniboards + fixed gaps fit within availableHeight
-    MINIBOARD_HEIGHT = (availableHeight - (NUM_GAPS_PER_COLUMN * fixedGap)) / MINIBOARDS_PER_COLUMN;
-
-    // Ensure a minimum size for MINIBOARD_HEIGHT
-    MINIBOARD_HEIGHT = Math.max(MINIBOARD_HEIGHT, CONFIG.board.visibleRows * 4); // Minimum height for 4px cell size
-
-    // Calculate MINIBOARD_CELL_SIZE based on the new MINIBOARD_HEIGHT
-    MINIBOARD_CELL_SIZE = MINIBOARD_HEIGHT / CONFIG.board.visibleRows;
+    // Use a fixed ratio relative to the main board's cell size
+    // This ensures miniboards scale proportionally with the main game board
+    MINIBOARD_CELL_SIZE = 4.6; // Fixed size based on user request
 
     // Ensure a minimum size for MINIBOARD_CELL_SIZE
     MINIBOARD_CELL_SIZE = Math.max(MINIBOARD_CELL_SIZE, 4); // Minimum 4px cell size
 
-    // Recalculate MINIBOARD_HEIGHT based on the final MINIBOARD_CELL_SIZE to ensure integer values
+    // Recalculate MINIBOARD_HEIGHT based on the final MINIBOARD_CELL_SIZE
     MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE;
-
-    MINIBOARD_GAP = fixedGap; // Use the fixed gap
-
     MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE;
+
+    // MINIBOARD_GAP can remain fixed or also be relative
+    MINIBOARD_GAP = 4; // pixels for the gap between miniboards
 }
 
 function setupMiniboardSlots() {

@@ -8,6 +8,7 @@ import { attackBarSegments, MAX_ATTACK } from './garbage.js';
 
 // --- Layout Constants ---
 export let CELL_SIZE;
+export { CELL_SIZE as MAIN_BOARD_CELL_SIZE };
 export let BOARD_WIDTH;
 export let BOARD_HEIGHT;
 export let ATTACK_BAR_WIDTH;
@@ -43,8 +44,8 @@ let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 // --- Main Setup Function ---
 export function setupCanvases() {
     // Use viewport dimensions for reliable sizing
-    const screenWidth = window.innerWidth * 0.95; // Add padding
-    const screenHeight = window.innerHeight * 0.95; // Add padding
+    const screenWidth = window.innerWidth * 1.0; // Add padding
+    const screenHeight = window.innerHeight * 1.0; // Add padding
 
     // Define relative sizes for elements based on board cell units
     const BOARD_COLS = CONFIG.board.cols;
@@ -52,7 +53,7 @@ export function setupCanvases() {
     const HOLD_BOX_COLS = 4;
     const NEXT_BOX_COLS = 4;
     const ATTACK_BAR_COLS = 1;
-    const GAP_COLS = 1; // Gap between main game elements
+    const GAP_COLS = 3; // Gap between main game elements
 
     // --- Calculate CELL_SIZE based on available space ---
 
@@ -60,8 +61,8 @@ export function setupCanvases() {
     // Total columns needed for the central game area + miniboards
     const MINIBOARDS_PER_ROW = 7;
     const MINIBOARD_COLS = CONFIG.board.cols;
-    const MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO = 1/4;
-    const MINIBOARD_GAP_TO_CELL_SIZE_RATIO = 1/4;
+    const MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO = 1/8;
+    const MINIBOARD_GAP_TO_CELL_SIZE_RATIO = 1/8;
     const miniboardGridWidthInCellUnits =
         (MINIBOARDS_PER_ROW * MINIBOARD_COLS * MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO) +
         ((MINIBOARDS_PER_ROW - 1) * MINIBOARD_GAP_TO_CELL_SIZE_RATIO);
@@ -73,7 +74,7 @@ export function setupCanvases() {
 
     // 2. Calculate height-based CELL_SIZE
     // Estimate total vertical units needed
-    const totalVerticalUnits = BOARD_VISIBLE_ROWS + 4; // Board height + some padding for elements above/below
+    const totalVerticalUnits = BOARD_VISIBLE_ROWS + 2; // Board height + some padding for elements above/below
     const cellSizeFromHeight = screenHeight / totalVerticalUnits;
 
     // 3. Determine the final CELL_SIZE
