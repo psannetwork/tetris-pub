@@ -136,6 +136,12 @@ canvas {
   background-color: var(--button-primary-hover-bg);
 }
 
+.lobby-button[disabled], .game-end-buttons button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none; /* Prevents click events */
+}
+
 #countdown-overlay {
   font-size: 10vh; /* Changed to vh */
   font-weight: bold;

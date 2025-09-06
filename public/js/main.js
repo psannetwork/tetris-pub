@@ -27,10 +27,21 @@ let pps = '0.00';
 let apm = '0.0';
 let time = '00:00';
 
+// --- Helper function to set button state ---
+function setButtonState(button, enabled) {
+    button.disabled = !enabled;
+    if (enabled) {
+        button.classList.remove('disabled');
+    } else {
+        button.classList.add('disabled');
+    }
+}
+
 // --- Event Listeners ---
 startButton.onclick = () => {
     lobbyOverlay.classList.add('hidden');
     startMatching();
+    setButtonState(startButton, false); // Disable start button after click
 };
 
 retryButton.onclick = () => {
@@ -38,6 +49,9 @@ retryButton.onclick = () => {
     lobbyOverlay.classList.remove('hidden');
     setGameState('LOBBY');
     resetGame();
+    setButtonState(retryButton, false); // Disable retry button after click
+    setButtonState(lobbyButton, false); // Disable lobby button after click
+    setButtonState(startButton, true); // Enable start button for new game
 };
 
 lobbyButton.onclick = () => {
@@ -45,6 +59,9 @@ lobbyButton.onclick = () => {
     lobbyOverlay.classList.remove('hidden');
     setGameState('LOBBY');
     resetGame(); 
+    setButtonState(lobbyButton, false); // Disable lobby button after click
+    setButtonState(retryButton, false); // Disable retry button
+    setButtonState(startButton, true); // Enable start button for new game
 };
 
 // --- Game Loop ---
@@ -90,12 +107,32 @@ function update(now = performance.now()) {
         keyPresses = 0;
     }
 
+    // Update button states based on game state
+    updateButtonStates();
+
     // Drawing is now separated and happens every frame regardless of state
     drawGame();
     drawUI();
     startAnimationIfNeeded();
 
     requestAnimationFrame(update);
+}
+
+// --- Function to update button states based on game state ---
+function updateButtonStates() {
+    if (gameState === 'LOBBY') {
+        setButtonState(startButton, true);
+        setButtonState(retryButton, false);
+        setButtonState(lobbyButton, false);
+    } else if (gameState === 'PLAYING') {
+        setButtonState(startButton, false);
+        setButtonState(retryButton, false);
+        setButtonState(lobbyButton, false);
+    } else if (gameState === 'GAME_OVER') {
+        setButtonState(startButton, false);
+        setButtonState(retryButton, true);
+        setButtonState(lobbyButton, true);
+    }
 }
 
 // --- Initialization ---
@@ -107,6 +144,7 @@ function init() {
     resetGame();
     lastTime = performance.now();
     update();
+    updateButtonStates(); // Initial button state update
 }
 
 // --- Public Functions ---

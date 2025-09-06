@@ -141,11 +141,15 @@ function handleGameOver(io, socket, reason) {
     if (activePlayersCount <= 1) {
         const allPlayersInRankOrder = [...ranks];
         const remaining = [...room.initialPlayers].find(id => !allPlayersInRankOrder.includes(id));
+        
+        let finalRanks = [];
         if (remaining) {
-            allPlayersInRankOrder.unshift(remaining);
+            finalRanks.push(remaining); // Winner is first
         }
-
-        const finalRanks = allPlayersInRankOrder.reverse();
+        // Add the eliminated players in reverse order of elimination
+        for (let i = ranks.length - 1; i >= 0; i--) {
+            finalRanks.push(ranks[i]);
+        }
 
         const yourRankMap = Object.fromEntries(
             [...room.initialPlayers].map(id => [id, finalRanks.indexOf(id) + 1])
