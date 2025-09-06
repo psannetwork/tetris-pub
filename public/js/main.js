@@ -35,8 +35,9 @@ startButton.onclick = () => {
 
 retryButton.onclick = () => {
     gameEndOverlay.classList.remove('visible');
+    lobbyOverlay.classList.remove('hidden');
+    setGameState('LOBBY');
     resetGame();
-    startMatching();
 };
 
 lobbyButton.onclick = () => {
