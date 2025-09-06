@@ -231,10 +231,37 @@ function drawAttackBar() {
     attackBarCtx.fillStyle = '#111';
     attackBarCtx.fillRect(0, 0, ATTACK_BAR_WIDTH, BOARD_HEIGHT);
 
+    const now = performance.now();
     let currentY = BOARD_HEIGHT;
+    
     for (const seg of attackBarSegments) {
         const segHeight = BOARD_HEIGHT * (seg.value / MAX_ATTACK);
-        attackBarCtx.fillStyle = seg.type === 'pending' ? '#F9A825' : CONFIG.colors.attackBar;
+        
+        let segmentColor;
+        
+        const elapsed = seg.timestamp ? (now - seg.timestamp) : 0;
+        
+        // --- DEBUGGING LOGS --- 
+        console.log(`Segment value: ${seg.value}, Timestamp: ${seg.timestamp}, Now: ${now}, Elapsed: ${elapsed}`);
+        // --- END DEBUGGING LOGS ---
+
+        if (elapsed >= 12000) {
+            // 12秒以上経過: 点滅（100msごとに赤と白）
+            const flashSpeed = 100;
+            const isBright = Math.floor(now / flashSpeed) % 2 === 0;
+            segmentColor = isBright ? '#FF0000' : '#FFFFFF';
+        } else if (elapsed >= 8000) {
+            // 8秒以上経過: 赤
+            segmentColor = '#FF0000';
+        } else if (elapsed >= 4000) {
+            // 4秒以上経過: 黄
+            segmentColor = '#FFFF00';
+        } else {
+            // それ以外: 白
+            segmentColor = '#FFFFFF';
+        }
+        
+        attackBarCtx.fillStyle = segmentColor;
         currentY -= segHeight;
         attackBarCtx.fillRect(0, currentY, ATTACK_BAR_WIDTH, segHeight);
     }
