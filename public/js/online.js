@@ -405,8 +405,7 @@ socket.on("StartGame", () => {
 });
 
 socket.on("ranking", ({ yourRankMap }) => {
-  // If we already have a final rank, don't process further ranking events.
-  if (finalRanking[socket.id]) return;
+  
 
   // Merge new ranking info
   Object.assign(finalRanking, yourRankMap);
