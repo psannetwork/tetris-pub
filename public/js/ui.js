@@ -35,6 +35,11 @@ export function showGameEndScreen(title, isWin, rankingMap, myId) {
   }
 }
 
+export function showPerfectClearMessage() {
+  console.log("Perfect Clear!");
+  // TODO: Implement actual UI for perfect clear message
+}
+
 /**
  * Displays the countdown overlay.
  * @param {number|string} count - The countdown number or text to display.

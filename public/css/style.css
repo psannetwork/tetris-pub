@@ -150,9 +150,9 @@ canvas {
 }
 
 .final-ranks {
-  margin-top: 20px;
+  margin: 20px auto; /* Center the block horizontally */
   text-align: left;
-  max-width: 300px;
+  max-width: 400px; /* Increased width for better readability */
   width: 80%;
 }
 
@@ -168,10 +168,11 @@ canvas {
 }
 
 .final-ranks li {
-  background-color: rgba(0,0,0,0.2);
+  background-color: rgba(0,0,0,0.4);
   padding: 8px;
   margin-bottom: 5px;
   border-radius: 4px;
+  font-size: 1.8vh;
 }
 
 .my-rank {
