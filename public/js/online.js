@@ -364,6 +364,7 @@ socket.on("connect", () => {
     });
     startAnimationIfNeeded();
     finalRanking = {}; // Reset on new connection
+    setGameState('LOBBY'); // Ensure client is in lobby state on connect
 });
 
 export function startMatching() {
@@ -576,6 +577,7 @@ socket.on("reconnect", () => {
     console.log("✅ サーバーに再接続しました");
     hideConnectionError();
     socket.emit('requestRoomInfo');
+    setGameState('LOBBY'); // Ensure client is in lobby state on reconnect
 });
 socket.on("reconnect_failed", () => {
     console.error("再接続に失敗しました");

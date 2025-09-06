@@ -43,8 +43,8 @@ let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 // --- Main Setup Function ---
 export function setupCanvases() {
     // Use viewport dimensions for reliable sizing
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
+    const screenWidth = window.innerWidth * 0.95; // Add padding
+    const screenHeight = window.innerHeight * 0.95; // Add padding
 
     // Define relative sizes for elements based on board cell units
     const BOARD_COLS = CONFIG.board.cols;
