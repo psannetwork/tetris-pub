@@ -10,17 +10,20 @@
 </head>
 <body>
 
-  <div id="game-container">
-    <div class="game-panel-left">
-      <div id="hold-box"></div>
+  <div id="overall-game-wrapper">
+    <div id="left-miniboards-group"></div>
+    <div id="game-container"> <!-- This is the new central block -->
+      <div id="game-left-panel">
+        <div id="hold-box"></div>
+      </div>
+      <div id="attack-bar"></div> <!-- Attack bar is now a direct child of game-container -->
+      <div id="main-game-board"></div>
+      <div id="game-right-panel">
+        <div id="next-box"></div>
+        <div id="score-display"></div>
+      </div>
     </div>
-    <div id="attack-bar"></div>
-    <div id="main-game-board"></div>
-    <div class="game-panel-right">
-      <div id="next-box"></div>
-      <div id="score-display"></div>
-    </div>
-    <div id="miniboards-container"></div>
+    <div id="right-miniboards-group"></div>
   </div>
 
   <div id="lobby-overlay">

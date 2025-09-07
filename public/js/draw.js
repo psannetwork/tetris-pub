@@ -43,54 +43,16 @@ let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 
 // --- Main Setup Function ---
 export function setupCanvases() {
-    // Use viewport dimensions for reliable sizing
-    const screenWidth = window.innerWidth * 1.0; // Add padding
-    const screenHeight = window.innerHeight * 1.0; // Add padding
-
-    // Define relative sizes for elements based on board cell units
-    const BOARD_COLS = CONFIG.board.cols;
-    const BOARD_VISIBLE_ROWS = CONFIG.board.visibleRows;
-    const HOLD_BOX_COLS = 4;
-    const NEXT_BOX_COLS = 4;
-    const ATTACK_BAR_COLS = 1;
-    const GAP_COLS = 3; // Gap between main game elements
-
-    // --- Calculate CELL_SIZE based on available space ---
-
-    // 1. Calculate width-based CELL_SIZE
-    // Total columns needed for the central game area + miniboards
-    const MINIBOARDS_PER_ROW = 7;
-    const MINIBOARD_COLS = CONFIG.board.cols;
-    const MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO = 1/8;
-    const MINIBOARD_GAP_TO_CELL_SIZE_RATIO = 1/8;
-    const miniboardGridWidthInCellUnits =
-        (MINIBOARDS_PER_ROW * MINIBOARD_COLS * MINIBOARD_CELL_SIZE_TO_CELL_SIZE_RATIO) +
-        ((MINIBOARDS_PER_ROW - 1) * MINIBOARD_GAP_TO_CELL_SIZE_RATIO);
-
-    const mainAreaColsNeeded = HOLD_BOX_COLS + GAP_COLS + ATTACK_BAR_COLS + GAP_COLS + BOARD_COLS + GAP_COLS + NEXT_BOX_COLS;
-    // Add space for two miniboard grids and gaps to separate them from the main area
-    const totalHorizontalUnits = mainAreaColsNeeded + (2 * miniboardGridWidthInCellUnits) + (2 * GAP_COLS);
-    const cellSizeFromWidth = screenWidth / totalHorizontalUnits;
-
-    // 2. Calculate height-based CELL_SIZE
-    // Estimate total vertical units needed
-    const totalVerticalUnits = BOARD_VISIBLE_ROWS + 2; // Board height + some padding for elements above/below
-    const cellSizeFromHeight = screenHeight / totalVerticalUnits;
-
-    // 3. Determine the final CELL_SIZE
-    CELL_SIZE = Math.floor(Math.min(cellSizeFromWidth, cellSizeFromHeight));
-    CELL_SIZE = Math.max(CELL_SIZE, 8); // Set a reasonable minimum size
-
-    // --- Recalculate all dimensions based on the final CELL_SIZE ---
-    BOARD_WIDTH = BOARD_COLS * CELL_SIZE;
-    BOARD_HEIGHT = BOARD_VISIBLE_ROWS * CELL_SIZE;
-    ATTACK_BAR_WIDTH = ATTACK_BAR_COLS * CELL_SIZE;
-    HOLD_BOX_WIDTH = HOLD_BOX_COLS * CELL_SIZE;
-    HOLD_BOX_HEIGHT = 4 * CELL_SIZE; // Standard 4-cell height
-    NEXT_BOX_WIDTH = NEXT_BOX_COLS * CELL_SIZE;
-    NEXT_BOX_HEIGHT = CONFIG.game.nextPiecesCount * 4 * CELL_SIZE;
-    const SCORE_AREA_ROWS = 3;
-    SCORE_AREA_HEIGHT = SCORE_AREA_ROWS * CELL_SIZE;
+    // Fixed dimensions based on user requirements
+    CELL_SIZE = 30; // 300px board width / 10 columns
+    BOARD_WIDTH = 300;
+    BOARD_HEIGHT = 600;
+    ATTACK_BAR_WIDTH = 30;
+    HOLD_BOX_WIDTH = 96;
+    HOLD_BOX_HEIGHT = 96;
+    NEXT_BOX_WIDTH = 96;
+    NEXT_BOX_HEIGHT = 456; // Changed from 480 to 456 (76px * 6 pieces)
+    SCORE_AREA_HEIGHT = 100; // Arbitrary fixed height for score display
 
     // --- Create Canvases and Set Element Sizes ---
     gameCtx = createCanvas('main-game-board', BOARD_WIDTH, BOARD_HEIGHT).ctx;
@@ -105,16 +67,21 @@ export function setupCanvases() {
     boardCanvas.height = BOARD_HEIGHT;
     boardCtx = boardCanvas.getContext('2d');
 
+    // Set the height of the next-box HTML element to match NEXT_BOX_HEIGHT
+    const nextBoxElement = document.getElementById('next-box');
+    if (nextBoxElement) {
+        nextBoxElement.style.height = `${NEXT_BOX_HEIGHT}px`;
+    }
 
     scoreDisplay.style.width = `${NEXT_BOX_WIDTH}px`;
     scoreDisplay.style.height = `${SCORE_AREA_HEIGHT}px`;
-    scoreDisplay.style.fontSize = `${CELL_SIZE * 0.6}px`;
+    scoreDisplay.style.fontSize = `1.2rem`; // Fixed font size
 
-    // Set panel heights to match the board for alignment
-    const leftPanel = document.querySelector('.game-panel-left');
-    if (leftPanel) leftPanel.style.height = `${BOARD_HEIGHT}px`;
-    const rightPanel = document.querySelector('.game-panel-right');
-    if (rightPanel) rightPanel.style.height = `${BOARD_HEIGHT}px`;
+    // Remove panel height adjustments as they are handled by CSS now
+    // const leftPanel = document.querySelector('.game-panel-left');
+    // if (leftPanel) leftPanel.style.height = '';
+    // const rightPanel = document.querySelector('.game-panel-right');
+    // if (rightPanel) rightPanel.style.height = '';
 
     // Notify other components that layout has changed
     window.dispatchEvent(new CustomEvent('layout-changed'));

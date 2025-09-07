@@ -27,50 +27,108 @@ html, body {
     color: var(--text-color);
 }
 
-#game-container {
-    position: fixed; /* Use fixed positioning for robust centering */
+#overall-game-wrapper {
+    position: fixed;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -52%);
+    transform: translate(-50%, -50%);
     display: flex;
-    gap: 10px;
-    /* width and height will be determined by content, or set by JS */
+    width: 1232px; /* 305 + 20 + 582 + 20 + 305 */
+    height: 623.5px; /* Max height of miniboards */
+    box-sizing: border-box;
+    justify-content: center; /* Center the game-container and miniboards */
+    align-items: flex-start; /* Align items to the top */
+    gap: 20px; /* Gap between miniboards and game-container */
+}
+
+#game-container {
+    display: flex;
+    width: 582px; /* 96 + 20 + 30 + 20 + 300 + 20 + 96 */
+    height: 600px; /* Main board height */
+    box-sizing: border-box;
+    justify-content: center; /* Center main-game-board */
+    align-items: flex-start; /* Align items to the top */
+    gap: 20px; /* Gap between panels and main board */
+}
+
+#game-left-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* Push hold box to top */
+    align-items: center; /* Center items horizontally */
+    width: 96px; /* Width of hold box */
+    height: 600px; /* Main board height */
     box-sizing: border-box;
 }
 
-#game-container > div {
-    /* Removed position: absolute; */
-}
-
-.game-panel-left, .game-panel-right {
+#game-right-panel {
     display: flex;
-    flex-direction: column; /* Align items vertically */
-    gap: 10px; /* Gap between elements inside the panel */
+    flex-direction: column;
+    justify-content: space-between; /* Distribute space between elements */
     align-items: center; /* Center items horizontally */
-    justify-content: flex-start; /* Align content to the top */
+    width: 96px; /* Width of next box */
+    height: 600px; /* Main board height */
+    box-sizing: border-box;
 }
 
-canvas {
-    display: block;
+#left-miniboards-group, #right-miniboards-group {
+    width: 305px; /* 7 * 35px + 6 * 10px */
+    height: 623.5px; /* 7 * 80.5px + 6 * 10px */
+    display: grid;
+    grid-template-columns: repeat(7, 35px); /* 7 mini-boards of 35px each */
+    grid-template-rows: repeat(7, 80.5px); /* 7 mini-boards of 80.5px each */
+    gap: 10px; /* Gap between mini-boards */
+    box-sizing: border-box;
+    overflow: hidden; /* Hide overflow if mini-boards exceed container */
+}
+
+#attack-bar {
+    width: 30px;
+    height: 600px; /* Main board height */
+    background-color: var(--attack-color); /* Example color */
+    /* align-self is not needed here as it's a direct child of game-container */
+}
+
+#main-game-board {
+    width: 300px;
+    height: 600px;
+    background-color: var(--board-background-color);
+    box-sizing: border-box;
+}
+
+#hold-box {
+    width: 96px;
+    height: 96px;
+    background-color: var(--panel-background-color);
+    /* align-self is not needed here as game-left-panel handles positioning */
+}
+
+#next-box {
+    width: 96px;
+    /* height: 480px; */ /* Removed fixed height */
+    background-color: var(--panel-background-color);
+    /* align-self is not needed here as game-right-panel handles positioning */
 }
 
 #score-display {
     color: white;
-    /* font-size will be set by JS */
     font-family: var(--font-family);
+    width: 96px; /* Same width as next-box */
+    text-align: center;
+    /* align-self is not needed here as game-right-panel handles positioning */
 }
 
+/* Mini-board specific styling */
 .miniboard {
-    position: absolute;
+    width: 35px;
+    height: 80.5px;
+    background-color: var(--panel-background-color);
+    box-sizing: border-box;
+    /* Further styling for individual mini-boards can go here */
 }
 
-#miniboards-container {
-    width: 0;
-    height: 0;
-    flex-shrink: 0;
-    flex-grow: 0;
-    margin: 0;
-    padding: 0;
+canvas {
+    display: block;
 }
 
 /* Overlays */

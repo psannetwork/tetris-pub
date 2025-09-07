@@ -14,7 +14,8 @@ export let currentCountdown = null;
 
 // --- Opponent State Management ---
 export const miniboardSlots = [];
-const miniboardsContainer = document.getElementById('miniboards-container');
+const leftMiniboardsGroup = document.getElementById('left-miniboards-group');
+const rightMiniboardsGroup = document.getElementById('right-miniboards-group');
 
 export let MINIBOARD_CELL_SIZE;
 export let MINIBOARD_WIDTH;
@@ -108,7 +109,7 @@ class MiniboardEntryEffect {
 function setupMiniboardDimensions() {
     // Use a fixed ratio relative to the main board's cell size
     // This ensures miniboards scale proportionally with the main game board
-    MINIBOARD_CELL_SIZE = 4.6; // Fixed size based on user request
+    MINIBOARD_CELL_SIZE = 3.5; // Fixed size based on user request
 
     // Ensure a minimum size for MINIBOARD_CELL_SIZE
     MINIBOARD_CELL_SIZE = Math.max(MINIBOARD_CELL_SIZE, 4); // Minimum 4px cell size
@@ -122,7 +123,8 @@ function setupMiniboardDimensions() {
 }
 
 function setupMiniboardSlots() {
-    miniboardsContainer.innerHTML = '';
+    leftMiniboardsGroup.innerHTML = '';
+    rightMiniboardsGroup.innerHTML = '';
     miniboardSlots.length = 0;
     const totalMiniboards = 98; // 49 per side for a 7x7 grid
     for (let i = 0; i < totalMiniboards; i++) {
@@ -130,7 +132,12 @@ function setupMiniboardSlots() {
         canvas.width = MINIBOARD_WIDTH;
         canvas.height = MINIBOARD_HEIGHT;
         canvas.className = 'miniboard';
-        miniboardsContainer.appendChild(canvas);
+        
+        if (i < 49) {
+            leftMiniboardsGroup.appendChild(canvas);
+        } else {
+            rightMiniboardsGroup.appendChild(canvas);
+        }
 
         miniboardSlots.push({
             userId: null,
@@ -146,53 +153,13 @@ function setupMiniboardSlots() {
 }
 
 function positionMiniboards() {
-    // No explicit topMargin needed if we calculate MINIBOARD_HEIGHT to fill the screen
-    const topMargin = -(MINIBOARD_HEIGHT * 1.25 + MINIBOARD_GAP);
-
-    // Get the actual positions of the side panels from the DOM.
-    const leftPanel = document.querySelector('.game-panel-left');
-    const rightPanel = document.querySelector('.game-panel-right');
-
-    if (!leftPanel || !rightPanel) {
-        console.error("Game panels not found for miniboard positioning.");
-        return;
-    }
-
-    const leftRect = leftPanel.getBoundingClientRect();
-    const rightRect = rightPanel.getBoundingClientRect();
-    const containerRect = document.getElementById('game-container').getBoundingClientRect();
-
-    // Calculate positions relative to the game-container.
-    const gameAreaLeft = leftRect.left - containerRect.left;
-    const gameAreaRight = rightRect.right - containerRect.left;
-
-    const miniboardsPerRow = MINIBOARDS_PER_COLUMN;
-    const totalMiniboardsPerSide = miniboardsPerRow * MINIBOARDS_PER_COLUMN; // 49
-
-    const leftGridWidth = miniboardsPerRow * MINIBOARD_WIDTH + (miniboardsPerRow - 1) * MINIBOARD_GAP;
-
-    // Position grids relative to the actual game area bounds.
-    const leftGridStartX = gameAreaLeft - MINIBOARD_GAP - leftGridWidth;
-    const rightGridStartX = gameAreaRight + MINIBOARD_GAP;
-
-    let leftCount = 0;
-    let rightCount = 0;
+    const totalMiniboardsPerSide = 49; // 49 per side for a 7x7 grid
 
     miniboardSlots.forEach((slot, i) => {
-        if (i < totalMiniboardsPerSide) { // Left side: 0-48
-            const row = Math.floor(leftCount / miniboardsPerRow);
-            const col = leftCount % miniboardsPerRow;
-            slot.canvas.style.left = `${leftGridStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
-            slot.canvas.style.top = `${topMargin + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
-            leftCount++;
-        } else if (i < totalMiniboardsPerSide * 2) { // Right side: 49-97
-            const row = Math.floor(rightCount / miniboardsPerRow);
-            const col = rightCount % miniboardsPerRow;
-            slot.canvas.style.left = `${rightGridStartX + (col * (MINIBOARD_WIDTH + MINIBOARD_GAP))}px`;
-            slot.canvas.style.top = `${topMargin + (row * (MINIBOARD_HEIGHT + MINIBOARD_GAP))}px`;
-            rightCount++;
+        if (i < totalMiniboardsPerSide * 2) { // Ensure miniboards are visible if they are within the expected count
+            slot.canvas.style.display = ''; // Make sure they are visible
         } else {
-            slot.canvas.style.display = 'none';
+            slot.canvas.style.display = 'none'; // Hide any extra miniboards
         }
     });
 }

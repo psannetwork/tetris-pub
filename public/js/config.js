@@ -63,12 +63,12 @@ export const CONFIG = {
         softDrop: "ArrowDown", hardDrop: "Space", hold: "KeyC"
     },
     game: {
-        nextPiecesCount: 5
+        nextPiecesCount: 6
     },
     debug: {
         enableGarbage: true
     },
-    MAX_MINIBOARDS_PER_SIDE: 50,
+    MAX_MINIBOARDS_PER_SIDE: 40,
     serverUrl: 'https://special-doodle-ggq6qrpxpgjhvp45-6000.app.github.dev',
 
     // テトリミノの形状定義
