@@ -19,8 +19,35 @@ function handleSocketConnection(io, socket) {
         const oldRoomId = playerRoom.get(socket.id);
         if (oldRoomId && rooms.has(oldRoomId)) {
             const oldRoom = rooms.get(oldRoomId);
-            oldRoom.players.delete(socket.id);
-            oldRoom.initialPlayers.delete(socket.id);
+            // If the player was in a game that had started BUT was not yet over, handle it as a game over.
+        // If the game was already over, no need to call handleGameOver again.
+        if (oldRoom.isGameStarted && !oldRoom.isGameOver) {
+            handleGameOver(io, socket, "left to re-match");
+        }
+            
+            // Now, fully remove the player from the old room
+        oldRoom.players.delete(socket.id);
+        oldRoom.initialPlayers.delete(socket.id);
+        playerRoom.delete(socket.id); // Also clear the playerRoom map here
+
+        socket.leave(oldRoomId); // Leave the socket.io room
+        console.log(`🚪 ${socket.id} left room ${oldRoomId}`);
+
+        // Notify remaining players in the old room
+            emitToRoom(io, oldRoom, "roomInfo", {
+                roomId: oldRoom.roomId,
+                members: [...oldRoom.players]
+            });
+
+            // If the room becomes empty, clean it up
+            if (oldRoom.players.size === 0 && !oldRoom.isGameOver) {
+                clearInterval(oldRoom.countdownInterval);
+                spectators.delete(oldRoomId);
+                setTimeout(() => {
+                    rooms.delete(oldRoomId);
+                    console.log(`🗑️ Room ${oldRoomId} deleted due to being empty after a player left.`);
+                }, 5000);
+            }
         }
 
         let room = getAvailableRoom();
@@ -148,6 +175,9 @@ function handleSocketConnection(io, socket) {
             room.players.delete(socket.id);
             room.initialPlayers.delete(socket.id);
             playerRoom.delete(socket.id);
+
+            socket.leave(roomId); // Explicitly leave the room
+            console.log(`🚪 ${socket.id} left room ${roomId} on disconnect.`);
 
             if (room.players.size === 0 && !room.isGameOver) {
                 clearInterval(room.countdownInterval);

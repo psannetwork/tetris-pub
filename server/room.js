@@ -155,7 +155,7 @@ function handleGameOver(io, socket, reason) {
             [...room.initialPlayers].map(id => [id, finalRanks.indexOf(id) + 1])
         );
 
-        const rankingData = { ranking: finalRanks, yourRankMap };
+        const rankingData = { ranking: finalRanks, yourRankMap, roomId: room.roomId };
         emitToRoom(io, room, "ranking", rankingData);
 
         const winnerId = finalRanks[0]; // The first player in finalRanks is the winner
@@ -197,7 +197,7 @@ function handleGameOver(io, socket, reason) {
         })
     );
 
-    const rankingData = { ranking: ranks, yourRankMap };
+    const rankingData = { ranking: ranks, yourRankMap, roomId: room.roomId };
     emitToRoom(io, room, "ranking", rankingData);
     emitToRoom(io, room, "playerKO", socket.id);
 }

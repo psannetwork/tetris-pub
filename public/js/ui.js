@@ -62,3 +62,12 @@ export function showCountdown(count) {
         }
     }
 }
+
+/**
+ * Hides the game end screen.
+ */
+export function hideGameEndScreen() {
+  if (gameEndOverlay) {
+    gameEndOverlay.classList.remove('visible');
+  }
+}

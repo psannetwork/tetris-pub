@@ -1,6 +1,6 @@
 import { CONFIG } from './config.js';
 import { tetrominoTypeToIndex, MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './draw.js';
-import { showCountdown, showGameEndScreen } from './ui.js';
+import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
 import { drawUI } from './draw.js';
@@ -107,26 +107,19 @@ class MiniboardEntryEffect {
 }
 
 function setupMiniboardDimensions() {
-    // Use a fixed ratio relative to the main board's cell size
-    // This ensures miniboards scale proportionally with the main game board
-    MINIBOARD_CELL_SIZE = 3.5; // Fixed size based on user request
-
-    // Ensure a minimum size for MINIBOARD_CELL_SIZE
-    MINIBOARD_CELL_SIZE = Math.max(MINIBOARD_CELL_SIZE, 4); // Minimum 4px cell size
-
-    // Recalculate MINIBOARD_HEIGHT based on the final MINIBOARD_CELL_SIZE
-    MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE;
-    MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE;
-
-    // MINIBOARD_GAP can remain fixed or also be relative
-    MINIBOARD_GAP = 4; // pixels for the gap between miniboards
+    MINIBOARD_CELL_SIZE = 3.5; // Keep this for canvas drawing dimensions
+    MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE; // e.g. 20 * 3.5 = 70
+    MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE; // e.g. 10 * 3.5 = 35
 }
+
+// Call dimensions setup once on load.
+setupMiniboardDimensions();
 
 function setupMiniboardSlots() {
     leftMiniboardsGroup.innerHTML = '';
     rightMiniboardsGroup.innerHTML = '';
     miniboardSlots.length = 0;
-    const totalMiniboards = 98; // 49 per side for a 7x7 grid
+    const totalMiniboards = 98;
     for (let i = 0; i < totalMiniboards; i++) {
         const canvas = document.createElement('canvas');
         canvas.width = MINIBOARD_WIDTH;
@@ -146,31 +139,14 @@ function setupMiniboardSlots() {
             canvas: canvas,
             ctx: canvas.getContext('2d'),
             isNew: false,
-            effect: null, // Add this property
+            effect: null,
             dirty: true
         });
     }
 }
 
-function positionMiniboards() {
-    const totalMiniboardsPerSide = 49; // 49 per side for a 7x7 grid
-
-    miniboardSlots.forEach((slot, i) => {
-        if (i < totalMiniboardsPerSide * 2) { // Ensure miniboards are visible if they are within the expected count
-            slot.canvas.style.display = ''; // Make sure they are visible
-        } else {
-            slot.canvas.style.display = 'none'; // Hide any extra miniboards
-        }
-    });
-}
-
-window.addEventListener('layout-changed', () => {
-    setupMiniboardDimensions();
-    setupMiniboardSlots();
-    positionMiniboards();
-    // 必要に応じてアニメーションを開始
-    startAnimationIfNeeded();
-});
+// Setup slots on initial load
+window.addEventListener('load', setupMiniboardSlots);
 
 export function connectToServer() {
     socket.connect();
@@ -262,11 +238,16 @@ function drawMiniBoard(slot, currentTime) {
     const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
     for (let r = 0; r < CONFIG.board.visibleRows; r++) {
         for (let c = 0; c < CONFIG.board.cols; c++) {
-            const block = boardState[startRow + r][c];
+            const block = boardState[startRow + r]?.[c];
             if (block !== 0) {
                 const typeIndex = tetrominoTypeToIndex(block);
                 ctx.fillStyle = block === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
-                ctx.fillRect(c * MINIBOARD_CELL_SIZE, r * MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE);
+                ctx.fillRect(
+                    c * MINIBOARD_CELL_SIZE,
+                    r * MINIBOARD_CELL_SIZE,
+                    MINIBOARD_CELL_SIZE,
+                    MINIBOARD_CELL_SIZE
+                );
             }
         }
     }
@@ -309,6 +290,7 @@ function startAnimationIfNeeded() {
 export { drawAllMiniBoards as drawAllMiniBoardsInternal }; // 内部用
 
 let finalRanking = {}; // To store all player ranks
+let currentRoomId = null; // To store the current room ID
 
 // --- Socket Event Handlers ---
 socket.on("connect", () => {
@@ -332,6 +314,7 @@ export function startMatching() {
 }
 
 socket.on("roomInfo", (data) => {
+    currentRoomId = data.roomId; // Store the current room ID
     const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
     const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
 
@@ -349,17 +332,28 @@ socket.on("roomInfo", (data) => {
 socket.on("StartGame", () => {
     currentCountdown = null;
     showCountdown(null);
+    hideGameEndScreen(); // Hide end screen
     resetGame(); // Changed to resetGame()
+    setHoldPiece(null); // Moved from CountDown
+    drawUI();           // Moved from CountDown
     setGameState('PLAYING');
     miniboardSlots.forEach(slot => {
-        slot.isGameOver = false;
-        slot.dirty = true;
+        if (slot.userId) { // Only reset boards for active opponents
+            slot.isGameOver = false;
+            slot.boardState.forEach(row => row.fill(0)); // Clear the board state
+            slot.dirty = true;
+        }
     });
     startAnimationIfNeeded();
     finalRanking = {}; // Reset for new game
+    lastSentBoard = null; // Ensure board history is cleared for the new game
 });
 
-socket.on("ranking", ({ yourRankMap }) => {
+socket.on("ranking", ({ yourRankMap, roomId }) => {
+  if (roomId !== currentRoomId) {
+      console.log(`Ignoring ranking update from old room: ${roomId}`);
+      return;
+  }
   
 
   // Merge new ranking info
@@ -412,6 +406,7 @@ socket.on("ranking", ({ yourRankMap }) => {
 });
 
 socket.on("BoardStatus", (data) => {
+    if (gameState !== 'PLAYING') return; // Ignore if not in a game
     const { UserID, board, diff } = data;
     let slot = miniboardSlots.find(s => s.userId === UserID);
     if (!slot) {
@@ -422,6 +417,7 @@ socket.on("BoardStatus", (data) => {
 });
 
 socket.on("BoardStatusBulk", (boards) => {
+    if (gameState !== 'PLAYING') return; // Ignore if not in a game
     for (const userId in boards) {
         const boardData = boards[userId];
         if (!boardData) continue;
@@ -443,11 +439,6 @@ socket.on("PlayerDisconnected", ({ userId }) => {
 socket.on("CountDown", (count) => {
     currentCountdown = count;
     showCountdown(count);
-    if (count === 5) { // Assuming 5 is the start of the countdown
-        setHoldPiece(null);
-        setNextPieces([]);
-        drawUI(); // Update the UI to reflect empty Next/Hold
-    }
 });
 socket.on("ReceiveGarbage", ({ from, lines }) => { addAttackBar(lines); });
 
