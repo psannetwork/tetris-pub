@@ -5,7 +5,7 @@ const BOT_COUNT = 30;
 const BOT_MOVE_DELAY = 400;
 const MOVE_ANIMATION_DELAY = 100;
 const SOFT_DROP_DELAY = 100;
-const SERVER_URL = 'http://localhost:6000';
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:6000';
 
 let lastPieceType = null;
 
