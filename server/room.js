@@ -22,6 +22,7 @@ function createRoom(playerId) {
         isGameOver: false,
         totalPlayers: null,
         boards: {},
+        stats: new Map(),
         countdownCount: COUNTDOWN_START,
         countdownInterval: null,
         matchingClosed: false,
@@ -117,12 +118,17 @@ function startCountdown(io, room) {
     }, 1000);
 }
 
-function handleGameOver(io, socket, reason) {
+function handleGameOver(io, socket, reason, stats) {
     const roomId = playerRoom.get(socket.id);
     if (!roomId || !rooms.has(roomId)) return;
     const room = rooms.get(roomId);
 
     if (room.isGameOver) return;
+
+    // Store player stats
+    if (stats) {
+        room.stats.set(socket.id, stats);
+    }
 
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
@@ -155,7 +161,9 @@ function handleGameOver(io, socket, reason) {
             [...room.initialPlayers].map(id => [id, finalRanks.indexOf(id) + 1])
         );
 
-        const rankingData = { ranking: finalRanks, yourRankMap, roomId: room.roomId };
+        const statsMap = Object.fromEntries(room.stats);
+
+        const rankingData = { ranking: finalRanks, yourRankMap, statsMap, roomId: room.roomId };
         emitToRoom(io, room, "ranking", rankingData);
 
         const winnerId = finalRanks[0]; // The first player in finalRanks is the winner
@@ -196,8 +204,9 @@ function handleGameOver(io, socket, reason) {
             return [id, rankIndex !== -1 ? rankIndex + activePlayersCount + 1 : null];
         })
     );
+    const statsMap = Object.fromEntries(room.stats);
 
-    const rankingData = { ranking: ranks, yourRankMap, roomId: room.roomId };
+    const rankingData = { ranking: ranks, yourRankMap, statsMap, roomId: room.roomId };
     emitToRoom(io, room, "ranking", rankingData);
     emitToRoom(io, room, "playerKO", socket.id);
 }

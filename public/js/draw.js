@@ -3,7 +3,7 @@
 import { CONFIG } from './config.js';
 import { board, currentPiece, holdPiece, nextPieces, isValidPosition } from './game.js';
 import { getStats } from './main.js';
-import { effects } from './effects.js';
+import { effects, orbs, effectCtx, effectCanvas } from './effects.js';
 import { attackBarSegments, MAX_ATTACK } from './garbage.js';
 
 // --- Layout Constants ---
@@ -184,7 +184,19 @@ export function drawGame() {
     });
 
     gameCtx.restore();
+
+    // Draw light orbs on the separate effect canvas
+    if (effectCtx && effectCanvas) {
+        effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+        if (orbs.length > 0) {
+            console.log(`Drawing ${orbs.length} orbs`);
+        }
+        for (const orb of orbs) {
+            orb.draw(effectCtx);
+        }
+    }
 }
+
 
 export function drawUI() {
     drawAttackBar();

@@ -3,6 +3,7 @@ import { tetrominoTypeToIndex, MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, 
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
+import { createLightOrb, effectCanvas } from './effects.js';
 import { drawUI } from './draw.js';
 
 export const socket = io(CONFIG.serverUrl, {
@@ -11,6 +12,13 @@ export const socket = io(CONFIG.serverUrl, {
 });
 
 export let currentCountdown = null;
+
+// --- Callback for stats ---
+let getStatsCallback = () => ({ score: 0, lines: 0, level: 1, time: '0.00', pps: 0, apm: 0 });
+
+export function setOnlineGetStatsCallback(callback) {
+    getStatsCallback = callback;
+}
 
 // --- Opponent State Management ---
 export const miniboardSlots = [];
@@ -292,6 +300,63 @@ export { drawAllMiniBoards as drawAllMiniBoardsInternal }; // 内部用
 let finalRanking = {}; // To store all player ranks
 let currentRoomId = null; // To store the current room ID
 
+// --- Attack Effect Helpers ---
+function getBoardCenterPosition(userId, clearedLines = null) {
+    if (!effectCanvas) return null;
+
+    const effectCanvasRect = effectCanvas.getBoundingClientRect();
+    let targetRect;
+
+    if (userId === socket.id) {
+        const mainBoard = document.getElementById('main-game-board');
+        if (!mainBoard) return null;
+        targetRect = mainBoard.getBoundingClientRect();
+
+        if (clearedLines && clearedLines.length > 0) {
+            const avgLine = clearedLines.reduce((sum, line) => sum + line, 0) / clearedLines.length;
+            const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+            const yPos = (avgLine - startRow + 0.5) * MAIN_BOARD_CELL_SIZE;
+
+            return {
+                x: targetRect.left - effectCanvasRect.left + targetRect.width / 2,
+                y: targetRect.top - effectCanvasRect.top + yPos
+            };
+        }
+    } 
+
+    const slot = miniboardSlots.find(s => s.userId === userId);
+    if (slot && slot.canvas) {
+        targetRect = slot.canvas.getBoundingClientRect();
+    } else if (userId === socket.id && !targetRect) {
+        // Fallback for main board if clearedLines logic didn't run
+        const mainBoard = document.getElementById('main-game-board');
+        if (mainBoard) targetRect = mainBoard.getBoundingClientRect();
+    }
+
+    if (targetRect) {
+        return {
+            x: targetRect.left - effectCanvasRect.left + targetRect.width / 2,
+            y: targetRect.top - effectCanvasRect.top + targetRect.height / 2
+        };
+    }
+
+    return null;
+}
+
+function getAttackBarPosition() {
+    if (!effectCanvas) return null;
+    const attackBar = document.getElementById('attack-bar');
+    if (!attackBar) return null;
+
+    const effectCanvasRect = effectCanvas.getBoundingClientRect();
+    const attackBarRect = attackBar.getBoundingClientRect();
+    
+    return {
+        x: attackBarRect.left - effectCanvasRect.left + attackBarRect.width / 2,
+        y: attackBarRect.top - effectCanvasRect.top + attackBarRect.height / 2 
+    };
+}
+
 // --- Socket Event Handlers ---
 socket.on("connect", () => {
     console.log("✅ サーバーに接続:", socket.id);
@@ -349,7 +414,7 @@ socket.on("StartGame", () => {
     lastSentBoard = null; // Ensure board history is cleared for the new game
 });
 
-socket.on("ranking", ({ yourRankMap, roomId }) => {
+socket.on("ranking", ({ yourRankMap, statsMap, roomId }) => {
   if (roomId !== currentRoomId) {
       console.log(`Ignoring ranking update from old room: ${roomId}`);
       return;
@@ -387,7 +452,7 @@ socket.on("ranking", ({ yourRankMap, roomId }) => {
       } else {
         setGameState('GAME_OVER');
       }
-      showGameEndScreen(title, isWin, finalRanking, socket.id);
+      showGameEndScreen(title, isWin, finalRanking, socket.id, statsMap || { [socket.id]: getStatsCallback() });
       return;
   }
 
@@ -401,7 +466,8 @@ socket.on("ranking", ({ yourRankMap, roomId }) => {
   if (opponents.length > 0 && activeOpponents.length === 0) {
       finalRanking[socket.id] = 1; // I am the winner
       setGameClear(true); // This also sets gameState to GAME_OVER
-      showGameEndScreen('You Win!', true, finalRanking, socket.id);
+      const statsMap = { [socket.id]: getStatsCallback() };
+      showGameEndScreen('You Win!', true, finalRanking, socket.id, statsMap);
   }
 });
 
@@ -440,7 +506,25 @@ socket.on("CountDown", (count) => {
     currentCountdown = count;
     showCountdown(count);
 });
-socket.on("ReceiveGarbage", ({ from, lines }) => { addAttackBar(lines); });
+
+socket.on("ReceiveGarbage", ({ from, lines }) => { 
+    addAttackBar(lines); 
+    
+    console.log(`ReceiveGarbage from: ${from}, lines: ${lines}`);
+    let attackerPos;
+    if (from) {
+        attackerPos = getBoardCenterPosition(from);
+    } else {
+        if (effectCanvas) {
+            const effectCanvasRect = effectCanvas.getBoundingClientRect();
+            attackerPos = { x: effectCanvasRect.width / 2, y: 0 };
+        }
+    }
+
+    const myAttackBarPos = getAttackBarPosition();
+    console.log('Attacker Pos:', attackerPos, 'My Attack Bar Pos:', myAttackBarPos);
+    createLightOrb(attackerPos, myAttackBarPos);
+});
 
 let lastSentBoard = null;
 function getBoardWithCurrentPiece(board, currentPiece) {
@@ -481,9 +565,31 @@ export function sendBoardStatus(board, currentPiece) {
         lastSentBoard = currentBoardState;
     }
 }
-export function sendGarbage(targetId, lines) {
+
+function sendGarbage(targetId, lines) {
     if (!socket.connected || lines <= 0) return;
     socket.emit("SendGarbage", { targetId, lines });
+}
+
+export function sendAttack(targetId, lines, clearedLines = null) {
+    sendGarbage(targetId, lines);
+
+    console.log(`sendAttack to: ${targetId}, lines: ${lines}, clearedLines:`, clearedLines);
+    const myPos = getBoardCenterPosition(socket.id, clearedLines);
+    let targetPos;
+
+    if (targetId) {
+        targetPos = getBoardCenterPosition(targetId);
+    } else {
+        // ターゲットがいない場合は、画面上部中央へ
+        if (effectCanvas) {
+            const effectCanvasRect = effectCanvas.getBoundingClientRect();
+            targetPos = { x: effectCanvasRect.width / 2, y: 0 };
+        }
+    }
+    
+    console.log('My Pos:', myPos, 'Target Pos:', targetPos);
+    createLightOrb(myPos, targetPos);
 }
 
 let connectionError = false;

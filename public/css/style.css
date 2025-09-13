@@ -213,33 +213,68 @@ canvas {
   display: flex;
 }
 
-.final-ranks {
-  margin: 20px auto; /* Center the block horizontally */
-  text-align: left;
-  max-width: 600px; /* Increased width for better readability */
+#final-ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   width: 80%;
+  max-width: 700px;
+  margin: 20px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 10px; /* for scrollbar */
 }
 
-.final-ranks h2 {
-  text-align: center;
-  margin-bottom: 10px;
+.rank-card {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  align-items: center;
+  background-color: var(--panel-background-color);
+  padding: 10px 20px;
+  border-radius: 8px;
+  border-left: 5px solid transparent;
+  transition: all 0.3s ease;
 }
 
-.final-ranks ol {
-  list-style-type: none;
-  padding: 0;
-  margin: 0;
+.rank-card.my-rank {
+  background-color: rgba(52, 152, 219, 0.3);
+  border-left-color: var(--button-primary-bg);
 }
 
-.final-ranks li {
-  background-color: rgba(0,0,0,0.4);
-  padding: 8px;
-  margin-bottom: 5px;
-  border-radius: 4px;
-  font-size: 1.8vh;
+.rank-card.my-rank .rank-player-name {
+    font-weight: bold;
 }
 
-.my-rank {
-  background-color: var(--button-primary-bg) !important;
+.rank-position {
+  font-size: 2em;
   font-weight: bold;
+  color: var(--text-color);
+}
+
+.rank-player-name {
+  font-size: 1.2em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-stats {
+  text-align: right;
+  font-size: 0.9em;
+  color: #bdc3c7;
+}
+
+.rank-stats span {
+  margin-left: 15px;
+}
+
+#effect-canvas {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1172px;
+    height: 593.5px;
+    pointer-events: none;
+    z-index: 10;
 }

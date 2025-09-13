@@ -84,15 +84,17 @@ function handleSocketConnection(io, socket) {
             const prevRoomId = playerRoom.get(socket.id);
             const prevRoom = rooms.get(prevRoomId);
             if (prevRoom) {
+                const wasInGame = prevRoom.isGameStarted && !prevRoom.isGameOver;
+                // Delete player from active players list
                 prevRoom.players.delete(socket.id);
-                prevRoom.initialPlayers.delete(socket.id);
-                if (prevRoom.isGameStarted) {
-                    handleGameOver(io, socket, "spectating");
+                playerRoom.delete(socket.id);
+                socket.leave(prevRoomId);
+                console.log(`🔄 ${socket.id} converted from player to spectator for ${roomId}`);
+                // Handle game over for the previous room
+                if (wasInGame) {
+                    handleGameOver(io, socket, "spectating", null);
                 }
             }
-            playerRoom.delete(socket.id);
-            socket.leave(prevRoomId);
-            console.log(`🔄 ${socket.id} converted from player to spectator for ${roomId}`);
         }
         if (!spectators.has(roomId)) spectators.set(roomId, new Set());
         spectators.get(roomId).add(socket.id);
@@ -122,10 +124,8 @@ function handleSocketConnection(io, socket) {
         emitToSpectators(io, roomId, "BoardStatus", board);
     });
 
-    socket.on("PlayerGameStatus", (status) => {
-        if (status.includes("gameover")) {
-            handleGameOver(io, socket, "normal");
-        }
+    socket.on("gameOver", ({ stats }) => {
+        handleGameOver(io, socket, "normal", stats);
     });
 
     socket.on("SendGarbage", ({ targetId, lines }) => {
@@ -169,15 +169,21 @@ function handleSocketConnection(io, socket) {
         const roomId = playerRoom.get(socket.id);
         if (roomId && rooms.has(roomId)) {
             const room = rooms.get(roomId);
-            if (room.isGameStarted) {
-                handleGameOver(io, socket, reason);
-            }
-            room.players.delete(socket.id);
-            room.initialPlayers.delete(socket.id);
-            playerRoom.delete(socket.id);
+            const wasInGame = room.isGameStarted && !room.isGameOver;
 
-            socket.leave(roomId); // Explicitly leave the room
+            // Remove player from room FIRST
+            room.players.delete(socket.id);
+            playerRoom.delete(socket.id);
+            socket.leave(roomId);
             console.log(`🚪 ${socket.id} left room ${roomId} on disconnect.`);
+
+            // THEN handle game over logic
+            if (wasInGame) {
+                handleGameOver(io, socket, reason, null);
+            }
+            
+            // Note: We don't delete from initialPlayers so ranking works correctly.
+            // The room cleanup logic will handle it later.
 
             if (room.players.size === 0 && !room.isGameOver) {
                 clearInterval(room.countdownInterval);

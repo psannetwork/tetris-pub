@@ -1,3 +1,5 @@
+import { setGameGetStatsCallback } from './game.js';
+import { setOnlineGetStatsCallback } from './online.js';
 import { CONFIG } from './config.js';
 import { 
     gameState, setGameState, resetGame,
@@ -5,7 +7,7 @@ import {
     board, score, linesCleared
 } from './game.js';
 import { drawGame, drawUI, setupCanvases } from './draw.js';
-import { updateEffects } from './effects.js';
+import { updateEffects, initEffects } from './effects.js';
 import { handleInput } from './input.js';
 import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded } from './online.js';
 import { showCountdown } from './ui.js';
@@ -137,6 +139,8 @@ function updateButtonStates() {
 
 // --- Initialization ---
 function init() {
+    setGameGetStatsCallback(getStats);
+    setOnlineGetStatsCallback(getStats);
     setupCanvases();
     connectToServer();
     gameEndOverlay.classList.remove('visible');

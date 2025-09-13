@@ -4,33 +4,54 @@ import { CONFIG } from './config.js';
 const gameEndOverlay = document.getElementById('game-end-overlay');
 const gameEndMessage = document.getElementById('game-end-message');
 const countdownOverlay = document.getElementById('countdown-overlay');
+const rankingListContainer = document.getElementById('final-ranking-list');
 
 /**
  * Controls the game over/win screen overlay.
- * @param {string} message - The message to display (e.g., "Game Over").
+ * @param {string} title - The message to display (e.g., "You Win!").
  * @param {boolean} isWin - True if it's a win screen.
+ * @param {object} rankingMap - A map of userId to their final rank.
+ * @param {string} myId - The current user's ID.
+ * @param {object} statsMap - A map of userId to their game stats.
  */
-export function showGameEndScreen(title, isWin, rankingMap, myId) {
-  if (gameEndOverlay && gameEndMessage) {
-    let fullMessage = `<h1 style="color: ${isWin ? CONFIG.colors.win : CONFIG.colors.lose};">${title}</h1>`;
+export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {}) {
+  if (gameEndOverlay && gameEndMessage && rankingListContainer) {
+    // 1. Set title
+    gameEndMessage.innerHTML = `<h1 style="color: ${isWin ? CONFIG.colors.win : CONFIG.colors.lose};">${title}</h1>`;
 
+    // 2. Clear previous ranking
+    rankingListContainer.innerHTML = '';
+
+    // 3. Create and append new ranking
     if (rankingMap) {
       const sortedRanks = Object.entries(rankingMap)
-        .filter(([, rank]) => rank !== null) // Filter out any players who might not have a rank yet
+        .filter(([, rank]) => rank !== null)
         .sort(([, rankA], [, rankB]) => rankA - rankB);
 
-      fullMessage += '<div class="final-ranks"><h2>Results</h2><ol>';
       for (const [userId, rank] of sortedRanks) {
         const isMe = userId === myId;
-        // Simplified display name
         const displayName = isMe ? 'You' : `Player...${userId.substring(userId.length - 4)}`;
-        const myRankClass = isMe ? 'my-rank' : '';
-        fullMessage += `<li class="${myRankClass}"><b>#${rank}</b> - ${displayName}</li>`;
+        const userStats = statsMap[userId] || { score: 0, lines: 0 };
+
+        const card = document.createElement('div');
+        card.className = 'rank-card';
+        if (isMe) {
+          card.classList.add('my-rank');
+        }
+
+        card.innerHTML = `
+          <div class="rank-position">#${rank}</div>
+          <div class="rank-player-name">${displayName}</div>
+          <div class="rank-stats">
+            <span>Score: ${userStats.score}</span>
+            <span>Lines: ${userStats.lines}</span>
+          </div>
+        `;
+        rankingListContainer.appendChild(card);
       }
-      fullMessage += '</ol></div>';
     }
 
-    gameEndMessage.innerHTML = fullMessage;
+    // 4. Show the overlay
     gameEndOverlay.classList.add('visible');
   }
 }

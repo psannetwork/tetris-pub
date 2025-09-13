@@ -1,6 +1,6 @@
 import { CONFIG } from './config.js';
 import { triggerLineClearEffect, triggerTspinEffect, triggerLockPieceEffect, triggerScoreUpdateEffect } from './effects.js';
-import { sendGarbage, socket } from './online.js'; // Import socket
+import { sendAttack, socket } from './online.js'; // Import socket
 import { attackBarSegments, getAttackBarSum, removeAttackBar, processFlashingGarbage } from './garbage.js';
 import { showGameEndScreen, showPerfectClearMessage } from './ui.js';
 import { triggerScreenShake, CELL_SIZE, tetrominoTypeToIndex, drawBoard } from './draw.js';
@@ -300,13 +300,20 @@ export function hold() {
     }
 }
 
+let getStatsCallback = () => ({ score: 0, lines: 0, level: 1, time: '0.00', pps: 0, apm: 0 });
+
+export function setGameGetStatsCallback(callback) {
+    getStatsCallback = callback;
+}
+
 export function triggerGameOver() {
     // Don't show screen here. Wait for ranking event from server.
     if (gameState === 'GAME_OVER') return; // Prevent multiple triggers
     console.log("triggerGameOver() called. Notifying server.");
     setGameState('GAME_OVER');
     isGameOver = true;
-    socket.emit('PlayerGameStatus', 'gameover');
+    const stats = getStatsCallback();
+    socket.emit('gameOver', { stats });
 }
 
 export function resetGame() {
@@ -411,8 +418,8 @@ function finishLineClear(lines, lockedPiece, tSpin) {
             clearType = lines.length === 1 ? 'single' : lines.length === 2 ? 'double' : lines.length === 3 ? 'triple' : lines.length === 4 ? 'tetris' : 'none';
         }
 
-        const firepower = sendFirepower(clearType, btb, ren, isPerfectClear, 0);
-        processGarbageBar(firepower);
+        const firepower = sendFirepower(clearType, btb, ren, isPerfectClear, 0, lines);
+        processGarbageBar(firepower, lines);
 
         currentPiece = nextPieces.shift();
         nextPieces.push(getNextPieceFromBag());
@@ -506,24 +513,24 @@ function getTargetBonus(targetCount) {
     return 9;
 }
 
-export function sendFirepower(clearType, btb, ren, perfectClear, targetCount) {
+export function sendFirepower(clearType, btb, ren, perfectClear, targetCount, lines) {
     const total = calculateFirepower(clearType, btb, ren, perfectClear, targetCount);
     console.log(`Calculated firepower: ${total} (Clear: ${clearType}, B2B: ${btb ? '+1' : '0'}, REN Bonus applied, Target Bonus: +${getTargetBonus(targetCount || 0)})`);
     console.log(`DEBUG: sendFirepower - clearType: ${clearType}, btb: ${btb}, ren: ${ren}, perfectClear: ${perfectClear}, targetCount: ${targetCount}, total: ${total}`);
     return total;
 }
 
-export function processGarbageBar(firepower) {
+export function processGarbageBar(firepower, lines) {
     const accumulated = getAttackBarSum();
     if (accumulated > 0) {
         const subtract = Math.min(accumulated, firepower);
         removeAttackBar(subtract);
         const remainder = firepower - subtract;
         if (remainder > 0) {
-            sendGarbage(null, remainder);
+            sendAttack(null, remainder, lines);
         }
     } else {
-        sendGarbage(null, firepower);
+        sendAttack(null, firepower, lines);
     }
 }
 
