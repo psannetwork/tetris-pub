@@ -17,6 +17,7 @@ function createRoom(playerId) {
         roomId,
         players: new Set([playerId]),
         initialPlayers: new Set([playerId]),
+        playerTargets: new Map(), // Who is targeting whom
         isCountingDown: false,
         isGameStarted: false,
         isGameOver: false,

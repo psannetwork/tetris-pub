@@ -1,8 +1,11 @@
 import { CONFIG } from './config.js';
+import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from './layout.js';
 
 export let effects = [];
+export let textEffects = [];
 export let tspinEffect = null;
 export let scoreUpdateEffect = null;
+export let targetAttackFlashes = new Map(); // attackerId -> flashEndTime
 
 export let orbs = [];
 export let effectCanvas = null;
@@ -12,9 +15,44 @@ export function initEffects(canvas) {
     effectCanvas = canvas;
     if (!effectCanvas) return;
     effectCtx = canvas.getContext('2d');
-    effectCanvas.width = 1172;
-    effectCanvas.height = 593.5;
+    effectCanvas.width = BOARD_WIDTH;
+    effectCanvas.height = BOARD_HEIGHT;
 }
+
+// --- Text Effect ---
+export function addTextEffect(text, { style = 'default', duration = 500, x = BOARD_WIDTH / 2, y = BOARD_HEIGHT / 2 } = {}) {
+    textEffects.push({
+        text,
+        style,
+        duration,
+        startTime: performance.now(),
+        x,
+        y,
+        initialY: y,
+    });
+}
+
+export function drawTextEffects(ctx) {
+    const now = performance.now();
+    textEffects.forEach(effect => {
+        const progress = (now - effect.startTime) / effect.duration;
+        if (progress >= 1) return; // Should be filtered out by updateEffects, but good to check
+
+        ctx.save();
+        ctx.font = `bold ${30 * (1 - progress * 0.5)}px Arial`; // Example: fading and shrinking
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
+        ctx.strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+        ctx.lineWidth = 2;
+
+        const currentY = effect.initialY - (progress * 50); // Example: move upwards
+
+        ctx.fillText(effect.text, effect.x, currentY);
+        ctx.strokeText(effect.text, effect.x, currentY);
+        ctx.restore();
+    });
+}
+
 
 // 光玉クラス
 class LightOrb {
@@ -123,12 +161,71 @@ export function createLightOrb(startPos, endPos) {
     // console.log(`Orbs count: ${orbs.length}`);
 }
 
-export function triggerLineClearEffect(rows) {
+// --- Line Clear and Particle Effects ---
+
+function addParticle(props) {
+    const defaults = {
+        type: 'particle',
+        startTime: performance.now(),
+        duration: 500,
+        size: Math.random() * 3 + 2,
+        velocity: {
+            x: (Math.random() - 0.5) * 8,
+            y: (Math.random() - 0.5) * 8 - 3, // Move upwards initially
+        },
+        color: '#FFFFFF',
+    };
+    effects.push({ ...defaults, ...props });
+}
+
+export function triggerLineClearEffect(rows, clearType) {
+    const duration = 300;
+    const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+
+    // Base line clear flash
     effects.push({
         type: 'lineClear',
         rows,
         startTime: performance.now(),
-        duration: CONFIG.effects.lineClearDuration
+        duration: CONFIG.effects.lineClearDuration,
+        style: clearType, // Pass style for special rendering (e.g., 'b2b')
+    });
+
+    // Add particles based on clear type
+    rows.forEach(row => {
+        const y = (row - startRow) * CELL_SIZE + CELL_SIZE / 2;
+        let particleCount = 0;
+        let particleColors = ['#FFFFFF'];
+
+        switch (clearType) {
+            case 'tetris':
+                particleCount = 40;
+                break;
+            case 'tspin':
+                particleCount = 30;
+                particleColors = ['#FF00FF', '#FFFFFF'];
+                break;
+            case 'b2b':
+                particleCount = 20;
+                // Rainbow colors for B2B
+                particleColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
+                break;
+            case 'combo':
+                 particleCount = 15;
+                 particleColors = ['#FFFF00'];
+                 break;
+            default: // single, double, triple
+                particleCount = rows.length * 5;
+        }
+
+        for (let i = 0; i < particleCount; i++) {
+            addParticle({
+                x: Math.random() * BOARD_WIDTH,
+                y: y,
+                color: particleColors[Math.floor(Math.random() * particleColors.length)],
+                duration: 400 + Math.random() * 300,
+            });
+        }
     });
 }
 
@@ -145,18 +242,15 @@ export function triggerTspinEffect(x, y) {
 export function triggerLockPieceEffect(x, y, color) {
     const particleCount = 5;
     for (let i = 0; i < particleCount; i++) {
-        effects.push({
-            type: 'particle',
+        addParticle({
             x,
             y,
             color,
-            size: Math.random() * 3 + 2, // 2px to 5px
-            velocity: {
+            duration: 300,
+             velocity: {
                 x: (Math.random() - 0.5) * 4,
                 y: (Math.random() - 0.5) * 4
             },
-            startTime: performance.now(),
-            duration: 300 // 300ms lifespan
         });
     }
 }
@@ -168,18 +262,26 @@ export function triggerScoreUpdateEffect() {
     };
 }
 
+export function triggerTargetAttackFlash(attackerId) {
+    targetAttackFlashes.set(attackerId, performance.now() + 200); // 200ms flash
+}
+
+
+
 export function updateEffects() {
     const now = performance.now();
     
     // Filter out expired effects
     effects = effects.filter(e => now - e.startTime < e.duration);
+    textEffects = textEffects.filter(e => now - e.startTime < e.duration);
     
     // Update active effects
     effects.forEach(e => {
         if (e.type === 'particle') {
             e.x += e.velocity.x;
             e.y += e.velocity.y;
-            e.velocity.y += 0.1; // Gravity
+            e.velocity.y += CONFIG.effects.particleGravity; // Gravity
+            e.velocity.x *= CONFIG.effects.particleFriction; // Friction
         }
     });
 
@@ -197,4 +299,49 @@ export function updateEffects() {
     if (scoreUpdateEffect && now - scoreUpdateEffect.startTime >= scoreUpdateEffect.duration) {
         scoreUpdateEffect = null;
     }
+
+    // Clean up expired flashes
+    for (const [key, value] of targetAttackFlashes.entries()) {
+        if (now > value) {
+            targetAttackFlashes.delete(key);
+        }
+    }
+}
+
+export function drawTspinEffect(ctx) {
+    if (!tspinEffect) return;
+
+    const now = performance.now();
+    const progress = (now - tspinEffect.startTime) / tspinEffect.duration;
+
+    if (progress >= 1) return; // Should be nullified by updateEffects, but good to check
+
+    ctx.save();
+    ctx.font = `bold ${40 * (1 - progress * 0.5)}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(255, 255, 0, ${1 - progress})`; // Yellow fading out
+    ctx.strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+    ctx.lineWidth = 3;
+
+    const currentY = tspinEffect.y - (progress * 30); // Move upwards slightly
+
+    ctx.fillText('T-SPIN!', tspinEffect.x, currentY);
+    ctx.strokeText('T-SPIN!', tspinEffect.x, currentY);
+    ctx.restore();
+}
+
+export function drawTargetAttackFlashes(ctx) {
+    const now = performance.now();
+    targetAttackFlashes.forEach((endTime, attackerId) => {
+        const duration = 200; // Flash duration (same as in triggerTargetAttackFlash)
+        const startTime = endTime - duration;
+        const progress = (now - startTime) / duration;
+
+        if (progress < 1) {
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 0, 0, ${0.5 * (1 - progress)})`; // Red fading out
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.restore();
+        }
+    });
 }

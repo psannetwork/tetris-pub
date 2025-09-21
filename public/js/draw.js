@@ -1,27 +1,11 @@
-
 'use strict';
 import { CONFIG } from './config.js';
 import { board, currentPiece, holdPiece, nextPieces, isValidPosition } from './game.js';
 import { getStats } from './main.js';
-import { effects, orbs, effectCtx, effectCanvas } from './effects.js';
+import * as Effects from './effects.js';
+import { drawTargetLines } from './online.js';
 import { attackBarSegments, MAX_ATTACK } from './garbage.js';
-
-// --- Layout Constants ---
-export let CELL_SIZE;
-export { CELL_SIZE as MAIN_BOARD_CELL_SIZE };
-export let BOARD_WIDTH;
-export let BOARD_HEIGHT;
-export let ATTACK_BAR_WIDTH;
-export let ATTACK_BAR_GAP;
-export let HOLD_BOX_WIDTH;
-export let HOLD_BOX_HEIGHT;
-export let HOLD_BOX_GAP;
-export let NEXT_BOX_WIDTH;
-export let NEXT_BOX_HEIGHT;
-export let NEXT_BOX_GAP;
-export let SCORE_AREA_HEIGHT;
-export let TOTAL_WIDTH;
-
+import { CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT, SCORE_AREA_HEIGHT, setLayoutConstants } from './layout.js';
 
 
 // --- Canvas & Context Creation ---
@@ -36,7 +20,7 @@ function createCanvas(containerId, width, height) {
     return { canvas, ctx: canvas.getContext('2d') };
 }
 
-let gameCtx, holdCtx, nextCtx, attackBarCtx;;
+let gameCtx, holdCtx, nextCtx, attackBarCtx;
 let boardCanvas, boardCtx; // Off-screen canvas for the board
 let scoreDisplay;
 let screenShake = { intensity: 0, duration: 0, endTime: 0 };
@@ -44,15 +28,18 @@ let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 // --- Main Setup Function ---
 export function setupCanvases() {
     // Fixed dimensions based on user requirements
-    CELL_SIZE = 30; // 300px board width / 10 columns
-    BOARD_WIDTH = 300;
-    BOARD_HEIGHT = 600;
-    ATTACK_BAR_WIDTH = 30;
-    HOLD_BOX_WIDTH = 96;
-    HOLD_BOX_HEIGHT = 96;
-    NEXT_BOX_WIDTH = 96;
-    NEXT_BOX_HEIGHT = 456; // Changed from 480 to 456 (76px * 6 pieces)
-    SCORE_AREA_HEIGHT = 100; // Arbitrary fixed height for score display
+    const layout = {
+        CELL_SIZE: CONFIG.layout.cellSize, // 300px board width / 10 columns
+        BOARD_WIDTH: CONFIG.layout.boardWidth,
+        BOARD_HEIGHT: CONFIG.layout.boardHeight,
+        ATTACK_BAR_WIDTH: CONFIG.layout.attackBarWidth,
+        HOLD_BOX_WIDTH: CONFIG.layout.holdBoxWidth,
+        HOLD_BOX_HEIGHT: CONFIG.layout.holdBoxHeight,
+        NEXT_BOX_WIDTH: CONFIG.layout.nextBoxWidth,
+        NEXT_BOX_HEIGHT: CONFIG.layout.nextBoxHeight, // Changed from 480 to 456 (76px * 6 pieces)
+        SCORE_AREA_HEIGHT: CONFIG.layout.scoreAreaHeight // Arbitrary fixed height for score display
+    };
+    setLayoutConstants(layout);
 
     // --- Create Canvases and Set Element Sizes ---
     gameCtx = createCanvas('main-game-board', BOARD_WIDTH, BOARD_HEIGHT).ctx;
@@ -75,13 +62,7 @@ export function setupCanvases() {
 
     scoreDisplay.style.width = `${NEXT_BOX_WIDTH}px`;
     scoreDisplay.style.height = `${SCORE_AREA_HEIGHT}px`;
-    scoreDisplay.style.fontSize = `1.2rem`; // Fixed font size
-
-    // Remove panel height adjustments as they are handled by CSS now
-    // const leftPanel = document.querySelector('.game-panel-left');
-    // if (leftPanel) leftPanel.style.height = '';
-    // const rightPanel = document.querySelector('.game-panel-right');
-    // if (rightPanel) rightPanel.style.height = '';
+    scoreDisplay.style.fontSize = CONFIG.ui.scoreFontSize; // Fixed font size
 
     // Notify other components that layout has changed
     window.dispatchEvent(new CustomEvent('layout-changed'));
@@ -130,7 +111,7 @@ export function drawGame() {
     // --- Apply screen shake ---
     if (now < screenShake.endTime) {
         const progress = (screenShake.endTime - now) / screenShake.duration;
-        const intensity = screenShake.intensity * progress * progress; // Ease-out effect
+        const intensity = screenShake.intensity * progress ** CONFIG.effects.screenShakeEaseOutFactor * CONFIG.effects.screenShakeIntensityFactor; // Ease-out effect
         const x = (Math.random() - 0.5) * intensity;
         const y = (Math.random() - 0.5) * intensity;
         gameCtx.translate(x, y);
@@ -147,7 +128,7 @@ export function drawGame() {
         while (isValidPosition(ghost, 0, 1)) {
             ghost.y++;
         }
-        gameCtx.globalAlpha = 0.3;
+        gameCtx.globalAlpha = CONFIG.effects.ghostPieceOpacity;
         drawPiece(gameCtx, ghost, 0, 0);
         gameCtx.globalAlpha = 1.0;
 
@@ -156,14 +137,14 @@ export function drawGame() {
     }
 
     // --- Draw effects (line clears, particles) ---
-    effects.forEach(effect => {
+    Effects.effects.forEach(effect => {
         const progress = (now - effect.startTime) / effect.duration;
         if (progress >= 1) return; // Skip finished effects
 
         const alpha = Math.max(0, 1 - progress);
 
         if (effect.type === 'lineClear') {
-            gameCtx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.8})`;
+            gameCtx.fillStyle = `rgba(255, 255, 255, ${alpha * CONFIG.effects.lineClearEffectOpacity})`;
             const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
             effect.rows.forEach(row => {
                 const y = (row - startRow) * CELL_SIZE;
@@ -175,8 +156,9 @@ export function drawGame() {
                 gameCtx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
                 gameCtx.beginPath();
                 // Update particle position for simple gravity effect
-                effect.y += effect.vy * progress;
-                effect.x += effect.vx * progress;
+                effect.vy += CONFIG.effects.particleGravity; // Gravity
+                effect.x += effect.vx;
+                effect.y += effect.vy;
                 gameCtx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
                 gameCtx.fill();
             }
@@ -185,15 +167,26 @@ export function drawGame() {
 
     gameCtx.restore();
 
-    // Draw light orbs on the separate effect canvas
-    if (effectCtx && effectCanvas) {
-        effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
-        if (orbs.length > 0) {
-            console.log(`Drawing ${orbs.length} orbs`);
+    // Draw light orbs and target lines on the separate effect canvas
+    if (Effects.effectCtx && Effects.effectCanvas) {
+        Effects.effectCtx.clearRect(0, 0, Effects.effectCanvas.width, Effects.effectCanvas.height);
+
+        // Draw target lines
+        drawTargetLines();
+
+        
+        for (const orb of Effects.orbs) {
+            orb.draw(Effects.effectCtx);
         }
-        for (const orb of orbs) {
-            orb.draw(effectCtx);
-        }
+
+        // Draw text effects
+        Effects.drawTextEffects(Effects.effectCtx);
+
+        // Draw T-Spin effect
+        Effects.drawTspinEffect(Effects.effectCtx);
+
+        // Draw target attack flashes
+        Effects.drawTargetAttackFlashes(Effects.effectCtx);
     }
 }
 
@@ -221,19 +214,17 @@ function drawAttackBar() {
         
         const elapsed = seg.timestamp ? (now - seg.timestamp) : 0;
         
-        // --- DEBUGGING LOGS --- 
-        console.log(`Segment value: ${seg.value}, Timestamp: ${seg.timestamp}, Now: ${now}, Elapsed: ${elapsed}`);
-        // --- END DEBUGGING LOGS ---
+        
 
-        if (elapsed >= 12000) {
+        if (elapsed >= CONFIG.effects.attackBarFlashTime1) {
             // 12秒以上経過: 点滅（100msごとに赤と白）
-            const flashSpeed = 100;
+            const flashSpeed = CONFIG.effects.attackBarFlashSpeed;
             const isBright = Math.floor(now / flashSpeed) % 2 === 0;
             segmentColor = isBright ? '#FF0000' : '#FFFFFF';
-        } else if (elapsed >= 8000) {
+        } else if (elapsed >= CONFIG.effects.attackBarFlashTime2) {
             // 8秒以上経過: 赤
             segmentColor = '#FF0000';
-        } else if (elapsed >= 4000) {
+        } else if (elapsed >= CONFIG.effects.attackBarFlashTime3) {
             // 4秒以上経過: 黄
             segmentColor = '#FFFF00';
         } else {
@@ -272,6 +263,22 @@ function drawScore() {
     if (!scoreDisplay) return;
     const stats = getStats();
     scoreDisplay.innerHTML = `Time: ${stats.time}<br>Score: ${stats.score}<br>Lines: ${stats.lines}<br>Level: ${stats.level}<br>PPS: ${stats.pps}<br>APM: ${stats.apm}`;
+
+    // Apply score update effect
+    if (Effects.scoreUpdateEffect) {
+        const now = performance.now();
+        const progress = (now - Effects.scoreUpdateEffect.startTime) / Effects.scoreUpdateEffect.duration;
+
+        if (progress < 1) {
+            const scale = 1 + Math.sin(progress * Math.PI) * CONFIG.effects.scoreUpdateScaleFactor; // Scale up and down
+            const opacity = 1 - progress; // Fade out
+            scoreDisplay.style.transform = `scale(${scale})`;
+            scoreDisplay.style.color = `rgba(255, 255, 0, ${opacity})`; // Yellow fading out
+        } else {
+            scoreDisplay.style.transform = ''; // Reset transform
+            scoreDisplay.style.color = ''; // Reset color
+        }
+    }
 }
 
 // --- Helper Functions ---
@@ -287,20 +294,20 @@ function hexToRgb(hex) {
 }
 
 function drawUITitledBox(ctx, x, y, w, h, title) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillStyle = CONFIG.colors.uiPanel;
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = '#ecf0f1';
     ctx.strokeRect(x, y, w, h);
     ctx.fillStyle = '#ecf0f1';
-    ctx.font = `bold ${CELL_SIZE * 0.6}px Exo 2`; // Dynamic font size
+    ctx.font = `bold ${CELL_SIZE * CONFIG.ui.titledBoxFontScale}px ${CONFIG.ui.fontFamily}`; // Dynamic font size
     ctx.textAlign = 'center';
-    ctx.fillText(title, x + w / 2, y + CELL_SIZE * 0.7);
+    ctx.fillText(title, x + w / 2, y + CELL_SIZE * CONFIG.ui.titledBoxTitleOffset);
     ctx.textAlign = 'left';
 }
 
 function drawMiniPiece(ctx, piece, boxX, boxY, boxW, boxH) {
     const shape = piece.shape[0];
-    const miniCellSize = Math.floor(boxW / 5);
+    const miniCellSize = Math.floor(boxW / CONFIG.ui.miniPieceCellCount);
     const pieceWidth = (Math.max(...shape.map(p => p[0])) - Math.min(...shape.map(p => p[0])) + 1) * miniCellSize;
     const pieceHeight = (Math.max(...shape.map(p => p[1])) - Math.min(...shape.map(p => p[1])) + 1) * miniCellSize;
     const offsetX = boxX + (boxW - pieceWidth) / 2 - Math.min(...shape.map(p => p[0])) * miniCellSize;
@@ -311,7 +318,7 @@ function drawMiniPiece(ctx, piece, boxX, boxY, boxW, boxH) {
 }
 
 function drawPiece(ctx, piece, boardX, boardY) {
-    const shape = piece.shape[piece.rotation];
+   const shape = piece.shape[piece.rotation];
     const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
     shape.forEach(([dx, dy]) => {
         const boardRow = piece.y + dy;
@@ -334,7 +341,7 @@ function lightenDarkenColor(col, amt) {
 }
 
 export function tetrominoTypeToIndex(type) {
-    const types = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+    const types = Object.keys(CONFIG.TETROMINOES);
     return types.indexOf(type);
 }
 
@@ -342,15 +349,15 @@ function drawBlock(ctx, x, y, color, size) {
     const typeIndex = tetrominoTypeToIndex(color);
     const baseColor = color === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
     if (!baseColor) return;
-    const lighter = lightenDarkenColor(baseColor, 30);
-    const darker = lightenDarkenColor(baseColor, -30);
+    const lighter = lightenDarkenColor(baseColor, CONFIG.effects.lightenDarkenAmount);
+    const darker = lightenDarkenColor(baseColor, -CONFIG.effects.lightenDarkenAmount);
     ctx.fillStyle = darker;
     ctx.fillRect(x, y, size, size);
     ctx.fillStyle = baseColor;
-    ctx.fillRect(x + size * 0.1, y + size * 0.1, size * 0.8, size * 0.8);
+    ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
     const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
     gradient.addColorStop(0, lighter);
     gradient.addColorStop(1, baseColor);
     ctx.fillStyle = gradient;
-    ctx.fillRect(x + size * 0.1, y + size * 0.1, size * 0.8, size * 0.8);
+    ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
 }

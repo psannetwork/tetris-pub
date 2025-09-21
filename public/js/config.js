@@ -45,7 +45,47 @@ export const CONFIG = {
     // エフェクト設定
     effects: {
         lineClearDuration: 250,
-        tspinEffectDuration: 1000
+        tspinEffectDuration: 1000,
+        particleGravity: 0.15,
+        particleFriction: 0.98,
+        orbAcceleration: 0.008,
+        orbBaseSize: 15,
+        orbRandomSize: 10,
+        orbMaxTrailLength: 15,
+        orbFadeDuration: 1000,
+        textEffectFontSizeBase: 30,
+        textEffectFontSizeShrink: 0.5,
+        textEffectMoveUp: 50,
+        tspinEffectFontSizeBase: 40,
+        tspinEffectFontSizeShrink: 0.5,
+        tspinEffectMoveUp: 30,
+        particleCountTetris: 40,
+        particleCountTspin: 30,
+        particleCountB2B: 20,
+        particleCountCombo: 15,
+        particleCountDefaultMultiplier: 5,
+        particleDurationBase: 400,
+        particleDurationRandom: 300,
+        lockPieceParticleCount: 5,
+        lockPieceParticleVelocityFactor: 4,
+        scoreUpdateDuration: 200,
+        scoreUpdateScaleFactor: 0.2,
+        targetAttackFlashDuration: 200,
+        targetAttackFlashOpacity: 0.5,
+        attackBarFlashSpeed: 100, // ms
+        attackBarFlashTime1: 12000, // ms (red and white flash)
+        attackBarFlashTime2: 8000,  // ms (red)
+        attackBarFlashTime3: 4000,  // ms (yellow)
+        screenShakeIntensityFactor: 0.5, // Multiplier for screen shake intensity
+        screenShakeEaseOutFactor: 2, // Exponent for ease-out effect (e.g., 2 for quadratic)
+        ghostPieceOpacity: 0.3,
+        lineClearEffectOpacity: 0.8,
+        particleGravity: 0.1, // Default particle gravity
+        drawBlockBorderRatio: 0.1,
+        drawBlockFillRatio: 0.8,
+        lightenDarkenAmount: 30, // Amount to lighten/darken colors
+        scoreUpdateEffectDuration: 200, // ms
+        scoreUpdateScaleFactor: 0.2, // Max scale increase for score update
     },
     // UI設定
     ui: {
@@ -56,7 +96,24 @@ export const CONFIG = {
         previewScale: 0.8,
         boxPadding: 10, 
         holdNextScale: 0.25,
+        titledBoxFillOpacity: 0.2,
+        titledBoxFontScale: 0.6,
+        titledBoxTitleOffset: 0.7,
+        miniPieceCellCount: 5,
+        scoreFontSize: "1.2rem",
     },
+    layout: {
+        cellSize: 30,
+        boardWidth: 300,
+        boardHeight: 600,
+        attackBarWidth: 30,
+        holdBoxWidth: 96,
+        holdBoxHeight: 96,
+        nextBoxWidth: 96,
+        nextBoxHeight: 456,
+        scoreAreaHeight: 100,
+    },
+
     // キーバインディング
     keyBindings: {
         rotateCCW: "KeyZ", rotateCW: "KeyX", moveLeft: "ArrowLeft", moveRight: "ArrowRight",

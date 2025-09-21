@@ -1,9 +1,10 @@
 import { CONFIG } from './config.js';
-import { tetrominoTypeToIndex, MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './draw.js';
+import { tetrominoTypeToIndex } from './draw.js';
+import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './layout.js';
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { createLightOrb, effectCanvas } from './effects.js';
+import { createLightOrb, effectCanvas, triggerTargetAttackFlash, effectCtx, targetAttackFlashes } from './effects.js';
 import { drawUI } from './draw.js';
 
 export const socket = io(CONFIG.serverUrl, {
@@ -11,7 +12,11 @@ export const socket = io(CONFIG.serverUrl, {
     reconnection: true
 });
 
+export let playerTargets = new Map();
+
 export let currentCountdown = null;
+
+export let isManualDisconnect = false; // New flag for manual disconnect
 
 // --- Callback for stats ---
 let getStatsCallback = () => ({ score: 0, lines: 0, level: 1, time: '0.00', pps: 0, apm: 0 });
@@ -140,7 +145,7 @@ function setupMiniboardSlots() {
             rightMiniboardsGroup.appendChild(canvas);
         }
 
-        miniboardSlots.push({
+        const slot = {
             userId: null,
             boardState: Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0)),
             isGameOver: false,
@@ -149,7 +154,15 @@ function setupMiniboardSlots() {
             isNew: false,
             effect: null,
             dirty: true
+        };
+
+        canvas.addEventListener('click', () => {
+            if (slot.userId && gameState === 'PLAYING') {
+                setTarget(slot.userId);
+            }
         });
+
+        miniboardSlots.push(slot);
     }
 }
 
@@ -225,6 +238,10 @@ function drawMiniBoard(slot, currentTime) {
         return;
     }
 
+    if (userId !== socket.id) { // Only for opponent miniboards
+        console.log(`Miniboard for ${userId}: isGameOver = ${isGameOver}`);
+    }
+
     if (isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -287,21 +304,62 @@ function drawAllMiniBoards() {
     }
 }
 
-// アニメーションを開始する関数
 function startAnimationIfNeeded() {
     if (!animationFrameId) {
         animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     }
 }
 
-// exportされたdrawAllMiniBoardsを削除し、代わりに以下を追加
-export { drawAllMiniBoards as drawAllMiniBoardsInternal }; // 内部用
+
 
 let finalRanking = {}; // To store all player ranks
 let currentRoomId = null; // To store the current room ID
 
+export function drawTargetLines() {
+    if (!effectCtx || !socket.id) return;
+
+    const myId = socket.id;
+    const myPos = getBoardCenterPosition(myId);
+    if (!myPos) return;
+
+    const now = performance.now();
+
+    for (const [attackerId, targetId] of playerTargets.entries()) {
+        // Draw lines from attackers to me
+        if (targetId === myId) {
+            const attackerPos = getBoardCenterPosition(attackerId);
+            if (attackerPos) {
+                effectCtx.beginPath();
+                effectCtx.moveTo(attackerPos.x, attackerPos.y);
+                effectCtx.lineTo(myPos.x, myPos.y);
+                effectCtx.strokeStyle = 'rgba(255, 255, 102, 0.7)'; // Yellowish
+                effectCtx.lineWidth = 1;
+                effectCtx.stroke();
+            }
+        }
+
+        // Draw line from me to my target
+        if (attackerId === myId && targetId) {
+            const targetPos = getBoardCenterPosition(targetId);
+            if (targetPos) {
+                const isFlashing = targetAttackFlashes.has(myId) && now < targetAttackFlashes.get(myId);
+
+                effectCtx.beginPath();
+                effectCtx.moveTo(myPos.x, myPos.y);
+                effectCtx.lineTo(effectCanvas.width / 2, effectCanvas.height / 2);
+                effectCtx.strokeStyle = isFlashing ? '#FFFFFF' : '#FFFF66';
+                effectCtx.lineWidth = isFlashing ? 3 : 1.5;
+                effectCtx.shadowColor = isFlashing ? '#FFFFFF' : '#FFFF66';
+                effectCtx.shadowBlur = 10;
+                effectCtx.stroke();
+                effectCtx.shadowBlur = 0; // Reset shadow blur
+            }
+        }
+    }
+}
+
 // --- Attack Effect Helpers ---
-function getBoardCenterPosition(userId, clearedLines = null) {
+export function getBoardCenterPosition(userId, clearedLines = null) {
     if (!effectCanvas) return null;
 
     const effectCanvasRect = effectCanvas.getBoundingClientRect();
@@ -377,6 +435,13 @@ export function startMatching() {
     startAnimationIfNeeded(); // Redraw to show them empty
     socket.emit("matching");
 }
+
+socket.on('targetsUpdate', (targets) => {
+    playerTargets = new Map(targets);
+    // We need to redraw the miniboards to update their target styles
+    miniboardSlots.forEach(slot => slot.dirty = true);
+    startAnimationIfNeeded();
+});
 
 socket.on("roomInfo", (data) => {
     currentRoomId = data.roomId; // Store the current room ID
@@ -455,20 +520,6 @@ socket.on("ranking", ({ yourRankMap, statsMap, roomId }) => {
       showGameEndScreen(title, isWin, finalRanking, socket.id, statsMap || { [socket.id]: getStatsCallback() });
       return;
   }
-
-  // Client-side win detection (last person standing)
-  const opponents = miniboardSlots.filter(s => s.userId && s.userId !== socket.id);
-  const activeOpponents = opponents.filter(s => {
-      // An opponent is active if they are NOT in the final ranking map
-      return !finalRanking[s.userId];
-  });
-
-  if (opponents.length > 0 && activeOpponents.length === 0) {
-      finalRanking[socket.id] = 1; // I am the winner
-      setGameClear(true); // This also sets gameState to GAME_OVER
-      const statsMap = { [socket.id]: getStatsCallback() };
-      showGameEndScreen('You Win!', true, finalRanking, socket.id, statsMap);
-  }
 });
 
 socket.on("BoardStatus", (data) => {
@@ -507,7 +558,7 @@ socket.on("CountDown", (count) => {
     showCountdown(count);
 });
 
-socket.on("ReceiveGarbage", ({ from, lines }) => { 
+socket.on("ReceiveGarbage", ({ from, lines }) => {
     addAttackBar(lines); 
     
     console.log(`ReceiveGarbage from: ${from}, lines: ${lines}`);
@@ -522,8 +573,8 @@ socket.on("ReceiveGarbage", ({ from, lines }) => {
     }
 
     const myAttackBarPos = getAttackBarPosition();
-    console.log('Attacker Pos:', attackerPos, 'My Attack Bar Pos:', myAttackBarPos);
-    createLightOrb(attackerPos, myAttackBarPos);
+    console.log('Attacker Pos:', attackerPos, 'Main Board Center:', { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 });
+    createLightOrb(attackerPos, { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 });
 });
 
 let lastSentBoard = null;
@@ -571,8 +622,18 @@ function sendGarbage(targetId, lines) {
     socket.emit("SendGarbage", { targetId, lines });
 }
 
+export function setTarget(targetId) {
+    if (!socket.connected) return;
+    socket.emit('setTarget', targetId);
+}
+
 export function sendAttack(targetId, lines, clearedLines = null) {
     sendGarbage(targetId, lines);
+
+    // Trigger the flash effect for the target line
+    if (targetId) {
+        triggerTargetAttackFlash(socket.id);
+    }
 
     console.log(`sendAttack to: ${targetId}, lines: ${lines}, clearedLines:`, clearedLines);
     const myPos = getBoardCenterPosition(socket.id, clearedLines);
@@ -588,8 +649,8 @@ export function sendAttack(targetId, lines, clearedLines = null) {
         }
     }
     
-    console.log('My Pos:', myPos, 'Target Pos:', targetPos);
-    createLightOrb(myPos, targetPos);
+    console.log('My Pos:', myPos, 'Main Board Center:', { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 });
+    createLightOrb(myPos, { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 });
 }
 
 let connectionError = false;

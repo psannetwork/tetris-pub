@@ -15,6 +15,20 @@ const { bots } = require('./bots.js');
 function handleSocketConnection(io, socket) {
     console.log("🚀 User connected:", socket.id);
 
+    socket.on('setTarget', (targetId) => {
+        const roomId = playerRoom.get(socket.id);
+        if (!roomId || !rooms.has(roomId)) return;
+        const room = rooms.get(roomId);
+        if (!room || room.isGameOver) return;
+
+        // Set the target for the current player
+        room.playerTargets.set(socket.id, targetId);
+
+        // Broadcast the change
+        emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
+        console.log(`🎯 ${socket.id} is now targeting ${targetId}`);
+    });
+
     socket.on("matching", () => {
         const oldRoomId = playerRoom.get(socket.id);
         if (oldRoomId && rooms.has(oldRoomId)) {
@@ -29,6 +43,7 @@ function handleSocketConnection(io, socket) {
         oldRoom.players.delete(socket.id);
         oldRoom.initialPlayers.delete(socket.id);
         playerRoom.delete(socket.id); // Also clear the playerRoom map here
+        delete oldRoom.boards[socket.id]; // Clear board data when player leaves room
 
         socket.leave(oldRoomId); // Leave the socket.io room
         console.log(`🚪 ${socket.id} left room ${oldRoomId}`);
@@ -135,13 +150,17 @@ function handleSocketConnection(io, socket) {
         if (!room || room.isGameOver || room.players.size <= 1) return;
 
         const ranks = playerRanks.get(roomId) || [];
-        let recipient = targetId;
+        // Prioritize explicit targetId, then stored target, then random
+        let recipient = targetId || room.playerTargets.get(socket.id);
         const members = [...room.players];
 
         if (!recipient || !members.includes(recipient) || ranks.includes(recipient)) {
             const candidates = members.filter(id => id !== socket.id && !ranks.includes(id));
             if (!candidates.length) return;
             recipient = candidates[Math.floor(Math.random() * candidates.length)];
+            // Update target to the new random recipient and notify clients
+            room.playerTargets.set(socket.id, recipient);
+            emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
         }
 
         const emitData = { from: socket.id, lines };
@@ -171,15 +190,33 @@ function handleSocketConnection(io, socket) {
             const room = rooms.get(roomId);
             const wasInGame = room.isGameStarted && !room.isGameOver;
 
+            // --- Target Cleanup ---
+            let targetsChanged = false;
+            if (room.playerTargets.has(socket.id)) {
+                room.playerTargets.delete(socket.id);
+                targetsChanged = true;
+            }
+            for (const [attackerId, targetedId] of room.playerTargets.entries()) {
+                if (targetedId === socket.id) {
+                    room.playerTargets.set(attackerId, null); // Set target to null
+                    targetsChanged = true;
+                }
+            }
+
             // Remove player from room FIRST
             room.players.delete(socket.id);
             playerRoom.delete(socket.id);
+            delete room.boards[socket.id]; // Clear board data when player disconnects
             socket.leave(roomId);
             console.log(`🚪 ${socket.id} left room ${roomId} on disconnect.`);
 
             // THEN handle game over logic
             if (wasInGame) {
                 handleGameOver(io, socket, reason, null);
+            }
+
+            if (targetsChanged) {
+                 emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
             }
             
             // Note: We don't delete from initialPlayers so ranking works correctly.

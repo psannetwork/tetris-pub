@@ -1,9 +1,10 @@
 import { CONFIG } from './config.js';
-import { triggerLineClearEffect, triggerTspinEffect, triggerLockPieceEffect, triggerScoreUpdateEffect } from './effects.js';
+import * as Effects from './effects.js';
 import { sendAttack, socket } from './online.js'; // Import socket
 import { attackBarSegments, getAttackBarSum, removeAttackBar, processFlashingGarbage } from './garbage.js';
 import { showGameEndScreen, showPerfectClearMessage } from './ui.js';
-import { triggerScreenShake, CELL_SIZE, tetrominoTypeToIndex, drawBoard } from './draw.js';
+import { triggerScreenShake, tetrominoTypeToIndex, drawBoard } from './draw.js';
+import { CELL_SIZE } from './layout.js';
 
 export const LOCK_DELAY = 500;
 export const MAX_FLOOR_KICKS = 15;
@@ -58,7 +59,7 @@ export function createPiece(type) {
     x: Math.floor(CONFIG.board.cols / 2),
     y: 0,
     color: t.color,
-    isRotation: false,
+    lastMove: null, // Can be 'rotate', 'move', 'fall'
     lockDelay: 0,
     floorKickCount: 0,
     lastKick: [0, 0],
@@ -105,7 +106,7 @@ export function mergePiece(piece) {
 
 
 export function detectTSpin(piece) {
-    if (piece.type !== 'T' || !piece.isRotation) return { detected: false, mini: false };
+    if (piece.type !== 'T' || piece.lastMove !== 'rotate') return { detected: false, mini: false };
 
     const corners = [
         { x: piece.x - 1, y: piece.y - 1 },
@@ -153,6 +154,7 @@ export function detectTSpin(piece) {
 export function rotatePiece(piece, dir) {
     const newRotation = (piece.rotation + dir + 4) % 4;
     let offsets = [];
+    piece.lastMove = null; // Reset last move
 
     if (piece.type === 'O') {
         piece.rotation = newRotation;
@@ -179,7 +181,7 @@ export function rotatePiece(piece, dir) {
                 piece.x += dx;
                 piece.y += dy;
                 piece.rotation = newRotation;
-                piece.isRotation = true;
+                piece.lastMove = 'rotate';
                 if (!isValidPosition(piece, 0, 1)) { // If piece is on the ground
                     if (piece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
                         piece.lockDelay = 0;
@@ -189,7 +191,6 @@ export function rotatePiece(piece, dir) {
                 return;
             }
         }
-        piece.isRotation = false;
         return;
     }
 
@@ -201,14 +202,13 @@ export function rotatePiece(piece, dir) {
                 piece.lockDelayResets++;
             }
         }
-        piece.isRotation = true;
+        piece.lastMove = 'rotate';
         return;
     }
 
     // If we reach here, it means a direct rotation (0,0 offset) was not possible.
     // Now try wall kicks.
     if (piece.floorKickCount >= MAX_FLOOR_KICKS) {
-        piece.isRotation = false;
         return; // Prevent further kicks if limit reached
     }
 
@@ -227,7 +227,7 @@ export function rotatePiece(piece, dir) {
             piece.x += dx;
             piece.y += dy;
             piece.rotation = newRotation;
-            piece.isRotation = true;
+            piece.lastMove = 'rotate';
             if (!isValidPosition(piece, 0, 1)) { // If piece is on the ground
                 if (piece.lockDelayResets < MAX_LOCK_DELAY_RESETS) {
                     piece.lockDelay = 0;
@@ -237,7 +237,6 @@ export function rotatePiece(piece, dir) {
             return;
         }
     }
-    piece.isRotation = false;
 }
 
 export function movePiece(offset) {
@@ -250,7 +249,7 @@ export function movePiece(offset) {
                 currentPiece.lockDelayResets++;
             }
         }
-        currentPiece.isRotation = false;
+        currentPiece.lastMove = 'move';
     }
 }
 
@@ -261,9 +260,28 @@ export function hardDrop() {
         d++;
     }
     score += d * CONFIG.scoring.drop;
-    if (d > 0) triggerScoreUpdateEffect();
+    if (d > 0) Effects.triggerScoreUpdateEffect();
     triggerScreenShake(4, 150);
     lockPiece();
+}
+
+function checkGameOver() {
+    if (!currentPiece || isValidPosition(currentPiece, 0, 0)) {
+        return;
+    }
+
+    // Check if the piece is blocked above the visible board
+    const shape = currentPiece.shape[currentPiece.rotation];
+    const isBlockedInSpawn = shape.some(([dx, dy]) => {
+        const y = currentPiece.y + dy;
+        // The non-visible area is from row 0 to (CONFIG.board.rows - CONFIG.board.visibleRows - 1)
+        return y < (CONFIG.board.rows - CONFIG.board.visibleRows);
+    });
+
+    if (isBlockedInSpawn) {
+        console.log("Game Over reason: Piece blocked in spawn area.");
+        triggerGameOver();
+    }
 }
 
 export function hold() {
@@ -284,20 +302,7 @@ export function hold() {
     currentPiece.lockDelay = 0;
     holdUsed = true;
 
-    // Check for game over after hold
-    if (!isValidPosition(currentPiece, 0, 0)) {
-        console.log("Game Over condition: Piece blocked immediately after hold.");
-        const shape = currentPiece.shape[currentPiece.rotation];
-        const isBlockedInSpawn = shape.some(([dx, dy]) => {
-            const y = currentPiece.y + dy;
-            return y < CONFIG.board.rows - CONFIG.board.visibleRows;
-        });
-
-        if (isBlockedInSpawn) {
-            console.log("Game Over reason: Piece blocked in spawn area after hold.");
-            triggerGameOver();
-        }
-    }
+    checkGameOver();
 }
 
 let getStatsCallback = () => ({ score: 0, lines: 0, level: 1, time: '0.00', pps: 0, apm: 0 });
@@ -352,7 +357,7 @@ export function lockPiece() {
     shape.forEach(([dx, dy]) => {
         const x = (lockedPiece.x + dx) * CELL_SIZE;
         const y = (lockedPiece.y + dy - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CELL_SIZE;
-        triggerLockPieceEffect(x + CELL_SIZE / 2, y + CELL_SIZE / 2, color);
+        Effects.triggerLockPieceEffect(x + CELL_SIZE / 2, y + CELL_SIZE / 2, color);
     });
 
     let tSpin = { detected: false, mini: false };
@@ -361,8 +366,8 @@ export function lockPiece() {
         if (tSpin.detected) {
             const tSpinScore = tSpin.mini ? CONFIG.scoring.tspinMini : CONFIG.scoring.tspin;
             score += tSpinScore;
-            if (tSpinScore > 0) triggerScoreUpdateEffect();
-            triggerTspinEffect(lockedPiece.x, lockedPiece.y);
+            if (tSpinScore > 0) Effects.triggerScoreUpdateEffect();
+            // T-spin effect is triggered via clearType now
         }
     }
 
@@ -373,7 +378,26 @@ export function lockPiece() {
 
     if (lines.length) {
         isClearing = true;
-        triggerLineClearEffect(lines);
+        const isB2BCandidate = lines.length === 4 || tSpin.detected;
+        const btb = previousClearWasB2B && isB2BCandidate;
+
+        let clearType = 'none';
+        if (tSpin.detected) {
+            clearType = 'tspin';
+        } else if (lines.length === 4) {
+            clearType = 'tetris';
+        } else if (ren > 1) {
+            clearType = 'combo';
+        } else if (lines.length > 0) {
+            clearType = ['single', 'double', 'triple'][lines.length - 1];
+        }
+
+        // B2B overrides other types for its specific effect
+        if (btb) {
+            clearType = 'b2b';
+        }
+
+        Effects.triggerLineClearEffect(lines, clearType);
         setTimeout(() => finishLineClear(lines, lockedPiece, tSpin), CONFIG.effects.lineClearDuration);
     } else {
         finishLineClear([], lockedPiece, tSpin);
@@ -384,7 +408,25 @@ function finishLineClear(lines, lockedPiece, tSpin) {
     let ren = lockedPiece.combo || 0;
     if (lines.length) {
         ren = (lockedPiece.combo || 0) + 1;
-        const btb = (lockedPiece.type === 'T' || lines.length === 4) ? previousClearWasB2B : false;
+        const isB2BCandidate = (lines.length === 4 || tSpin.detected);
+        const btb = previousClearWasB2B && isB2BCandidate;
+
+        // Add text effects based on the original logic
+        if (btb) {
+            Effects.addTextEffect('BACK TO BACK', { style: 'b2b', duration: 800 });
+        }
+
+        if (tSpin.detected) {
+            const tSpinText = tSpin.mini ? 'T-SPIN MINI' : `T-SPIN ${['', 'SINGLE', 'DOUBLE', 'TRIPLE'][lines.length]}`.trim();
+            Effects.addTextEffect(tSpinText, { style: 'tspin', duration: 800 });
+        } else if (lines.length === 4) {
+            Effects.addTextEffect('TETRIS', { style: 'tetris', duration: 800 });
+        }
+
+        if (ren > 1) {
+            Effects.addTextEffect(`${ren} COMBO`, { style: 'combo', duration: 600 });
+        }
+
 
         board = board.filter((row, idx) => !lines.includes(idx));
         while (board.length < CONFIG.board.rows) {
@@ -397,7 +439,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
             isPerfectClear = true;
             showPerfectClearMessage(); // Call the UI function
             score += CONFIG.scoring.perfectClear; // Add score for perfect clear
-            if (CONFIG.scoring.perfectClear > 0) triggerScoreUpdateEffect();
+            if (CONFIG.scoring.perfectClear > 0) Effects.triggerScoreUpdateEffect();
         }
 
         let pts = 0;
@@ -408,40 +450,27 @@ function finishLineClear(lines, lockedPiece, tSpin) {
             case 4: pts = CONFIG.scoring.tetris; break;
         }
         score += pts;
-        if (pts > 0) triggerScoreUpdateEffect();
+        if (pts > 0) Effects.triggerScoreUpdateEffect();
         linesCleared += lines.length;
 
-        let clearType;
+        let clearTypeForAttack;
         if (lockedPiece.type === 'T' && tSpin.detected) {
-            clearType = tSpin.mini ? 'tsmini' : (lines.length === 1 ? 'tsingle' : lines.length === 2 ? 'tsdouble' : 'tstriple');
+            clearTypeForAttack = tSpin.mini ? 'tsmini' : (lines.length === 1 ? 'tsingle' : lines.length === 2 ? 'tsdouble' : 'tstriple');
         } else {
-            clearType = lines.length === 1 ? 'single' : lines.length === 2 ? 'double' : lines.length === 3 ? 'triple' : lines.length === 4 ? 'tetris' : 'none';
+            clearTypeForAttack = lines.length === 1 ? 'single' : lines.length === 2 ? 'double' : lines.length === 3 ? 'triple' : lines.length === 4 ? 'tetris' : 'none';
         }
 
-        const firepower = sendFirepower(clearType, btb, ren, isPerfectClear, 0, lines);
+        const firepower = sendFirepower(clearTypeForAttack, btb, ren, isPerfectClear, 0, lines);
         processGarbageBar(firepower, lines);
 
         currentPiece = nextPieces.shift();
         nextPieces.push(getNextPieceFromBag());
         holdUsed = false;
-        previousClearWasB2B = (lockedPiece.type === 'T' || lines.length === 4);
+        previousClearWasB2B = isB2BCandidate;
         currentPiece.combo = ren;
         isClearing = false;
 
-        // Check for game over after a new piece is spawned
-        if (!isValidPosition(currentPiece, 0, 0)) {
-            console.log("Game Over condition: Piece blocked immediately after spawn (after line clear).");
-            const shape = currentPiece.shape[currentPiece.rotation];
-            const isBlockedInSpawn = shape.some(([dx, dy]) => {
-                const y = currentPiece.y + dy;
-                return y < CONFIG.board.rows - CONFIG.board.visibleRows;
-            });
-
-            if (isBlockedInSpawn) {
-                console.log("Game Over reason: Piece blocked in spawn area after line clear.");
-                triggerGameOver();
-            }
-        }
+        checkGameOver();
     } else {
         currentPiece = nextPieces.shift();
         nextPieces.push(getNextPieceFromBag());
@@ -453,20 +482,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
         currentPiece.combo = 0;
         previousClearWasB2B = false;
 
-        // Check for game over after a new piece is spawned
-        if (!isValidPosition(currentPiece, 0, 0)) {
-            console.log("Game Over condition: Piece blocked immediately after spawn (no line clear).");
-            const shape = currentPiece.shape[currentPiece.rotation];
-            const isBlockedInSpawn = shape.some(([dx, dy]) => {
-                const y = currentPiece.y + dy;
-                return y < CONFIG.board.rows - CONFIG.board.visibleRows;
-            });
-
-            if (isBlockedInSpawn) {
-                console.log("Game Over reason: Piece blocked in spawn area (no line clear).");
-                triggerGameOver();
-            }
-        }
+        checkGameOver();
     }
 }
 
@@ -515,8 +531,6 @@ function getTargetBonus(targetCount) {
 
 export function sendFirepower(clearType, btb, ren, perfectClear, targetCount, lines) {
     const total = calculateFirepower(clearType, btb, ren, perfectClear, targetCount);
-    console.log(`Calculated firepower: ${total} (Clear: ${clearType}, B2B: ${btb ? '+1' : '0'}, REN Bonus applied, Target Bonus: +${getTargetBonus(targetCount || 0)})`);
-    console.log(`DEBUG: sendFirepower - clearType: ${clearType}, btb: ${btb}, ren: ${ren}, perfectClear: ${perfectClear}, targetCount: ${targetCount}, total: ${total}`);
     return total;
 }
 
