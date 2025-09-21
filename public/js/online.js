@@ -4,7 +4,7 @@ import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { createLightOrb, effectCanvas, triggerTargetAttackFlash, effectCtx, targetAttackFlashes } from './effects.js';
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect } from './effects.js';
 import { drawUI } from './draw.js';
 
 export const socket = io(CONFIG.serverUrl, {
@@ -95,6 +95,16 @@ class MiniboardEntryEffect {
         this.ctx.arc(this.x, this.y, centerSize, 0, Math.PI * 2);
         this.ctx.fillStyle = `rgba(255, 255, 255, ${centerAlpha})`;
         this.ctx.fill();
+
+        // DEBUG: Draw a crosshair at the effect's perceived center
+        this.ctx.strokeStyle = 'red';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.x - 5, this.y);
+        this.ctx.lineTo(this.x + 5, this.y);
+        this.ctx.moveTo(this.x, this.y - 5);
+        this.ctx.lineTo(this.x, this.y + 5);
+        this.ctx.stroke();
 
         // パーティクル描画
         this.particles.forEach((particle, index) => {
@@ -243,16 +253,28 @@ function drawMiniBoard(slot, currentTime) {
     }
 
     if (isGameOver) {
-        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = `bold ${canvas.width / 4}px Exo 2`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
+        console.log(`drawMiniBoard: Miniboard for ${userId} is Game Over. Attempting to draw "KO".`);
+        // Temporary debug: Draw a red background to confirm drawing is happening
+        // ctx.fillStyle = 'red';
+        // ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        // ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // ctx.fillStyle = 'white';
+        // ctx.font = `bold ${canvas.width / 4}px Exo 2`;
+        // ctx.textAlign = "center";
+        // ctx.textBaseline = "middle";
+        // ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
+
+        // Get the center position of the mini-board relative to the main game canvas
+        const koPos = getBoardCenterPosition(userId);
+        if (koPos) {
+            addTextEffect('KO', { style: 'ko', duration: 1500, x: koPos.x, y: koPos.y });
+        }
+
         // If there was an effect, clear it
         if (effect) slot.effect = null;
-        slot.dirty = false;
+        // Do NOT set slot.dirty = false here, as we want the KO to persist
         return;
     }
 
@@ -315,12 +337,23 @@ function startAnimationIfNeeded() {
 let finalRanking = {}; // To store all player ranks
 let currentRoomId = null; // To store the current room ID
 
-export function drawTargetLines() {
-    if (!effectCtx || !socket.id) return;
+export function drawTargetLines(ctx) {
+    if (!ctx) {
+        console.log("drawTargetLines: context is null");
+        return;
+    }
+    if (!socket.id) {
+        console.log("drawTargetLines: socket.id is null");
+        return;
+    }
 
     const myId = socket.id;
     const myPos = getBoardCenterPosition(myId);
-    if (!myPos) return;
+    if (!myPos) {
+        console.log("drawTargetLines: myPos is null, cannot draw lines.");
+        return;
+    }
+    console.log(`drawTargetLines: myPos = ${JSON.stringify(myPos)}`);
 
     const now = performance.now();
 
@@ -329,12 +362,15 @@ export function drawTargetLines() {
         if (targetId === myId) {
             const attackerPos = getBoardCenterPosition(attackerId);
             if (attackerPos) {
-                effectCtx.beginPath();
-                effectCtx.moveTo(attackerPos.x, attackerPos.y);
-                effectCtx.lineTo(myPos.x, myPos.y);
-                effectCtx.strokeStyle = 'rgba(255, 255, 102, 0.7)'; // Yellowish
-                effectCtx.lineWidth = 1;
-                effectCtx.stroke();
+                console.log(`drawTargetLines: Drawing line from attacker ${attackerId} at ${JSON.stringify(attackerPos)} to me at ${JSON.stringify(myPos)}`);
+                ctx.beginPath();
+                ctx.moveTo(attackerPos.x, attackerPos.y);
+                ctx.lineTo(myPos.x, myPos.y);
+                ctx.strokeStyle = 'rgba(255, 255, 102, 0.7)'; // Yellowish
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            } else {
+                console.log(`drawTargetLines: Attacker ${attackerId} pos is null, cannot draw line to me.`);
             }
         }
 
@@ -342,17 +378,20 @@ export function drawTargetLines() {
         if (attackerId === myId && targetId) {
             const targetPos = getBoardCenterPosition(targetId);
             if (targetPos) {
+                console.log(`drawTargetLines: Drawing line from me to target ${targetId} at ${JSON.stringify(targetPos)}`);
                 const isFlashing = targetAttackFlashes.has(myId) && now < targetAttackFlashes.get(myId);
 
-                effectCtx.beginPath();
-                effectCtx.moveTo(myPos.x, myPos.y);
-                effectCtx.lineTo(effectCanvas.width / 2, effectCanvas.height / 2);
-                effectCtx.strokeStyle = isFlashing ? '#FFFFFF' : '#FFFF66';
-                effectCtx.lineWidth = isFlashing ? 3 : 1.5;
-                effectCtx.shadowColor = isFlashing ? '#FFFFFF' : '#FFFF66';
-                effectCtx.shadowBlur = 10;
-                effectCtx.stroke();
-                effectCtx.shadowBlur = 0; // Reset shadow blur
+                ctx.beginPath();
+                ctx.moveTo(myPos.x, myPos.y);
+                ctx.lineTo(targetPos.x, targetPos.y);
+                ctx.strokeStyle = isFlashing ? '#FFFFFF' : '#FFFF66';
+                ctx.lineWidth = isFlashing ? 3 : 1.5;
+                ctx.shadowColor = isFlashing ? '#FFFFFF' : '#FFFF66';
+                ctx.shadowBlur = 10;
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Reset shadow blur
+            } else {
+                console.log(`drawTargetLines: Target ${targetId} pos is null, cannot draw line from me.`);
             }
         }
     }
@@ -360,41 +399,30 @@ export function drawTargetLines() {
 
 // --- Attack Effect Helpers ---
 export function getBoardCenterPosition(userId, clearedLines = null) {
-    if (!effectCanvas) return null;
+    const mainGameCanvas = document.getElementById('main-game-board');
+    if (!mainGameCanvas) return null;
+    const mainGameCanvasRect = mainGameCanvas.getBoundingClientRect();
 
-    const effectCanvasRect = effectCanvas.getBoundingClientRect();
     let targetRect;
 
     if (userId === socket.id) {
         const mainBoard = document.getElementById('main-game-board');
         if (!mainBoard) return null;
         targetRect = mainBoard.getBoundingClientRect();
-
-        if (clearedLines && clearedLines.length > 0) {
-            const avgLine = clearedLines.reduce((sum, line) => sum + line, 0) / clearedLines.length;
-            const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
-            const yPos = (avgLine - startRow + 0.5) * MAIN_BOARD_CELL_SIZE;
-
-            return {
-                x: targetRect.left - effectCanvasRect.left + targetRect.width / 2,
-                y: targetRect.top - effectCanvasRect.top + yPos
-            };
+    } else {
+        const slot = miniboardSlots.find(s => s.userId === userId);
+        if (slot && slot.canvas) {
+            targetRect = slot.canvas.getBoundingClientRect();
         }
-    } 
-
-    const slot = miniboardSlots.find(s => s.userId === userId);
-    if (slot && slot.canvas) {
-        targetRect = slot.canvas.getBoundingClientRect();
-    } else if (userId === socket.id && !targetRect) {
-        // Fallback for main board if clearedLines logic didn't run
-        const mainBoard = document.getElementById('main-game-board');
-        if (mainBoard) targetRect = mainBoard.getBoundingClientRect();
     }
 
     if (targetRect) {
+        const finalX = targetRect.left - mainGameCanvasRect.left + targetRect.width / 2;
+        const finalY = targetRect.top - mainGameCanvasRect.top + targetRect.height / 2;
+        console.log(`getBoardCenterPosition for ${userId}: targetRect=${JSON.stringify(targetRect)}, mainGameCanvasRect=${JSON.stringify(mainGameCanvasRect)}, finalX=${finalX}, finalY=${finalY}`);
         return {
-            x: targetRect.left - effectCanvasRect.left + targetRect.width / 2,
-            y: targetRect.top - effectCanvasRect.top + targetRect.height / 2
+            x: finalX,
+            y: finalY
         };
     }
 
@@ -402,16 +430,18 @@ export function getBoardCenterPosition(userId, clearedLines = null) {
 }
 
 function getAttackBarPosition() {
-    if (!effectCanvas) return null;
+    const mainGameCanvas = document.getElementById('main-game-board');
+    if (!mainGameCanvas) return null;
+    const mainGameCanvasRect = mainGameCanvas.getBoundingClientRect();
+
     const attackBar = document.getElementById('attack-bar');
     if (!attackBar) return null;
 
-    const effectCanvasRect = effectCanvas.getBoundingClientRect();
     const attackBarRect = attackBar.getBoundingClientRect();
     
     return {
-        x: attackBarRect.left - effectCanvasRect.left + attackBarRect.width / 2,
-        y: attackBarRect.top - effectCanvasRect.top + attackBarRect.height / 2 
+        x: attackBarRect.left - mainGameCanvasRect.left + attackBarRect.width / 2,
+        y: attackBarRect.top - mainGameCanvasRect.top + attackBarRect.height / 2 
     };
 }
 
@@ -485,6 +515,7 @@ socket.on("ranking", ({ yourRankMap, statsMap, roomId }) => {
       return;
   }
   
+  console.log(`[Ranking] Received ranking update for room ${roomId}. yourRankMap:`, yourRankMap);
 
   // Merge new ranking info
   Object.assign(finalRanking, yourRankMap);
@@ -493,6 +524,11 @@ socket.on("ranking", ({ yourRankMap, statsMap, roomId }) => {
   miniboardSlots.forEach(slot => {
       if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
           finalRanking[slot.userId] = null; // Mark as active/undetermined rank
+      }
+      if (slot.userId && finalRanking.hasOwnProperty(slot.userId) && finalRanking[slot.userId] !== null && !slot.isGameOver) {
+          console.log(`[Ranking] Setting isGameOver=true for userId: ${slot.userId}, rank: ${finalRanking[slot.userId]}`);
+          slot.isGameOver = true;
+          slot.dirty = true;
       }
   });
 
@@ -566,10 +602,8 @@ socket.on("ReceiveGarbage", ({ from, lines }) => {
     if (from) {
         attackerPos = getBoardCenterPosition(from);
     } else {
-        if (effectCanvas) {
-            const effectCanvasRect = effectCanvas.getBoundingClientRect();
-            attackerPos = { x: effectCanvasRect.width / 2, y: 0 };
-        }
+        // ターゲットがいない場合は、画面上部中央へ
+        attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
     }
 
     const myAttackBarPos = getAttackBarPosition();
@@ -650,7 +684,7 @@ export function sendAttack(targetId, lines, clearedLines = null) {
     }
     
     console.log('My Pos:', myPos, 'Main Board Center:', { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 });
-    createLightOrb(myPos, { x: BOARD_WIDTH / 2, y: BOARD_HEIGHT / 2 });
+    createLightOrb(myPos, targetPos);
 }
 
 let connectionError = false;

@@ -20,8 +20,9 @@ function createCanvas(containerId, width, height) {
     return { canvas, ctx: canvas.getContext('2d') };
 }
 
-let gameCtx, holdCtx, nextCtx, attackBarCtx;
+let gameCtx, holdCtx, nextCtx, attackBarCtx, effectsCtx;
 let boardCanvas, boardCtx; // Off-screen canvas for the board
+let effectsCanvas; // Overlay canvas for effects
 let scoreDisplay;
 let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 
@@ -64,9 +65,29 @@ export function setupCanvases() {
     scoreDisplay.style.height = `${SCORE_AREA_HEIGHT}px`;
     scoreDisplay.style.fontSize = CONFIG.ui.scoreFontSize; // Fixed font size
 
+    // Create overlay canvas for effects
+    const gameBoardContainer = document.getElementById('main-game-board');
+    if (gameBoardContainer) {
+        effectsCanvas = document.createElement('canvas');
+        effectsCanvas.id = 'effects-overlay'; // Assign the ID here
+        effectsCanvas.width = BOARD_WIDTH;
+        effectsCanvas.height = BOARD_HEIGHT;
+        effectsCtx = effectsCanvas.getContext('2d');
+
+        // Position the effects canvas absolutely over the game board
+        effectsCanvas.style.position = 'absolute';
+        effectsCanvas.style.top = '0';
+        effectsCanvas.style.left = '0';
+        gameBoardContainer.style.position = 'relative'; // Ensure container is positioned
+        gameBoardContainer.appendChild(effectsCanvas);
+    }
+
     // Notify other components that layout has changed
     window.dispatchEvent(new CustomEvent('layout-changed'));
     drawBoard();
+
+    // Initialize effects module with the new effects canvas
+    Effects.initEffects(effectsCanvas);
 }
 
 function positionElement(id, x, y) {
@@ -115,6 +136,7 @@ export function drawGame() {
         const x = (Math.random() - 0.5) * intensity;
         const y = (Math.random() - 0.5) * intensity;
         gameCtx.translate(x, y);
+        console.log(`Screen shake translation: x=${x}, y=${y}`);
     }
     
     // --- Draw the pre-rendered board ---
@@ -136,7 +158,7 @@ export function drawGame() {
         drawPiece(gameCtx, currentPiece, 0, 0);
     }
 
-    // --- Draw effects (line clears, particles) ---
+    // --- Draw effects (line clears) ---
     Effects.effects.forEach(effect => {
         const progress = (now - effect.startTime) / effect.duration;
         if (progress >= 1) return; // Skip finished effects
@@ -150,44 +172,23 @@ export function drawGame() {
                 const y = (row - startRow) * CELL_SIZE;
                 if (y >= 0) gameCtx.fillRect(0, y, BOARD_WIDTH, CELL_SIZE);
             });
-        } else if (effect.type === 'particle') {
-            const rgb = hexToRgb(effect.color);
-            if (rgb) {
-                gameCtx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-                gameCtx.beginPath();
-                // Update particle position for simple gravity effect
-                effect.vy += CONFIG.effects.particleGravity; // Gravity
-                effect.x += effect.vx;
-                effect.y += effect.vy;
-                gameCtx.arc(effect.x, effect.y, effect.size, 0, Math.PI * 2);
-                gameCtx.fill();
-            }
         }
     });
 
-    gameCtx.restore();
-
-    // Draw light orbs and target lines on the separate effect canvas
-    if (Effects.effectCtx && Effects.effectCanvas) {
-        Effects.effectCtx.clearRect(0, 0, Effects.effectCanvas.width, Effects.effectCanvas.height);
-
-        // Draw target lines
-        drawTargetLines();
-
-        
-        for (const orb of Effects.orbs) {
-            orb.draw(Effects.effectCtx);
-        }
-
-        // Draw text effects
-        Effects.drawTextEffects(Effects.effectCtx);
-
-        // Draw T-Spin effect
-        Effects.drawTspinEffect(Effects.effectCtx);
-
-        // Draw target attack flashes
-        Effects.drawTargetAttackFlashes(Effects.effectCtx);
+    // Draw light orbs, particles, text effects, T-Spin effect, and target attack flashes on the effects canvas
+    if (effectsCtx) {
+        effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
+        Effects.drawOrbs();
+        Effects.drawParticles();
+        Effects.drawTextEffects();
+        Effects.drawTspinEffect();
+        Effects.drawTargetAttackFlashes();
     }
+
+    // Draw target lines on the game canvas
+    drawTargetLines(gameCtx); // Pass gameCtx
+
+    gameCtx.restore();
 }
 
 
@@ -307,12 +308,23 @@ function drawUITitledBox(ctx, x, y, w, h, title) {
 
 function drawMiniPiece(ctx, piece, boxX, boxY, boxW, boxH) {
     const shape = piece.shape[0];
-    const miniCellSize = Math.floor(boxW / CONFIG.ui.miniPieceCellCount);
-    const pieceWidth = (Math.max(...shape.map(p => p[0])) - Math.min(...shape.map(p => p[0])) + 1) * miniCellSize;
-    const pieceHeight = (Math.max(...shape.map(p => p[1])) - Math.min(...shape.map(p => p[1])) + 1) * miniCellSize;
-    const offsetX = boxX + (boxW - pieceWidth) / 2 - Math.min(...shape.map(p => p[0])) * miniCellSize;
-    const offsetY = boxY + (boxH - pieceHeight) / 2 - Math.min(...shape.map(p => p[1])) * miniCellSize;
+    // Calculate miniCellSize, rounding to the nearest integer for crisp drawing
+    const miniCellSize = Math.round(boxW / CONFIG.ui.miniPieceCellCount);
+
+    const pieceMinX = Math.min(...shape.map(p => p[0]));
+    const pieceMinY = Math.min(...shape.map(p => p[1]));
+    const pieceMaxX = Math.max(...shape.map(p => p[0]));
+    const pieceMaxY = Math.max(...shape.map(p => p[1]));
+
+    const pieceRenderWidth = (pieceMaxX - pieceMinX + 1) * miniCellSize;
+    const pieceRenderHeight = (pieceMaxY - pieceMinY + 1) * miniCellSize;
+
+    // Calculate offsets for centering, ensuring integer values
+    const offsetX = Math.round(boxX + (boxW - pieceRenderWidth) / 2 - pieceMinX * miniCellSize);
+    const offsetY = Math.round(boxY + (boxH - pieceRenderHeight) / 2 - pieceMinY * miniCellSize);
+
     shape.forEach(([x, y]) => {
+        // Ensure drawing coordinates are integers
         drawBlock(ctx, offsetX + x * miniCellSize, offsetY + y * miniCellSize, piece.type, miniCellSize);
     });
 }

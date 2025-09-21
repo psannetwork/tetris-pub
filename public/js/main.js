@@ -143,10 +143,6 @@ function init() {
     setGameGetStatsCallback(getStats);
     setOnlineGetStatsCallback(getStats);
     setupCanvases();
-    const effectCanvasElement = document.getElementById('effect-canvas');
-    if (effectCanvasElement) {
-        initEffects(effectCanvasElement);
-    }
     connectToServer();
     gameEndOverlay.classList.remove('visible');
     setGameState('LOBBY');

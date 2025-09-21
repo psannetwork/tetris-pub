@@ -8,19 +8,17 @@ export let scoreUpdateEffect = null;
 export let targetAttackFlashes = new Map(); // attackerId -> flashEndTime
 
 export let orbs = [];
-export let effectCanvas = null;
-export let effectCtx = null;
+
+let effectsCanvas;
+export let effectsCtx;
 
 export function initEffects(canvas) {
-    effectCanvas = canvas;
-    if (!effectCanvas) return;
-    effectCtx = canvas.getContext('2d');
-    effectCanvas.width = BOARD_WIDTH;
-    effectCanvas.height = BOARD_HEIGHT;
+    effectsCanvas = canvas;
+    effectsCtx = effectsCanvas.getContext('2d');
 }
 
 // --- Text Effect ---
-export function addTextEffect(text, { style = 'default', duration = 500, x = BOARD_WIDTH / 2, y = BOARD_HEIGHT / 2 } = {}) {
+export function addTextEffect(text, { style = 'default', duration = 1500, x = BOARD_WIDTH / 2, y = BOARD_HEIGHT / 2 } = {}) {
     textEffects.push({
         text,
         style,
@@ -32,24 +30,74 @@ export function addTextEffect(text, { style = 'default', duration = 500, x = BOA
     });
 }
 
-export function drawTextEffects(ctx) {
+export function drawTextEffects() {
     const now = performance.now();
     textEffects.forEach(effect => {
         const progress = (now - effect.startTime) / effect.duration;
         if (progress >= 1) return; // Should be filtered out by updateEffects, but good to check
 
-        ctx.save();
-        ctx.font = `bold ${30 * (1 - progress * 0.5)}px Arial`; // Example: fading and shrinking
-        ctx.textAlign = 'center';
-        ctx.fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
-        ctx.strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
-        ctx.lineWidth = 2;
+        effectsCtx.save();
+        effectsCtx.textAlign = 'center';
 
-        const currentY = effect.initialY - (progress * 50); // Example: move upwards
+        let fontSize;
+        let fillStyle;
+        let strokeStyle;
+        let lineWidth;
+        let currentY;
 
-        ctx.fillText(effect.text, effect.x, currentY);
-        ctx.strokeText(effect.text, effect.x, currentY);
-        ctx.restore();
+        switch (effect.style) {
+            case 'ko':
+                fontSize = 50 * (1 - progress * 0.5); // Larger, shrinks less
+                fillStyle = `rgba(255, 0, 0, ${1 - progress})`; // Red, fading out
+                strokeStyle = `rgba(255, 255, 255, ${1 - progress})`; // White outline
+                lineWidth = 4;
+                currentY = effect.initialY - (progress * 70); // Moves up more
+                break;
+            case 'b2b':
+                fontSize = 35 * (1 - progress * 0.5);
+                fillStyle = `rgba(255, 165, 0, ${1 - progress})`; // Orange
+                strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+                lineWidth = 3;
+                currentY = effect.initialY - (progress * 60);
+                break;
+            case 'tspin':
+                fontSize = 35 * (1 - progress * 0.5);
+                fillStyle = `rgba(148, 0, 211, ${1 - progress})`; // Dark Violet
+                strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
+                lineWidth = 3;
+                currentY = effect.initialY - (progress * 60);
+                break;
+            case 'tetris':
+                fontSize = 40 * (1 - progress * 0.5);
+                fillStyle = `rgba(0, 255, 255, ${1 - progress})`; // Cyan
+                strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+                lineWidth = 3;
+                currentY = effect.initialY - (progress * 65);
+                break;
+            case 'combo':
+                fontSize = 30 * (1 - progress * 0.5);
+                fillStyle = `rgba(255, 255, 0, ${1 - progress})`; // Yellow
+                strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+                lineWidth = 2;
+                currentY = effect.initialY - (progress * 50);
+                break;
+            default: // 'default' style
+                fontSize = 30 * (1 - progress * 0.5);
+                fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
+                strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+                lineWidth = 2;
+                currentY = effect.initialY - (progress * 50);
+                break;
+        }
+
+        effectsCtx.font = `bold ${fontSize}px Arial`;
+        effectsCtx.fillStyle = fillStyle;
+        effectsCtx.strokeStyle = strokeStyle;
+        effectsCtx.lineWidth = lineWidth;
+
+        effectsCtx.fillText(effect.text, effect.x, currentY);
+        effectsCtx.strokeText(effect.text, effect.x, currentY);
+        effectsCtx.restore();
     });
 }
 
@@ -65,7 +113,7 @@ class LightOrb {
         this.currentY = startY;
         this.progress = 0;
         this.velocity = 0;
-        this.acceleration = 0.008; // 加速度
+        this.acceleration = 0.003; // 加速度 (減速)
         this.completed = false;
         this.arrived = false;
         this.arrivalTime = 0;
@@ -111,40 +159,33 @@ class LightOrb {
     }
 
     draw(ctx) {
-        if (this.trail.length > 1 && !this.arrived) {
-            for (let i = 0; i < this.trail.length - 1; i++) {
-                const point1 = this.trail[i];
-                const point2 = this.trail[i + 1];
-                
-                ctx.beginPath();
-                ctx.moveTo(point1.x, point1.y);
-                ctx.lineTo(point2.x, point2.y);
-                
-                ctx.strokeStyle = `rgba(255, 255, 200, ${point1.alpha})`;
-                ctx.lineWidth = 3;
-                ctx.lineCap = 'round';
-                ctx.stroke();
-            }
+        // Draw trail as fading circles
+        for (let i = 0; i < this.trail.length; i++) {
+            const point = this.trail[i];
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, point.size * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 200, ${point.alpha * 0.5})`;
+            ctx.fill();
         }
 
         if (!this.arrived || this.alpha > 0) {
+            // Main orb with radial gradient
+            const gradient = ctx.createRadialGradient(
+                this.currentX, this.currentY, 0,
+                this.currentX, this.currentY, this.size
+            );
+            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.alpha})`);
+            gradient.addColorStop(0.5, `rgba(255, 255, 200, ${this.alpha * 0.7})`);
+            gradient.addColorStop(1, `rgba(255, 255, 150, 0)`);
+
             ctx.beginPath();
-            ctx.arc(this.currentX, this.currentY, this.size * 1.8, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.4})`;
+            ctx.arc(this.currentX, this.currentY, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
             ctx.fill();
-            
+
+            // Small highlight
             ctx.beginPath();
-            ctx.arc(this.currentX, this.currentY, this.size * 1.2, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 200, ${this.alpha * 0.7})`;
-            ctx.fill();
-            
-            ctx.beginPath();
-            ctx.arc(this.currentX, this.currentY, this.size * 0.6, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
-            ctx.fill();
-            
-            ctx.beginPath();
-            ctx.arc(this.currentX - this.size/4, this.currentY - this.size/4, this.size/3, 0, Math.PI * 2);
+            ctx.arc(this.currentX - this.size / 4, this.currentY - this.size / 4, this.size / 3, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.9})`;
             ctx.fill();
         }
@@ -159,6 +200,10 @@ export function createLightOrb(startPos, endPos) {
     // console.log(`Creating LightOrb from`, startPos, `to`, endPos);
     orbs.push(new LightOrb(startPos.x, startPos.y, endPos.x, endPos.y));
     // console.log(`Orbs count: ${orbs.length}`);
+}
+
+export function drawOrbs() {
+    orbs.forEach(orb => orb.draw(effectsCtx));
 }
 
 // --- Line Clear and Particle Effects ---
@@ -176,6 +221,23 @@ function addParticle(props) {
         color: '#FFFFFF',
     };
     effects.push({ ...defaults, ...props });
+}
+
+export function drawParticles() {
+    effects.forEach(effect => {
+        if (effect.type === 'particle') {
+            const progress = (performance.now() - effect.startTime) / effect.duration;
+            if (progress < 1) {
+                effectsCtx.save();
+                effectsCtx.globalAlpha = 1 - progress;
+                effectsCtx.fillStyle = effect.color;
+                effectsCtx.beginPath();
+                effectsCtx.arc(effect.x, effect.y, effect.size * (1 - progress * 0.5), 0, Math.PI * 2);
+                effectsCtx.fill();
+                effectsCtx.restore();
+            }
+        }
+    });
 }
 
 export function triggerLineClearEffect(rows, clearType) {
@@ -308,7 +370,7 @@ export function updateEffects() {
     }
 }
 
-export function drawTspinEffect(ctx) {
+export function drawTspinEffect() {
     if (!tspinEffect) return;
 
     const now = performance.now();
@@ -316,21 +378,21 @@ export function drawTspinEffect(ctx) {
 
     if (progress >= 1) return; // Should be nullified by updateEffects, but good to check
 
-    ctx.save();
-    ctx.font = `bold ${40 * (1 - progress * 0.5)}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = `rgba(255, 255, 0, ${1 - progress})`; // Yellow fading out
-    ctx.strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
-    ctx.lineWidth = 3;
+    effectsCtx.save();
+    effectsCtx.font = `bold ${40 * (1 - progress * 0.5)}px Arial`;
+    effectsCtx.textAlign = 'center';
+    effectsCtx.fillStyle = `rgba(255, 255, 0, ${1 - progress})`; // Yellow fading out
+    effectsCtx.strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
+    effectsCtx.lineWidth = 3;
 
     const currentY = tspinEffect.y - (progress * 30); // Move upwards slightly
 
-    ctx.fillText('T-SPIN!', tspinEffect.x, currentY);
-    ctx.strokeText('T-SPIN!', tspinEffect.x, currentY);
-    ctx.restore();
+    effectsCtx.fillText('T-SPIN!', tspinEffect.x, currentY);
+    effectsCtx.strokeText('T-SPIN!', tspinEffect.x, currentY);
+    effectsCtx.restore();
 }
 
-export function drawTargetAttackFlashes(ctx) {
+export function drawTargetAttackFlashes() {
     const now = performance.now();
     targetAttackFlashes.forEach((endTime, attackerId) => {
         const duration = 200; // Flash duration (same as in triggerTargetAttackFlash)
@@ -338,10 +400,10 @@ export function drawTargetAttackFlashes(ctx) {
         const progress = (now - startTime) / duration;
 
         if (progress < 1) {
-            ctx.save();
-            ctx.fillStyle = `rgba(255, 0, 0, ${0.5 * (1 - progress)})`; // Red fading out
-            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            ctx.restore();
+            effectsCtx.save();
+            effectsCtx.fillStyle = `rgba(255, 0, 0, ${0.5 * (1 - progress)})`; // Red fading out
+            effectsCtx.fillRect(0, 0, effectsCtx.canvas.width, effectsCtx.canvas.height);
+            effectsCtx.restore();
         }
     });
 }
