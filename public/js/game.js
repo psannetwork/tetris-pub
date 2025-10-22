@@ -9,7 +9,8 @@ import { CELL_SIZE } from './layout.js';
 export const LOCK_DELAY = 500;
 export const MAX_FLOOR_KICKS = 15;
 export const MAX_LOCK_DELAY_RESETS = 15;
-
+export let ren;
+export let effectCanvas;
 export let gameState = 'LOBBY'; // LOBBY, PLAYING, GAME_OVER
 export let board;
 export let currentPiece;

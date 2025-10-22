@@ -12,7 +12,7 @@ const ENABLE_BOTS = true;
 const BOT_COUNT = 50;
 // -------------------------
 
-const PORT = process.env.PORT || 6000;
+const PORT = process.env.PORT || 3000;
 
 const app = express();
 const server = http.createServer(app);

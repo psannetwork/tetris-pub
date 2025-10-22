@@ -249,7 +249,7 @@ function drawMiniBoard(slot, currentTime) {
     }
 
     if (userId !== socket.id) { // Only for opponent miniboards
-        console.log(`Miniboard for ${userId}: isGameOver = ${isGameOver}`);
+
     }
 
     if (isGameOver) {
@@ -677,8 +677,9 @@ export function sendAttack(targetId, lines, clearedLines = null) {
         targetPos = getBoardCenterPosition(targetId);
     } else {
         // ターゲットがいない場合は、画面上部中央へ
-        if (effectCanvas) {
-            const effectCanvasRect = effectCanvas.getBoundingClientRect();
+        const effectCanvasElement = document.getElementById('effect-canvas');
+        if (effectCanvasElement) {
+            const effectCanvasRect = effectCanvasElement.getBoundingClientRect();
             targetPos = { x: effectCanvasRect.width / 2, y: 0 };
         }
     }

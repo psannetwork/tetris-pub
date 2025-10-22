@@ -126,7 +126,7 @@ export const CONFIG = {
         enableGarbage: true
     },
     MAX_MINIBOARDS_PER_SIDE: 40,
-    serverUrl: 'https://special-doodle-ggq6qrpxpgjhvp45-6000.app.github.dev',
+    serverUrl: 'https://webui.psannetwork.net',
 
     // テトリミノの形状定義
     TETROMINOES: {
