@@ -1,9 +1,9 @@
 import { CONFIG } from './config.js';
 import * as Effects from './effects.js';
-import { sendAttack, socket } from './online.js'; // Import socket
+import { sendAttack, socket, playerTargets } from './online.js'; // Import socket and playerTargets
 import { attackBarSegments, getAttackBarSum, removeAttackBar, processFlashingGarbage } from './garbage.js';
 import { showGameEndScreen, showPerfectClearMessage } from './ui.js';
-import { triggerScreenShake, tetrominoTypeToIndex, drawBoard } from './draw.js';
+import { triggerScreenShake, tetrominoTypeToIndex, drawBoard, getMainBoardOffset } from './draw.js';
 import { CELL_SIZE } from './layout.js';
 
 export const LOCK_DELAY = 500;
@@ -355,6 +355,7 @@ export function lockPiece() {
 
     const shape = lockedPiece.shape[lockedPiece.rotation];
     const color = CONFIG.colors.tetromino[tetrominoTypeToIndex(lockedPiece.type)];
+    const offset = getMainBoardOffset();
     shape.forEach(([dx, dy]) => {
         const x = (lockedPiece.x + dx) * CELL_SIZE;
         const y = (lockedPiece.y + dy - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CELL_SIZE;
@@ -368,7 +369,7 @@ export function lockPiece() {
             const tSpinScore = tSpin.mini ? CONFIG.scoring.tspinMini : CONFIG.scoring.tspin;
             score += tSpinScore;
             if (tSpinScore > 0) Effects.triggerScoreUpdateEffect();
-            // T-spin effect is triggered via clearType now
+            Effects.triggerTspinEffect(lockedPiece.x * CELL_SIZE + (CONFIG.layout.boardWidth / 2) - (CONFIG.board.cols / 2 * CELL_SIZE) , lockedPiece.y * CELL_SIZE + (CONFIG.layout.boardHeight / 2) - (CONFIG.board.rows / 2 * CELL_SIZE));
         }
     }
 
@@ -412,7 +413,6 @@ function finishLineClear(lines, lockedPiece, tSpin) {
         const isB2BCandidate = (lines.length === 4 || tSpin.detected);
         const btb = previousClearWasB2B && isB2BCandidate;
 
-        // Add text effects based on the original logic
         if (btb) {
             Effects.addTextEffect('BACK TO BACK', { style: 'b2b', duration: 800 });
         }
@@ -536,16 +536,21 @@ export function sendFirepower(clearType, btb, ren, perfectClear, targetCount, li
 }
 
 export function processGarbageBar(firepower, lines) {
+    let targetId = null;
+    if (socket && socket.id && playerTargets.has(socket.id)) {
+        targetId = playerTargets.get(socket.id);
+    }
+    
     const accumulated = getAttackBarSum();
     if (accumulated > 0) {
         const subtract = Math.min(accumulated, firepower);
         removeAttackBar(subtract);
         const remainder = firepower - subtract;
         if (remainder > 0) {
-            sendAttack(null, remainder, lines);
+            sendAttack(targetId, remainder, lines);
         }
     } else {
-        sendAttack(null, firepower, lines);
+        sendAttack(targetId, firepower, lines);
     }
 }
 

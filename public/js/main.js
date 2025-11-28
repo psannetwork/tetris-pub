@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects, initEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket } from './online.js'; // Added socket
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, initializeSocket } from './online.js'; // Added socket
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements ---
@@ -48,13 +48,13 @@ startButton.onclick = () => {
 
 retryButton.onclick = () => {
     gameEndOverlay.classList.remove('visible');
-    // Disconnect and reconnect the socket to force a full reset
-    socket.disconnect();
-    socket.connect();
+    setManualDisconnect(true);
+    initializeSocket();
+    connectToServer();
 
     setButtonState(retryButton, false); // Disable retry button after click
     setButtonState(lobbyButton, false); // Disable lobby button after click
-    setButtonState(startButton, true); // Enable start button for new game
+    setButtonState(startButton, false); // Disable start button
 };
 
 lobbyButton.onclick = () => {
@@ -143,6 +143,7 @@ function init() {
     setGameGetStatsCallback(getStats);
     setOnlineGetStatsCallback(getStats);
     setupCanvases();
+    initializeSocket();
     connectToServer();
     gameEndOverlay.classList.remove('visible');
     setGameState('LOBBY');

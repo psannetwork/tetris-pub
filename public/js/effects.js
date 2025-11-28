@@ -1,5 +1,6 @@
 import { CONFIG } from './config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from './layout.js';
+import { getMainBoardOffset } from './draw.js';
 
 export let effects = [];
 export let textEffects = [];
@@ -18,15 +19,19 @@ export function initEffects(canvas) {
 }
 
 // --- Text Effect ---
-export function addTextEffect(text, { style = 'default', duration = 1500, x = BOARD_WIDTH / 2, y = BOARD_HEIGHT / 2 } = {}) {
+export function addTextEffect(text, { style = 'default', duration = 1500, x, y } = {}) {
+    const offset = getMainBoardOffset();
+    const globalX = x !== undefined ? x : offset.x + BOARD_WIDTH / 2;
+    const globalY = y !== undefined ? y : offset.y + BOARD_HEIGHT / 2;
+
     textEffects.push({
         text,
         style,
         duration,
         startTime: performance.now(),
-        x,
-        y,
-        initialY: y,
+        x: globalX,
+        y: globalY,
+        initialY: globalY,
     });
 }
 
@@ -34,54 +39,51 @@ export function drawTextEffects() {
     const now = performance.now();
     textEffects.forEach(effect => {
         const progress = (now - effect.startTime) / effect.duration;
-        if (progress >= 1) return; // Should be filtered out by updateEffects, but good to check
+        if (progress >= 1) return;
 
         effectsCtx.save();
         effectsCtx.textAlign = 'center';
+        
+        let fontSize, fillStyle, strokeStyle, lineWidth, currentY;
 
-        let fontSize;
-        let fillStyle;
-        let strokeStyle;
-        let lineWidth;
-        let currentY;
-
+        // ... (rest of the switch statement is the same)
         switch (effect.style) {
             case 'ko':
-                fontSize = 50 * (1 - progress * 0.5); // Larger, shrinks less
-                fillStyle = `rgba(255, 0, 0, ${1 - progress})`; // Red, fading out
-                strokeStyle = `rgba(255, 255, 255, ${1 - progress})`; // White outline
+                fontSize = 50 * (1 - progress * 0.5);
+                fillStyle = `rgba(255, 0, 0, ${1 - progress})`;
+                strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 lineWidth = 4;
-                currentY = effect.initialY - (progress * 70); // Moves up more
+                currentY = effect.initialY - (progress * 70);
                 break;
             case 'b2b':
                 fontSize = 35 * (1 - progress * 0.5);
-                fillStyle = `rgba(255, 165, 0, ${1 - progress})`; // Orange
+                fillStyle = `rgba(255, 165, 0, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 3;
                 currentY = effect.initialY - (progress * 60);
                 break;
             case 'tspin':
                 fontSize = 35 * (1 - progress * 0.5);
-                fillStyle = `rgba(148, 0, 211, ${1 - progress})`; // Dark Violet
+                fillStyle = `rgba(148, 0, 211, ${1 - progress})`;
                 strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 lineWidth = 3;
                 currentY = effect.initialY - (progress * 60);
                 break;
             case 'tetris':
                 fontSize = 40 * (1 - progress * 0.5);
-                fillStyle = `rgba(0, 255, 255, ${1 - progress})`; // Cyan
+                fillStyle = `rgba(0, 255, 255, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 3;
                 currentY = effect.initialY - (progress * 65);
                 break;
             case 'combo':
                 fontSize = 30 * (1 - progress * 0.5);
-                fillStyle = `rgba(255, 255, 0, ${1 - progress})`; // Yellow
+                fillStyle = `rgba(255, 255, 0, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 2;
                 currentY = effect.initialY - (progress * 50);
                 break;
-            default: // 'default' style
+            default:
                 fontSize = 30 * (1 - progress * 0.5);
                 fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
@@ -100,6 +102,8 @@ export function drawTextEffects() {
         effectsCtx.restore();
     });
 }
+
+
 
 
 // 光玉クラス
@@ -193,13 +197,16 @@ class LightOrb {
 }
 
 export function createLightOrb(startPos, endPos) {
-    if (!startPos || !endPos) {
-        // console.error("createLightOrb: Invalid start or end position");
+    if (!startPos) {
+        console.error("createLightOrb: Invalid start position (null or undefined)");
         return;
     }
-    // console.log(`Creating LightOrb from`, startPos, `to`, endPos);
+    if (!endPos) {
+        console.error("createLightOrb: Invalid end position (null or undefined)");
+        return;
+    }
+    console.log(`Creating LightOrb from (${startPos.x}, ${startPos.y}) to (${endPos.x}, ${endPos.y})`);
     orbs.push(new LightOrb(startPos.x, startPos.y, endPos.x, endPos.y));
-    // console.log(`Orbs count: ${orbs.length}`);
 }
 
 export function drawOrbs() {
@@ -243,6 +250,7 @@ export function drawParticles() {
 export function triggerLineClearEffect(rows, clearType) {
     const duration = 300;
     const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+    const offset = getMainBoardOffset();
 
     // Base line clear flash
     effects.push({
@@ -282,8 +290,8 @@ export function triggerLineClearEffect(rows, clearType) {
 
         for (let i = 0; i < particleCount; i++) {
             addParticle({
-                x: Math.random() * BOARD_WIDTH,
-                y: y,
+                x: Math.random() * BOARD_WIDTH + offset.x,
+                y: y + offset.y,
                 color: particleColors[Math.floor(Math.random() * particleColors.length)],
                 duration: 400 + Math.random() * 300,
             });
@@ -292,10 +300,11 @@ export function triggerLineClearEffect(rows, clearType) {
 }
 
 export function triggerTspinEffect(x, y) {
+    const offset = getMainBoardOffset();
     tspinEffect = {
         type: 'tspin',
-        x,
-        y,
+        x: x + offset.x,
+        y: y + offset.y,
         startTime: performance.now(),
         duration: CONFIG.effects.tspinEffectDuration
     };
@@ -303,10 +312,11 @@ export function triggerTspinEffect(x, y) {
 
 export function triggerLockPieceEffect(x, y, color) {
     const particleCount = 5;
+    const offset = getMainBoardOffset();
     for (let i = 0; i < particleCount; i++) {
         addParticle({
-            x,
-            y,
+            x: x + offset.x,
+            y: y + offset.y,
             color,
             duration: 300,
              velocity: {
@@ -376,16 +386,16 @@ export function drawTspinEffect() {
     const now = performance.now();
     const progress = (now - tspinEffect.startTime) / tspinEffect.duration;
 
-    if (progress >= 1) return; // Should be nullified by updateEffects, but good to check
+    if (progress >= 1) return;
 
     effectsCtx.save();
     effectsCtx.font = `bold ${40 * (1 - progress * 0.5)}px Arial`;
     effectsCtx.textAlign = 'center';
-    effectsCtx.fillStyle = `rgba(255, 255, 0, ${1 - progress})`; // Yellow fading out
+    effectsCtx.fillStyle = `rgba(255, 255, 0, ${1 - progress})`;
     effectsCtx.strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
     effectsCtx.lineWidth = 3;
 
-    const currentY = tspinEffect.y - (progress * 30); // Move upwards slightly
+    const currentY = tspinEffect.y - (progress * 30);
 
     effectsCtx.fillText('T-SPIN!', tspinEffect.x, currentY);
     effectsCtx.strokeText('T-SPIN!', tspinEffect.x, currentY);
@@ -395,13 +405,13 @@ export function drawTspinEffect() {
 export function drawTargetAttackFlashes() {
     const now = performance.now();
     targetAttackFlashes.forEach((endTime, attackerId) => {
-        const duration = 200; // Flash duration (same as in triggerTargetAttackFlash)
+        const duration = 200;
         const startTime = endTime - duration;
         const progress = (now - startTime) / duration;
 
         if (progress < 1) {
             effectsCtx.save();
-            effectsCtx.fillStyle = `rgba(255, 0, 0, ${0.5 * (1 - progress)})`; // Red fading out
+            effectsCtx.fillStyle = `rgba(255, 0, 0, ${0.5 * (1 - progress)})`;
             effectsCtx.fillRect(0, 0, effectsCtx.canvas.width, effectsCtx.canvas.height);
             effectsCtx.restore();
         }

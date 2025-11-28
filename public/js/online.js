@@ -7,14 +7,220 @@ import { addAttackBar } from './garbage.js';
 import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect } from './effects.js';
 import { drawUI } from './draw.js';
 
-export const socket = io(CONFIG.serverUrl, {
-    autoConnect: false,
-    reconnection: true
-});
+export let socket;
+
+export function initializeSocket() {
+    if (socket) {
+        socket.disconnect();
+    }
+    
+    socket = io(CONFIG.serverUrl, {
+        autoConnect: false,
+        reconnection: true
+    });
+
+    // --- Socket Event Handlers ---
+    socket.on("connect", () => {
+        console.log("✅ サーバーに接続:", socket.id);
+        miniboardSlots.forEach(slot => {
+            slot.userId = null;
+            slot.dirty = true;
+        });
+        startAnimationIfNeeded();
+        finalRanking = {}; // Reset on new connection
+        
+        if (wasManualDisconnect()) {
+            setManualDisconnect(false);
+            startMatching(); // auto-retry
+        } else {
+            setGameState('LOBBY'); // Ensure client is in lobby state on connect
+            hideConnectionError();
+        }
+    });
+
+    socket.on('targetsUpdate', (targets) => {
+        playerTargets = new Map(targets);
+        // We need to redraw the miniboards to update their target styles
+        miniboardSlots.forEach(slot => slot.dirty = true);
+        startAnimationIfNeeded();
+    });
+
+    socket.on("roomInfo", (data) => {
+        currentRoomId = data.roomId; // Store the current room ID
+        const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+        const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+
+        // Add new opponents
+        newOpponentIds.forEach(id => {
+            if (!currentOpponents.has(id)) addOpponent(id);
+        });
+
+        // Remove disconnected opponents
+        currentOpponents.forEach(id => {
+            if (!newOpponentIds.has(id)) removeOpponent(id);
+        });
+    });
+
+    socket.on("StartGame", () => {
+        currentCountdown = null;
+        showCountdown(null);
+        hideGameEndScreen(); // Hide end screen
+        resetGame(); // Changed to resetGame()
+        setHoldPiece(null); // Moved from CountDown
+        drawUI();           // Moved from CountDown
+        setGameState('PLAYING');
+        miniboardSlots.forEach(slot => {
+            if (slot.userId) { // Only reset boards for active opponents
+                slot.isGameOver = false;
+                slot.boardState.forEach(row => row.fill(0)); // Clear the board state
+                slot.dirty = true;
+            }
+        });
+        startAnimationIfNeeded();
+        finalRanking = {}; // Reset for new game
+        lastSentBoard = null; // Ensure board history is cleared for the new game
+    });
+
+    socket.on("ranking", ({ yourRankMap, statsMap, roomId }) => {
+      if (roomId !== currentRoomId) {
+          console.log(`Ignoring ranking update from old room: ${roomId}`);
+          return;
+      }
+      
+      console.log(`[Ranking] Received ranking update for room ${roomId}. yourRankMap:`, yourRankMap);
+
+      // Merge new ranking info
+      Object.assign(finalRanking, yourRankMap);
+
+      // Ensure all active players are in finalRanking with null if their rank is not yet determined
+      miniboardSlots.forEach(slot => {
+          if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
+              finalRanking[slot.userId] = null; // Mark as active/undetermined rank
+          }
+          if (slot.userId && finalRanking.hasOwnProperty(slot.userId) && finalRanking[slot.userId] !== null && !slot.isGameOver) {
+              console.log(`[Ranking] Setting isGameOver=true for userId: ${slot.userId}, rank: ${finalRanking[slot.userId]}`);
+              slot.isGameOver = true;
+              slot.dirty = true;
+          }
+      });
+
+      // Update miniboards based on the comprehensive finalRanking map
+      for (const userId in finalRanking) {
+          const slot = miniboardSlots.find(s => s.userId === userId);
+          if (slot && finalRanking[userId] !== null) {
+              slot.isGameOver = true;
+              slot.dirty = true;
+          }
+      }
+      startAnimationIfNeeded();
+
+      const myRank = finalRanking[socket.id];
+
+      // If my rank is now determined, my game is over.
+      if (myRank !== null && myRank !== undefined) {
+          const isWin = myRank === 1;
+          const title = isWin ? 'You Win!' : 'Game Over';
+          if (isWin) {
+            setGameClear(true); // Sets state to GAME_OVER
+          } else {
+            setGameState('GAME_OVER');
+          }
+          showGameEndScreen(title, isWin, finalRanking, socket.id, statsMap || { [socket.id]: getStatsCallback() });
+          return;
+      }
+    });
+
+    socket.on("BoardStatus", (data) => {
+        if (gameState !== 'PLAYING') return; // Ignore if not in a game
+        const { UserID, board, diff } = data;
+        let slot = miniboardSlots.find(s => s.userId === UserID);
+        if (!slot) {
+            addOpponent(UserID);
+            slot = miniboardSlots.find(s => s.userId === UserID);
+        }
+        if (slot) updateSlotBoard(slot, board, diff);
+    });
+
+    socket.on("BoardStatusBulk", (boards) => {
+        if (gameState !== 'PLAYING') return; // Ignore if not in a game
+        for (const userId in boards) {
+            const boardData = boards[userId];
+            if (!boardData) continue;
+            let slot = miniboardSlots.find(s => s.userId === userId);
+            if (!slot) {
+                addOpponent(userId);
+                slot = miniboardSlots.find(s => s.userId === userId);
+            }
+            if (slot) updateSlotBoard(slot, boardData.board, boardData.diff);
+        }
+    });
+
+    socket.on("PlayerDisconnected", ({ userId }) => {
+        removeOpponent(userId);
+    });
+
+    socket.on("CountDown", (count) => {
+        currentCountdown = count;
+        showCountdown(count);
+    });
+
+    socket.on("ReceiveGarbage", ({ from, lines }) => {
+        addAttackBar(lines); 
+        
+        console.log(`ReceiveGarbage from: ${from}, lines: ${lines}`);
+        let attackerPos;
+        if (from) {
+            attackerPos = getBoardCenterPosition(from);
+        } else {
+            // ターゲットがいない場合は、画面上部中央へ
+            attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
+        }
+
+        const myPos = getBoardCenterPosition(socket.id);
+        createLightOrb(attackerPos, myPos);
+    });
+
+    socket.on("disconnect", (reason) => {
+        console.log(`❌ サーバーから切断されました: ${reason}`);
+        if (!wasManualDisconnect()) {
+            showConnectionError();
+        }
+    });
+
+    socket.on("connect_error", (err) => {
+        console.error(`接続エラー: ${err.message}`);
+        showConnectionError();
+    });
+
+    socket.on("reconnect", () => {
+        console.log("✅ サーバーに再接続しました");
+        hideConnectionError();
+        socket.emit('requestRoomInfo');
+        resetGame();
+        setGameState('LOBBY'); // Ensure client is in lobby state on reconnect
+    });
+
+    socket.on("reconnect_failed", () => {
+        console.error("再接続に失敗しました");
+        showConnectionError();
+    });
+}
+
+initializeSocket();
 
 export let playerTargets = new Map();
 
 export let currentCountdown = null;
+
+let manualDisconnect = false;
+
+export function setManualDisconnect(value) {
+    manualDisconnect = value;
+}
+
+export function wasManualDisconnect() {
+    return manualDisconnect;
+}
 
 export let isManualDisconnect = false; // New flag for manual disconnect
 
@@ -253,28 +459,13 @@ function drawMiniBoard(slot, currentTime) {
     }
 
     if (isGameOver) {
-        console.log(`drawMiniBoard: Miniboard for ${userId} is Game Over. Attempting to draw "KO".`);
-        // Temporary debug: Draw a red background to confirm drawing is happening
-        // ctx.fillStyle = 'red';
-        // ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-        // ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // ctx.fillStyle = 'white';
-        // ctx.font = `bold ${canvas.width / 4}px Exo 2`;
-        // ctx.textAlign = "center";
-        // ctx.textBaseline = "middle";
-        // ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
-
-        // Get the center position of the mini-board relative to the main game canvas
-        const koPos = getBoardCenterPosition(userId);
-        if (koPos) {
-            addTextEffect('KO', { style: 'ko', duration: 1500, x: koPos.x, y: koPos.y });
-        }
-
-        // If there was an effect, clear it
-        if (effect) slot.effect = null;
-        // Do NOT set slot.dirty = false here, as we want the KO to persist
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = `bold ${canvas.width / 4}px Exo 2`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
         return;
     }
 
@@ -338,22 +529,18 @@ let finalRanking = {}; // To store all player ranks
 let currentRoomId = null; // To store the current room ID
 
 export function drawTargetLines(ctx) {
-    if (!ctx) {
-        console.log("drawTargetLines: context is null");
+    if (!ctx || !socket.connected) {
         return;
     }
     if (!socket.id) {
-        console.log("drawTargetLines: socket.id is null");
         return;
     }
 
     const myId = socket.id;
     const myPos = getBoardCenterPosition(myId);
     if (!myPos) {
-        console.log("drawTargetLines: myPos is null, cannot draw lines.");
         return;
     }
-    console.log(`drawTargetLines: myPos = ${JSON.stringify(myPos)}`);
 
     const now = performance.now();
 
@@ -362,7 +549,6 @@ export function drawTargetLines(ctx) {
         if (targetId === myId) {
             const attackerPos = getBoardCenterPosition(attackerId);
             if (attackerPos) {
-                console.log(`drawTargetLines: Drawing line from attacker ${attackerId} at ${JSON.stringify(attackerPos)} to me at ${JSON.stringify(myPos)}`);
                 ctx.beginPath();
                 ctx.moveTo(attackerPos.x, attackerPos.y);
                 ctx.lineTo(myPos.x, myPos.y);
@@ -370,7 +556,7 @@ export function drawTargetLines(ctx) {
                 ctx.lineWidth = 1;
                 ctx.stroke();
             } else {
-                console.log(`drawTargetLines: Attacker ${attackerId} pos is null, cannot draw line to me.`);
+                // console.log(`drawTargetLines: Attacker ${attackerId} pos is null, cannot draw line to me.`);
             }
         }
 
@@ -378,7 +564,6 @@ export function drawTargetLines(ctx) {
         if (attackerId === myId && targetId) {
             const targetPos = getBoardCenterPosition(targetId);
             if (targetPos) {
-                console.log(`drawTargetLines: Drawing line from me to target ${targetId} at ${JSON.stringify(targetPos)}`);
                 const isFlashing = targetAttackFlashes.has(myId) && now < targetAttackFlashes.get(myId);
 
                 ctx.beginPath();
@@ -391,7 +576,7 @@ export function drawTargetLines(ctx) {
                 ctx.stroke();
                 ctx.shadowBlur = 0; // Reset shadow blur
             } else {
-                console.log(`drawTargetLines: Target ${targetId} pos is null, cannot draw line from me.`);
+                // console.log(`drawTargetLines: Target ${targetId} pos is null, cannot draw line from me.`);
             }
         }
     }
@@ -399,9 +584,9 @@ export function drawTargetLines(ctx) {
 
 // --- Attack Effect Helpers ---
 export function getBoardCenterPosition(userId, clearedLines = null) {
-    const mainGameCanvas = document.getElementById('main-game-board');
-    if (!mainGameCanvas) return null;
-    const mainGameCanvasRect = mainGameCanvas.getBoundingClientRect();
+    const wrapper = document.getElementById('overall-game-wrapper');
+    if (!wrapper) return null;
+    const wrapperRect = wrapper.getBoundingClientRect();
 
     let targetRect;
 
@@ -417,9 +602,8 @@ export function getBoardCenterPosition(userId, clearedLines = null) {
     }
 
     if (targetRect) {
-        const finalX = targetRect.left - mainGameCanvasRect.left + targetRect.width / 2;
-        const finalY = targetRect.top - mainGameCanvasRect.top + targetRect.height / 2;
-        console.log(`getBoardCenterPosition for ${userId}: targetRect=${JSON.stringify(targetRect)}, mainGameCanvasRect=${JSON.stringify(mainGameCanvasRect)}, finalX=${finalX}, finalY=${finalY}`);
+        const finalX = targetRect.left - wrapperRect.left + targetRect.width / 2;
+        const finalY = targetRect.top - wrapperRect.top + targetRect.height / 2;
         return {
             x: finalX,
             y: finalY
@@ -430,9 +614,9 @@ export function getBoardCenterPosition(userId, clearedLines = null) {
 }
 
 function getAttackBarPosition() {
-    const mainGameCanvas = document.getElementById('main-game-board');
-    if (!mainGameCanvas) return null;
-    const mainGameCanvasRect = mainGameCanvas.getBoundingClientRect();
+    const wrapper = document.getElementById('overall-game-wrapper');
+    if (!wrapper) return null;
+    const wrapperRect = wrapper.getBoundingClientRect();
 
     const attackBar = document.getElementById('attack-bar');
     if (!attackBar) return null;
@@ -440,8 +624,8 @@ function getAttackBarPosition() {
     const attackBarRect = attackBar.getBoundingClientRect();
     
     return {
-        x: attackBarRect.left - mainGameCanvasRect.left + attackBarRect.width / 2,
-        y: attackBarRect.top - mainGameCanvasRect.top + attackBarRect.height / 2 
+        x: attackBarRect.left - wrapperRect.left + attackBarRect.width / 2,
+        y: attackBarRect.top - wrapperRect.top + attackBarRect.height / 2 
     };
 }
 
@@ -454,7 +638,14 @@ socket.on("connect", () => {
     });
     startAnimationIfNeeded();
     finalRanking = {}; // Reset on new connection
-    setGameState('LOBBY'); // Ensure client is in lobby state on connect
+    
+    if (wasManualDisconnect()) {
+        setManualDisconnect(false);
+        startMatching(); // auto-retry
+    } else {
+        setGameState('LOBBY'); // Ensure client is in lobby state on connect
+        hideConnectionError();
+    }
 });
 
 export function startMatching() {
@@ -666,7 +857,7 @@ export function sendAttack(targetId, lines, clearedLines = null) {
 
     // Trigger the flash effect for the target line
     if (targetId) {
-        triggerTargetAttackFlash(socket.id);
+
     }
 
     console.log(`sendAttack to: ${targetId}, lines: ${lines}, clearedLines:`, clearedLines);
@@ -714,7 +905,9 @@ function hideConnectionError() {
 }
 socket.on("disconnect", (reason) => {
     console.log(`❌ サーバーから切断されました: ${reason}`);
-    showConnectionError();
+    if (!wasManualDisconnect()) {
+        showConnectionError();
+    }
 });
 socket.on("connect_error", (err) => {
     console.error(`接続エラー: ${err.message}`);

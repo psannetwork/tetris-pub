@@ -168,37 +168,49 @@ canvas {
     pointer-events: none;
 }
 
-.lobby-title, #game-end-message {
+
+.lobby-title, #game-end-title {
   font-size: 5vh; /* Changed to vh */
   font-weight: bold;
   margin-bottom: 2vh; /* Changed to vh */
   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
-.game-end-buttons button {
+.menu-buttons button, .lobby-button {
   background-color: var(--button-primary-bg);
   color: var(--button-primary-text);
-  border: 2px solid var(--panel-border-color);
-  padding: 1vh 2vh; /* Changed to vh */
-  margin: 1vh; /* Changed to vh */
-  font-size: 1.5vh; /* Changed to vh */
+  border: none;
+  padding: 15px 30px;
+  margin: 10px;
+  font-size: 1.2rem;
   font-family: var(--font-family);
   cursor: pointer;
   border-radius: 8px;
   transition: background-color 0.3s, box-shadow 0.3s, transform 0.1s;
   outline: none;
   text-transform: uppercase;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-.lobby-button:hover, .game-end-buttons button:hover {
+.menu-buttons button:hover, .lobby-button:hover {
   background-color: var(--button-primary-hover-bg);
+  box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
 }
 
-.lobby-button[disabled], .game-end-buttons button[disabled] {
-  opacity: 0.5;
+.menu-buttons button:focus, .lobby-button:focus {
+    box-shadow: 0 0 0 4px var(--button-focus-glow);
+}
+
+.lobby-button[disabled], .menu-buttons button[disabled] {
+  background-color: #7f8c8d;
+  opacity: 0.7;
   cursor: not-allowed;
   pointer-events: none; /* Prevents click events */
+  box-shadow: none;
+  transform: none;
 }
+
 
 #countdown-overlay {
   font-size: 10vh; /* Changed to vh */

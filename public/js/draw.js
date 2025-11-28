@@ -25,6 +25,11 @@ let boardCanvas, boardCtx; // Off-screen canvas for the board
 let effectsCanvas; // Overlay canvas for effects
 let scoreDisplay;
 let screenShake = { intensity: 0, duration: 0, endTime: 0 };
+let mainBoardOffset = { x: 0, y: 0 };
+
+export function getMainBoardOffset() {
+    return mainBoardOffset;
+}
 
 // --- Main Setup Function ---
 export function setupCanvases() {
@@ -49,6 +54,18 @@ export function setupCanvases() {
     attackBarCtx = createCanvas('attack-bar', ATTACK_BAR_WIDTH, BOARD_HEIGHT).ctx;
     scoreDisplay = document.getElementById('score-display');
 
+    // Get the overlay canvas for effects
+    effectsCanvas = document.getElementById('effect-canvas');
+    if (effectsCanvas) {
+        effectsCtx = effectsCanvas.getContext('2d');
+        // Manually set the canvas size to match the wrapper, as defined in CSS
+        const wrapper = document.getElementById('overall-game-wrapper');
+        if (wrapper) {
+            effectsCanvas.width = wrapper.offsetWidth;
+            effectsCanvas.height = wrapper.offsetHeight;
+        }
+    }
+
     // Create the off-screen canvas for the board
     boardCanvas = document.createElement('canvas');
     boardCanvas.width = BOARD_WIDTH;
@@ -65,29 +82,20 @@ export function setupCanvases() {
     scoreDisplay.style.height = `${SCORE_AREA_HEIGHT}px`;
     scoreDisplay.style.fontSize = CONFIG.ui.scoreFontSize; // Fixed font size
 
-    // Create overlay canvas for effects
-    const gameBoardContainer = document.getElementById('main-game-board');
-    if (gameBoardContainer) {
-        effectsCanvas = document.createElement('canvas');
-        effectsCanvas.id = 'effects-overlay'; // Assign the ID here
-        effectsCanvas.width = BOARD_WIDTH;
-        effectsCanvas.height = BOARD_HEIGHT;
-        effectsCtx = effectsCanvas.getContext('2d');
-
-        // Position the effects canvas absolutely over the game board
-        effectsCanvas.style.position = 'absolute';
-        effectsCanvas.style.top = '0';
-        effectsCanvas.style.left = '0';
-        gameBoardContainer.style.position = 'relative'; // Ensure container is positioned
-        gameBoardContainer.appendChild(effectsCanvas);
-    }
-
     // Notify other components that layout has changed
     window.dispatchEvent(new CustomEvent('layout-changed'));
     drawBoard();
 
     // Initialize effects module with the new effects canvas
     Effects.initEffects(effectsCanvas);
+    const mainBoardElement = document.getElementById('main-game-board');
+    const wrapperElement = document.getElementById('overall-game-wrapper');
+    if (mainBoardElement && wrapperElement) {
+        const boardRect = mainBoardElement.getBoundingClientRect();
+        const wrapperRect = wrapperElement.getBoundingClientRect();
+        mainBoardOffset.x = boardRect.left - wrapperRect.left;
+        mainBoardOffset.y = boardRect.top - wrapperRect.top;
+    }
 }
 
 function positionElement(id, x, y) {
@@ -183,10 +191,8 @@ export function drawGame() {
         Effects.drawTextEffects();
         Effects.drawTspinEffect();
         Effects.drawTargetAttackFlashes();
+        drawTargetLines(effectsCtx); // Pass effectsCtx
     }
-
-    // Draw target lines on the game canvas
-    drawTargetLines(gameCtx); // Pass gameCtx
 
     gameCtx.restore();
 }

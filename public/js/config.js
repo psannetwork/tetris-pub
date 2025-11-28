@@ -126,7 +126,7 @@ export const CONFIG = {
         enableGarbage: true
     },
     MAX_MINIBOARDS_PER_SIDE: 40,
-    serverUrl: 'https://webui.psannetwork.net',
+    serverUrl: 'https://tetris.psannetwork.net',
 
     // テトリミノの形状定義
     TETROMINOES: {

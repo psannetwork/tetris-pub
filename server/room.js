@@ -189,12 +189,7 @@ function handleGameOver(io, socket, reason, stats) {
         emitToSpectators(io, room.roomId, "GameOver"); // Spectators still get generic GameOver
 
         room.isGameOver = true;
-        setTimeout(() => {
-            spectators.delete(roomId);
-            rooms.delete(roomId);
-            playerRanks.delete(roomId);
-            console.log(`🗑️ Room ${roomId} deleted after game over.`);
-        }, 30000);
+        // The room will be cleaned up by the disconnect logic in socket.js
         return;
     }
 

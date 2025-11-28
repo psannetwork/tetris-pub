@@ -1,8 +1,10 @@
 import { CONFIG } from './config.js';
+import { addTextEffect } from './effects.js';
+import { getMainBoardOffset } from './draw.js'; // Import getMainBoardOffset
 
 // --- DOM Elements ---
 const gameEndOverlay = document.getElementById('game-end-overlay');
-const gameEndMessage = document.getElementById('game-end-message');
+const gameEndTitle = document.getElementById('game-end-title');
 const countdownOverlay = document.getElementById('countdown-overlay');
 const rankingListContainer = document.getElementById('final-ranking-list');
 
@@ -15,9 +17,10 @@ const rankingListContainer = document.getElementById('final-ranking-list');
  * @param {object} statsMap - A map of userId to their game stats.
  */
 export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {}) {
-  if (gameEndOverlay && gameEndMessage && rankingListContainer) {
+  if (gameEndOverlay && gameEndTitle && rankingListContainer) {
     // 1. Set title
-    gameEndMessage.innerHTML = `<h1 style="color: ${isWin ? CONFIG.colors.win : CONFIG.colors.lose};">${title}</h1>`;
+    gameEndTitle.textContent = title;
+    gameEndTitle.style.color = isWin ? CONFIG.colors.win : CONFIG.colors.lose;
 
     // 2. Clear previous ranking
     rankingListContainer.innerHTML = '';
@@ -57,8 +60,7 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
 }
 
 export function showPerfectClearMessage() {
-  console.log("Perfect Clear!");
-  // TODO: Implement actual UI for perfect clear message
+  addTextEffect('PERFECT CLEAR', { style: 'tetris', duration: 2000 });
 }
 
 /**
