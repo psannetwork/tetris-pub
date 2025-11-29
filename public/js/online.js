@@ -660,6 +660,11 @@ export function drawTargetLines(ctx) {
 
 // --- Attack Effect Helpers ---
 export function getBoardCenterPosition(userId, clearedLines = null) {
+    // Use the effects canvas to get consistent positioning
+    const effectsCanvas = document.getElementById('effect-canvas');
+    if (!effectsCanvas) return null;
+
+    const effectsCanvasRect = effectsCanvas.getBoundingClientRect();
     const wrapper = document.getElementById('overall-game-wrapper');
     if (!wrapper) return null;
     const wrapperRect = wrapper.getBoundingClientRect();
@@ -676,10 +681,11 @@ export function getBoardCenterPosition(userId, clearedLines = null) {
             targetRect = slot.canvas.getBoundingClientRect();
         }
     }
-    
+
     if (targetRect) {
-        const finalX = targetRect.left - wrapperRect.left + targetRect.width / 2;
-        const finalY = targetRect.top - wrapperRect.top + targetRect.height / 2;
+        // Calculate position relative to the effects canvas for consistent positioning
+        const finalX = targetRect.left - effectsCanvasRect.left + targetRect.width / 2;
+        const finalY = targetRect.top - effectsCanvasRect.top + targetRect.height / 2;
         return {
             x: finalX,
             y: finalY
