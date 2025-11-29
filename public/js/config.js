@@ -24,6 +24,7 @@ export const CONFIG = {
             null, "#3498db", "#2980b9", "#e67e22", "#f1c40f", "#2ecc71", "#9b59b6", "#e74c3c"
         ],
         ghost: "rgba(255,255,255,0.2)",
+        garbage: "#888",
         lineClear: "#3498db",
         attackBar: "#c0392b",
         text: "#ecf0f1",
@@ -100,7 +101,7 @@ export const CONFIG = {
         titledBoxFontScale: 0.6,
         titledBoxTitleOffset: 0.7,
         miniPieceCellCount: 5,
-        scoreFontSize: "1.2rem",
+        scoreFontSize: "0.9rem",
     },
     layout: {
         cellSize: 30,
@@ -109,7 +110,7 @@ export const CONFIG = {
         attackBarWidth: 30,
         holdBoxWidth: 96,
         holdBoxHeight: 96,
-        nextBoxWidth: 96,
+        nextBoxWidth: 120, // Increased from 96
         nextBoxHeight: 456,
         scoreAreaHeight: 100,
     },

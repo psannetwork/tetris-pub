@@ -1,19 +1,19 @@
-@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 :root {
-  --background-color: #2c3e50;
-  --board-background-color: #222;
-  --text-color: #ecf0f1;
-  --font-family: 'Exo 2', sans-serif;
-  --panel-background-color: rgba(0, 0, 0, 0.2);
-  --overlay-background-color: rgba(0, 0, 0, 0.75);
-  --win-color: #2ecc71;
-  --lose-color: #e74c3c;
-  --button-primary-bg: #3498db;
-  --button-primary-hover-bg: #2980b9;
+  --background-color: #1a1a1a;
+  --board-background-color: #000;
+  --text-color: #fff;
+  --font-family: 'Press Start 2P', cursive;
+  --panel-background-color: rgba(34, 34, 34, 0.5);
+  --overlay-background-color: rgba(0, 0, 0, 0.85);
+  --win-color: #00ff00;
+  --lose-color: #ff0000;
+  --button-primary-bg: #007bff;
+  --button-primary-hover-bg: #0056b3;
   --button-primary-text: #ffffff;
-  --button-focus-glow: rgba(52, 152, 219, 0.5);
-  --attack-color: #e74c3c;
+  --button-focus-glow: rgba(0, 123, 255, 0.5);
+  --attack-color: #ff0000;
 }
 
 html, body {
@@ -33,7 +33,7 @@ html, body {
     left: 50%;
     transform: translate(-50%, -50%);
     display: flex;
-    width: 1172px; /* 275 + 20 + 582 + 20 + 275 */
+    width: 1196px; /* 275 + 20 + 606 + 20 + 275 */
     height: 593.5px; /* Max height of miniboards */
     box-sizing: border-box;
     justify-content: center; /* Center the game-container and miniboards */
@@ -43,7 +43,7 @@ html, body {
 
 #game-container {
     display: flex;
-    width: 582px; /* 96 + 20 + 30 + 20 + 300 + 20 + 96 */
+    width: 606px; /* 96 + 20 + 30 + 20 + 300 + 20 + 120 */
     height: 600px; /* Main board height */
     box-sizing: border-box;
     justify-content: center; /* Center main-game-board */
@@ -66,7 +66,7 @@ html, body {
     flex-direction: column;
     justify-content: space-between; /* Distribute space between elements */
     align-items: center; /* Center items horizontally */
-    width: 96px; /* Width of next box */
+    width: 120px; /* Width of next box, increased from 96 */
     height: 600px; /* Main board height */
     box-sizing: border-box;
 }
@@ -104,7 +104,7 @@ html, body {
 }
 
 #next-box {
-    width: 96px;
+    width: 120px;
     /* height: 480px; */ /* Removed fixed height */
     background-color: var(--panel-background-color);
     /* align-self is not needed here as game-right-panel handles positioning */
@@ -113,7 +113,7 @@ html, body {
 #score-display {
     color: white;
     font-family: var(--font-family);
-    width: 96px; /* Same width as next-box */
+    width: 120px; /* Same width as next-box */
     text-align: center;
     /* align-self is not needed here as game-right-panel handles positioning */
 }
@@ -170,25 +170,24 @@ canvas {
 
 
 .lobby-title, #game-end-title {
-  font-size: 5vh; /* Changed to vh */
+  font-size: 1.8rem; /* Adjusted for pixel font */
   font-weight: bold;
-  margin-bottom: 2vh; /* Changed to vh */
+  margin-bottom: 2vh;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
 }
 
 .menu-buttons button, .lobby-button {
   background-color: var(--button-primary-bg);
   color: var(--button-primary-text);
-  border: none;
+  border: 2px solid var(--button-primary-text);
   padding: 15px 30px;
   margin: 10px;
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-family: var(--font-family);
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 0;
   transition: background-color 0.3s, box-shadow 0.3s, transform 0.1s;
   outline: none;
-  text-transform: uppercase;
   box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
@@ -203,7 +202,9 @@ canvas {
 }
 
 .lobby-button[disabled], .menu-buttons button[disabled] {
-  background-color: #7f8c8d;
+  background-color: #555;
+  color: #888;
+  border-color: #888;
   opacity: 0.7;
   cursor: not-allowed;
   pointer-events: none; /* Prevents click events */
@@ -243,13 +244,13 @@ canvas {
   align-items: center;
   background-color: var(--panel-background-color);
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 0;
   border-left: 5px solid transparent;
   transition: all 0.3s ease;
 }
 
 .rank-card.my-rank {
-  background-color: rgba(52, 152, 219, 0.3);
+  background-color: rgba(0, 123, 255, 0.3);
   border-left-color: var(--button-primary-bg);
 }
 
@@ -258,13 +259,13 @@ canvas {
 }
 
 .rank-position {
-  font-size: 2em;
+  font-size: 1.5em;
   font-weight: bold;
   color: var(--text-color);
 }
 
 .rank-player-name {
-  font-size: 1.2em;
+  font-size: 1em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -272,7 +273,7 @@ canvas {
 
 .rank-stats {
   text-align: right;
-  font-size: 0.9em;
+  font-size: 0.8em;
   color: #bdc3c7;
 }
 
@@ -285,8 +286,211 @@ canvas {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 1172px; /* Match overall-game-wrapper width */
+    width: 1196px; /* Match overall-game-wrapper width */
     height: 593.5px; /* Match overall-game-wrapper height */
     pointer-events: none;
     z-index: 10;
+}
+
+/* New: Hamburger menu button */
+#hamburger-menu-button {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 150; /* Above overlays but below modals */
+    background-color: var(--button-primary-bg);
+    color: var(--button-primary-text);
+    border: none;
+    padding: 8px 12px;
+    font-size: 1rem;
+    cursor: pointer;
+    border-radius: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+#hamburger-menu-button:hover {
+    background-color: var(--button-primary-hover-bg);
+}
+
+/* New: Message Display */
+#message-display {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: fit-content;
+    max-width: 80%;
+    padding: 10px 20px;
+    border-radius: 0;
+    font-size: 1rem;
+    color: white;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000; /* Always on top */
+    transition: all 0.5s ease-in-out;
+    opacity: 0;
+    pointer-events: none; /* Make it non-interactive */
+}
+
+#message-display.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#message-display.success {
+    background-color: #00ff00;
+}
+
+#message-display.error {
+    background-color: #ff0000;
+}
+
+#message-display.info {
+    background-color: #007bff;
+}
+
+
+/* New: Modal styles */
+.modal {
+  display: none; /* Hidden by default */
+  position: fixed; /* Stay in place */
+  z-index: 200; /* Sit on top */
+  left: 0;
+  top: 0;
+  width: 100%; /* Full width */
+  height: 100%; /* Full height */
+  overflow: auto; /* Enable scroll if needed */
+  background-color: rgba(0,0,0,0.8); /* Black w/ opacity */
+  padding-top: 60px;
+}
+
+.modal-content {
+  background-color: #111;
+  margin: 5% auto; /* 5% from the top and centered */
+  padding: 30px;
+  border: 1px solid #888;
+  width: 80%; /* Could be more responsive */
+  max-width: 500px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.modal-content h2 {
+  color: var(--text-color);
+  margin-bottom: 15px;
+}
+
+.modal-content input[type="text"],
+.modal-content input[type="password"] {
+  width: calc(100% - 40px); /* Full width minus padding */
+  padding: 12px 20px;
+  margin: 8px 0;
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 0;
+  box-sizing: border-box;
+  background-color: #333;
+  color: var(--text-color);
+  font-size: 1rem;
+  font-family: 'Press Start 2P', cursive;
+}
+
+.modal-content button {
+  background-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  border: none;
+  padding: 10px 20px;
+  margin: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background-color 0.3s;
+}
+
+.modal-content button:hover {
+  background-color: var(--button-primary-hover-bg);
+}
+
+.modal-content .close-modal {
+  background-color: #e74c3c;
+}
+
+.modal-content .close-modal:hover {
+  background-color: #c0392b;
+}
+
+#main-menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+#room-info-display {
+    background-color: var(--panel-background-color);
+    padding: 15px 25px;
+    border-radius: 0;
+    margin-top: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+#room-info-display p {
+    margin: 5px 0;
+    font-size: 1rem;
+}
+
+#room-info-display button {
+    margin-top: 15px;
+}
+
+/* Admin Menu Specific Styles */
+#admin-menu-modal .modal-content h3 {
+    margin-top: 20px;
+    color: var(--text-color);
+}
+
+#member-list {
+    list-style: none;
+    padding: 0;
+    width: 100%;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #444;
+    border-radius: 5px;
+    background-color: #222;
+}
+
+#member-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 15px;
+    border-bottom: 1px solid #333;
+}
+
+#member-list li:last-child {
+    border-bottom: none;
+}
+
+#member-list li span {
+    flex-grow: 1;
+    text-align: left;
+}
+
+#member-list li button.kick-button {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+#member-list li button.kick-button:hover {
+    background-color: #c0392b;
 }

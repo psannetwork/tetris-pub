@@ -81,35 +81,28 @@ export function initializeSocket() {
         lastSentBoard = null; // Ensure board history is cleared for the new game
     });
 
-    socket.on("ranking", ({ yourRankMap, statsMap, roomId }) => {
+    socket.on("ranking", (data) => {
+      const { yourRankMap, statsMap, roomId } = data;
       if (roomId !== currentRoomId) {
-          console.log(`Ignoring ranking update from old room: ${roomId}`);
+          console.log(`[Ranking Client] Ignoring ranking update from old room: ${roomId}`);
           return;
       }
       
-      console.log(`[Ranking] Received ranking update for room ${roomId}. yourRankMap:`, yourRankMap);
+      console.log(`[Ranking Client] Received ranking update for room ${roomId}. Data:`, data);
 
-      // Merge new ranking info
+      // Merge new ranking info into the main finalRanking object
       Object.assign(finalRanking, yourRankMap);
 
-      // Ensure all active players are in finalRanking with null if their rank is not yet determined
-      miniboardSlots.forEach(slot => {
-          if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
-              finalRanking[slot.userId] = null; // Mark as active/undetermined rank
-          }
-          if (slot.userId && finalRanking.hasOwnProperty(slot.userId) && finalRanking[slot.userId] !== null && !slot.isGameOver) {
-              console.log(`[Ranking] Setting isGameOver=true for userId: ${slot.userId}, rank: ${finalRanking[slot.userId]}`);
-              slot.isGameOver = true;
-              slot.dirty = true;
-          }
-      });
-
-      // Update miniboards based on the comprehensive finalRanking map
-      for (const userId in finalRanking) {
-          const slot = miniboardSlots.find(s => s.userId === userId);
-          if (slot && finalRanking[userId] !== null) {
-              slot.isGameOver = true;
-              slot.dirty = true;
+      // Update miniboards based on the new ranking information
+      for (const userId in yourRankMap) {
+          if (yourRankMap.hasOwnProperty(userId)) {
+              const rank = yourRankMap[userId];
+              const slot = miniboardSlots.find(s => s.userId === userId);
+              if (slot && rank !== null && !slot.isGameOver) {
+                  console.log(`[Ranking Client] Setting isGameOver=true for userId: ${userId}, rank: ${rank}`);
+                  slot.isGameOver = true;
+                  slot.dirty = true;
+              }
           }
       }
       startAnimationIfNeeded();
@@ -121,7 +114,7 @@ export function initializeSocket() {
           const isWin = myRank === 1;
           const title = isWin ? 'You Win!' : 'Game Over';
           if (isWin) {
-            setGameClear(true); // Sets state to GAME_OVER
+            setGameClear(true);
           } else {
             setGameState('GAME_OVER');
           }
@@ -178,6 +171,19 @@ export function initializeSocket() {
 
         const myPos = getBoardCenterPosition(socket.id);
         createLightOrb(attackerPos, myPos);
+    });
+
+    socket.on("GarbageTransfer", ({ from, to, lines }) => {
+        // Don't draw the effect if I am the one receiving it,
+        // as ReceiveGarbage already handles that.
+        if (to === socket.id) return;
+
+        const fromPos = getBoardCenterPosition(from);
+        const toPos = getBoardCenterPosition(to);
+
+        if (fromPos && toPos) {
+            createLightOrb(fromPos, toPos);
+        }
     });
 
     socket.on("disconnect", (reason) => {
@@ -444,29 +450,28 @@ function drawMiniBoard(slot, currentTime) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas.style.display = 'block';
 
-    // If no user, draw an empty board
+    // If no user, draw an empty, bordered slot
     if (userId === null) {
-        ctx.fillStyle = 'rgba(0,0,0,0.1)'; // A lighter background for empty slots
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // If there was an effect, clear it
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
         if (effect) slot.effect = null;
         slot.dirty = false;
         return;
     }
 
-    if (userId !== socket.id) { // Only for opponent miniboards
-
-    }
-
+    // This part of the drawing logic will now correctly handle the KO display persistence.
     if (isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.font = `bold ${canvas.width / 4}px Exo 2`;
+        ctx.fillStyle = 'red';
+        ctx.font = `bold ${canvas.width / 3.5}px ${CONFIG.ui.fontFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
-        return;
+        // Do not set dirty to false, so it persists
+        return; 
     }
 
     // Draw the actual miniboard content
@@ -479,23 +484,37 @@ function drawMiniBoard(slot, currentTime) {
             const block = boardState[startRow + r]?.[c];
             if (block !== 0) {
                 const typeIndex = tetrominoTypeToIndex(block);
-                ctx.fillStyle = block === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
-                ctx.fillRect(
-                    c * MINIBOARD_CELL_SIZE,
-                    r * MINIBOARD_CELL_SIZE,
-                    MINIBOARD_CELL_SIZE,
-                    MINIBOARD_CELL_SIZE
-                );
+                const color = block === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
+                
+                if (block === 'G') {
+                    const border = MINIBOARD_CELL_SIZE * 0.15;
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(c * MINIBOARD_CELL_SIZE, r * MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE);
+                    ctx.fillStyle = CONFIG.colors.garbage;
+                    ctx.fillRect(
+                        c * MINIBOARD_CELL_SIZE + border,
+                        r * MINIBOARD_CELL_SIZE + border,
+                        MINIBOARD_CELL_SIZE - border * 2,
+                        MINIBOARD_CELL_SIZE - border * 2
+                    );
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(
+                        c * MINIBOARD_CELL_SIZE,
+                        r * MINIBOARD_CELL_SIZE,
+                        MINIBOARD_CELL_SIZE,
+                        MINIBOARD_CELL_SIZE
+                    );
+                }
             }
         }
     }
-
-    // Update and draw the effect if active
+    
     if (effect && effect.isActive()) {
         effect.update(currentTime);
         effect.draw(currentTime);
     } else if (effect && !effect.isActive()) {
-        slot.effect = null; // Clean up inactive effect
+        slot.effect = null;
     }
     slot.dirty = false;
 }
@@ -506,11 +525,11 @@ function drawAllMiniBoards() {
     const currentTime = performance.now();
     miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
     
-    // アニメーションが必要なエフェクトがあるかチェック
+    // Check if there are any active effects OR if the game is playing and there are opponents
     const hasActiveEffects = miniboardSlots.some(slot => slot.effect && slot.effect.isActive());
+    const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
     
-    // アクティブなエフェクトがある場合のみ次のフレームを要求
-    if (hasActiveEffects) {
+    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents)) {
         animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     } else {
         animationFrameId = null;
@@ -594,22 +613,28 @@ export function getBoardCenterPosition(userId, clearedLines = null) {
         const mainBoard = document.getElementById('main-game-board');
         if (!mainBoard) return null;
         targetRect = mainBoard.getBoundingClientRect();
+        console.log('[getBoardCenterPosition] My board rect:', targetRect);
     } else {
         const slot = miniboardSlots.find(s => s.userId === userId);
         if (slot && slot.canvas) {
             targetRect = slot.canvas.getBoundingClientRect();
+            console.log(`[getBoardCenterPosition] Opponent ${userId} rect:`, targetRect);
         }
     }
+    
+    console.log('[getBoardCenterPosition] Wrapper rect:', wrapperRect);
 
     if (targetRect) {
         const finalX = targetRect.left - wrapperRect.left + targetRect.width / 2;
         const finalY = targetRect.top - wrapperRect.top + targetRect.height / 2;
+        console.log(`[getBoardCenterPosition] Calculated position for ${userId}:`, { x: finalX, y: finalY });
         return {
             x: finalX,
             y: finalY
         };
     }
 
+    console.log(`[getBoardCenterPosition] No targetRect found for ${userId}`);
     return null;
 }
 

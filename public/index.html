@@ -25,12 +25,54 @@
       </div>
     </div>
     <div id="right-miniboards-group"></div>
+    <button id="hamburger-menu-button" class="icon-button" style="display: none;">☰</button> <!-- Hamburger Icon -->
   </div>
 
   <div id="lobby-overlay">
     <div class="overlay-content">
       <h1 class="lobby-title">Tetris Battle</h1>
-      <button id="start-button" class="lobby-button">Start Game</button>
+      <div id="main-menu-buttons">
+        <button id="join-public-match-button" class="lobby-button">公開マッチ</button>
+        <button id="create-room-button" class="lobby-button">部屋作成</button>
+        <button id="join-room-button" class="lobby-button">部屋IDで参加</button>
+      </div>
+
+      <div id="room-info-display" style="display: none;">
+        <p>部屋ID: <span id="current-room-id"></span></p>
+        <p><span id="room-host-status"></span></p>
+        <button id="host-start-game-button" class="lobby-button" style="display: none;">ゲーム開始</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="create-room-modal" class="modal">
+    <div class="modal-content">
+      <h2>部屋作成</h2>
+      <input type="text" id="create-room-password" placeholder="パスワード (任意)">
+      <button id="confirm-create-room">作成</button>
+      <button class="close-modal">キャンセル</button>
+    </div>
+  </div>
+
+  <div id="join-room-modal" class="modal">
+    <div class="modal-content">
+      <h2>部屋IDで参加</h2>
+      <input type="text" id="join-room-id" placeholder="部屋ID">
+      <input type="password" id="join-room-password" placeholder="パスワード (設定されている場合)">
+      <button id="confirm-join-room">参加</button>
+      <button class="close-modal">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- New: Admin Menu Modal -->
+  <div id="admin-menu-modal" class="modal">
+    <div class="modal-content">
+      <h2>ルーム管理</h2>
+      <p>部屋ID: <span id="admin-room-id"></span></p>
+      <button id="admin-start-game-button" class="lobby-button">ゲーム開始</button>
+      <h3>現在のメンバー</h3>
+      <ul id="member-list"></ul>
+      <button class="close-modal">閉じる</button>
     </div>
   </div>
 
@@ -46,6 +88,9 @@
   </div>
 
   <div id="countdown-overlay" style="display: none;"></div>
+
+  <!-- New: Message Display Area -->
+  <div id="message-display" style="display: none;"></div>
 
   <script type="module" src="js/main.js"></script>
 </body>

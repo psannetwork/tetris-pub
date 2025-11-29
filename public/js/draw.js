@@ -365,17 +365,28 @@ export function tetrominoTypeToIndex(type) {
 
 function drawBlock(ctx, x, y, color, size) {
     const typeIndex = tetrominoTypeToIndex(color);
-    const baseColor = color === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
+    const isGarbage = color === 'G';
+    const baseColor = isGarbage ? CONFIG.colors.garbage : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
     if (!baseColor) return;
-    const lighter = lightenDarkenColor(baseColor, CONFIG.effects.lightenDarkenAmount);
-    const darker = lightenDarkenColor(baseColor, -CONFIG.effects.lightenDarkenAmount);
-    ctx.fillStyle = darker;
-    ctx.fillRect(x, y, size, size);
-    ctx.fillStyle = baseColor;
-    ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
-    const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
-    gradient.addColorStop(0, lighter);
-    gradient.addColorStop(1, baseColor);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
+
+    if (isGarbage) {
+        // Draw garbage blocks smaller
+        const border = size * 0.15; // Larger border, making the block smaller
+        ctx.fillStyle = '#222'; // Darker background for garbage cell
+        ctx.fillRect(x, y, size, size);
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(x + border, y + border, size - border * 2, size - border * 2);
+    } else {
+        const lighter = lightenDarkenColor(baseColor, CONFIG.effects.lightenDarkenAmount);
+        const darker = lightenDarkenColor(baseColor, -CONFIG.effects.lightenDarkenAmount);
+        ctx.fillStyle = darker;
+        ctx.fillRect(x, y, size, size);
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
+        const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
+        gradient.addColorStop(0, lighter);
+        gradient.addColorStop(1, baseColor);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
+    }
 }
