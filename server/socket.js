@@ -17,6 +17,8 @@ const {
 } = require('./room.js');
 const { bots } = require('./bots.js');
 
+
+
 function handleSocketConnection(io, socket) {
     console.log("🚀 User connected:", socket.id);
 
@@ -391,7 +393,7 @@ function handleSocketConnection(io, socket) {
 
             // THEN handle game over logic
             if (wasInGame) {
-                handleGameOver(io, socket, reason, null);
+                    handleGameOver(io, socket, reason, null);
             }
 
             if (targetsChanged) {

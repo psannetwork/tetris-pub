@@ -1,6 +1,7 @@
 import { CONFIG } from './config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from './layout.js';
 import { getMainBoardOffset } from './draw.js';
+import { currentCountdown } from './online.js';
 
 export let effects = [];
 export let textEffects = [];
@@ -205,11 +206,47 @@ export function createLightOrb(startPos, endPos) {
         console.error("createLightOrb: Invalid end position (null or undefined)");
         return;
     }
-    console.log(`Creating LightOrb from (${startPos.x}, ${startPos.y}) to (${endPos.x}, ${endPos.y})`);
     orbs.push(new LightOrb(startPos.x, startPos.y, endPos.x, endPos.y));
 }
 
+function drawCountdown(ctx, count) {
+    if (!ctx || !count || count === 0) return;
+
+    // Calculate center position using canvas dimensions
+    const centerX = ctx.canvas.width / 2;
+    const centerY = ctx.canvas.height / 2;
+
+    // Calculate dynamic font size based on canvas size (similar to 5em in the original HTML)
+    const fontSize = Math.max(60, Math.min(ctx.canvas.width * 0.15, ctx.canvas.height * 0.15));
+
+    // Set text properties
+    ctx.font = `bold ${fontSize}px ${CONFIG.ui.fontFamily}`;
+    ctx.fillStyle = CONFIG.colors.text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Draw text shadow for better visibility
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
+
+    // Draw the countdown text
+    ctx.fillText(String(count), centerX, centerY);
+
+    // Reset shadow settings
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+}
+
 export function drawOrbs() {
+    // Draw countdown if active
+    if (currentCountdown !== null && currentCountdown !== '' && currentCountdown !== 0) {
+        drawCountdown(effectsCtx, currentCountdown);
+    }
+
     orbs.forEach(orb => orb.draw(effectsCtx));
 }
 

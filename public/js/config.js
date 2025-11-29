@@ -110,8 +110,8 @@ export const CONFIG = {
         attackBarWidth: 30,
         holdBoxWidth: 96,
         holdBoxHeight: 96,
-        nextBoxWidth: 120, // Increased from 96
-        nextBoxHeight: 456,
+        nextBoxWidth: 90,
+        nextBoxHeight: 324,
         scoreAreaHeight: 100,
     },
 

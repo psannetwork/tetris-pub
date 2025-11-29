@@ -64,26 +64,13 @@ export function showPerfectClearMessage() {
 }
 
 /**
- * Displays the countdown overlay.
+ * Updates the countdown state (now handled in canvas drawing).
  * @param {number|string} count - The countdown number or text to display.
  */
 export function showCountdown(count) {
-    if (countdownOverlay) {
-        if (count === null || count === '' || count === 0) {
-            countdownOverlay.style.display = 'none';
-        } else {
-            countdownOverlay.textContent = count;
-            countdownOverlay.style.display = 'flex';
-            countdownOverlay.style.position = 'absolute';
-            countdownOverlay.style.top = '50%';
-            countdownOverlay.style.left = '50%';
-            countdownOverlay.style.transform = 'translate(-50%, -50%)';
-            countdownOverlay.style.backgroundColor = 'rgba(0,0,0,0)'; // Fully transparent background
-            countdownOverlay.style.zIndex = '1000'; // Ensure it's on top
-            countdownOverlay.style.fontSize = '5em'; // Make the text large
-            countdownOverlay.style.color = 'white'; // Ensure text is visible
-        }
-    }
+    // Countdown is now handled in canvas drawing, so we won't update HTML elements here
+    // This function exists for compatibility but does not update HTML elements
+    // The actual countdown display is handled by drawCountdown in draw.js
 }
 
 /**

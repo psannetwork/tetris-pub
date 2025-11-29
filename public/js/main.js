@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects, initEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -375,13 +375,19 @@ function init() {
     };
 
     retryButton.onclick = () => {
+        setManualDisconnect(true);
+        setAutoMatchOnReconnect(true); // Do auto-match when retrying
+        socket.disconnect();
         gameEndOverlay.classList.remove('visible');
-        connectToServer(); // Reconnects and handles room logic
+        connectToServer(); // Reconnect will be handled by connect event in online.js
         setButtonState(retryButton, false);
         setButtonState(lobbyButton, false);
     };
 
     lobbyButton.onclick = () => {
+        setManualDisconnect(true);
+        setAutoMatchOnReconnect(false); // Don't auto-match when going back to lobby
+        socket.disconnect();
         gameEndOverlay.classList.remove('visible');
         setGameState('LOBBY');
         resetGame();
@@ -389,6 +395,8 @@ function init() {
         setButtonState(lobbyButton, false);
         setButtonState(retryButton, false);
         setButtonState(joinPublicMatchButton, true);
+        // Reconnect the socket after disconnecting to allow new matching
+        connectToServer();
     };
 
     // --- Socket Event Handlers ---
@@ -404,61 +412,7 @@ function init() {
         }
     });
 
-    socket.on('ranking', (data) => {
-        // data contains: { ranking: finalRanks, yourRankMap, statsMap, roomId }
-        finalRankingList.innerHTML = ''; // Clear previous ranking
 
-        const myRank = data.yourRankMap[socket.id];
-
-        data.ranking.forEach((playerId, index) => {
-            const rankCard = document.createElement('div');
-            rankCard.classList.add('rank-card');
-            if (playerId === socket.id) {
-                rankCard.classList.add('my-rank');
-            }
-
-            const rankPosition = document.createElement('div');
-            rankPosition.classList.add('rank-position');
-            rankPosition.textContent = `${index + 1}.`;
-
-            const playerName = document.createElement('div');
-            playerName.classList.add('rank-player-name');
-            playerName.textContent = playerId;
-
-            const playerStats = document.createElement('div');
-            playerStats.classList.add('rank-stats');
-            const stats = data.statsMap[playerId];
-            if (stats) {
-                playerStats.innerHTML = `
-                    <span>Lines: ${stats.lines}</span>
-                    <span>Score: ${stats.score}</span>
-                    <span>APM: ${stats.apm}</span>
-                    <span>PPS: ${stats.pps}</span>
-                `;
-            }
-
-            rankCard.appendChild(rankPosition);
-            rankCard.appendChild(playerName);
-            rankCard.appendChild(playerStats);
-            finalRankingList.appendChild(rankCard);
-        });
-
-        // Determine game end title
-        if (gameEndTitle) { // Guard against null
-            if (myRank === 1) {
-                gameEndTitle.textContent = 'YOU WIN!';
-                gameEndTitle.style.color = CONFIG.winColor; // Assuming CONFIG.winColor is defined
-            } else {
-                gameEndTitle.textContent = 'GAME OVER';
-                gameEndTitle.style.color = CONFIG.loseColor; // Assuming CONFIG.loseColor is defined
-            }
-        }
-
-
-        gameEndOverlay.classList.add('visible');
-        setGameState('GAME_OVER');
-        updateButtonStates();
-    });
 
 
     socket.on('kicked', ({ reason }) => { // New handler for kicked players

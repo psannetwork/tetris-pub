@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 
 // --- Bot Configuration ---
 const ENABLE_BOTS = true;
-const BOT_COUNT = 10;
+const BOT_COUNT = 3;
 // -------------------------
 
 const PORT = process.env.PORT || 6000;

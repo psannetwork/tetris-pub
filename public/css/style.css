@@ -64,7 +64,7 @@ html, body {
 #game-right-panel {
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Distribute space between elements */
+    justify-content: flex-start; /* Align items to the top */
     align-items: center; /* Center items horizontally */
     width: 120px; /* Width of next box, increased from 96 */
     height: 600px; /* Main board height */
@@ -94,12 +94,14 @@ html, body {
     height: 600px;
     background-color: var(--board-background-color);
     box-sizing: border-box;
+    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8); /* Inner shadow for depth */
 }
 
 #hold-box {
     width: 96px;
     height: 96px;
     background-color: var(--panel-background-color);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
     /* align-self is not needed here as game-left-panel handles positioning */
 }
 
@@ -107,6 +109,7 @@ html, body {
     width: 120px;
     /* height: 480px; */ /* Removed fixed height */
     background-color: var(--panel-background-color);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
     /* align-self is not needed here as game-right-panel handles positioning */
 }
 
@@ -115,7 +118,11 @@ html, body {
     font-family: var(--font-family);
     width: 120px; /* Same width as next-box */
     text-align: center;
+    margin-top: 20px; /* Move it down from the top slightly */
     /* align-self is not needed here as game-right-panel handles positioning */
+    visibility: hidden; /* Visually hidden but still accessible */
+    position: absolute;
+    left: -9999px;
 }
 
 /* Mini-board specific styling */
@@ -214,8 +221,7 @@ canvas {
 
 
 #countdown-overlay {
-  font-size: 10vh; /* Changed to vh */
-  font-weight: bold;
+  display: none !important; /* Hide HTML overlay as it's now rendered on canvas */
 }
 
 #game-end-overlay {
@@ -281,13 +287,12 @@ canvas {
   margin-left: 15px;
 }
 
-#effect-canvas {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 1196px; /* Match overall-game-wrapper width */
-    height: 593.5px; /* Match overall-game-wrapper height */
+#effect-canvas, #ui-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     pointer-events: none;
     z-index: 10;
 }

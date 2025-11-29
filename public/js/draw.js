@@ -8,6 +8,8 @@ import { attackBarSegments, MAX_ATTACK } from './garbage.js';
 import { CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT, SCORE_AREA_HEIGHT, setLayoutConstants } from './layout.js';
 
 
+import { currentCountdown } from './online.js';
+
 // --- Canvas & Context Creation ---
 function createCanvas(containerId, width, height) {
     const container = document.getElementById(containerId);
@@ -20,9 +22,10 @@ function createCanvas(containerId, width, height) {
     return { canvas, ctx: canvas.getContext('2d') };
 }
 
-let gameCtx, holdCtx, nextCtx, attackBarCtx, effectsCtx;
+let gameCtx, holdCtx, nextCtx, attackBarCtx, effectsCtx, uiCtx;
 let boardCanvas, boardCtx; // Off-screen canvas for the board
 let effectsCanvas; // Overlay canvas for effects
+let uiCanvas; // Canvas for UI elements (time, score, etc.)
 let scoreDisplay;
 let screenShake = { intensity: 0, duration: 0, endTime: 0 };
 let mainBoardOffset = { x: 0, y: 0 };
@@ -63,6 +66,18 @@ export function setupCanvases() {
         if (wrapper) {
             effectsCanvas.width = wrapper.offsetWidth;
             effectsCanvas.height = wrapper.offsetHeight;
+        }
+    }
+
+    // Get the UI canvas
+    uiCanvas = document.getElementById('ui-canvas');
+    if (uiCanvas) {
+        uiCtx = uiCanvas.getContext('2d');
+        // Manually set the canvas size to match the wrapper, as defined in CSS
+        const wrapper = document.getElementById('overall-game-wrapper');
+        if (wrapper) {
+            uiCanvas.width = wrapper.offsetWidth;
+            uiCanvas.height = wrapper.offsetHeight;
         }
     }
 
@@ -144,7 +159,6 @@ export function drawGame() {
         const x = (Math.random() - 0.5) * intensity;
         const y = (Math.random() - 0.5) * intensity;
         gameCtx.translate(x, y);
-        console.log(`Screen shake translation: x=${x}, y=${y}`);
     }
     
     // --- Draw the pre-rendered board ---
@@ -203,6 +217,74 @@ export function drawUI() {
     drawHoldPiece();
     drawNextPieces();
     drawScore();
+
+    // Draw UI elements on the UI canvas if it exists
+    if (uiCanvas && uiCtx) {
+        drawUIElements();
+    }
+}
+
+function drawUIElements() {
+    if (!uiCtx) return;
+
+    // Clear the UI canvas
+    uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+
+    // Draw score and time information on the UI canvas
+    if (scoreDisplay) {
+        const stats = getStats();
+        const uiText = `Time: ${stats.time}\nScore: ${stats.score}\nLines: ${stats.lines}\nLevel: ${stats.level}\nPPS: ${stats.pps}\nAPM: ${stats.apm}`;
+
+        // Set text properties
+        uiCtx.font = CONFIG.ui.scoreFontSize + ' ' + CONFIG.ui.fontFamily;
+
+        // Apply score update effect if active
+        let textColor = '#ecf0f1'; // Default color
+        let textScale = 1; // Default scale
+
+        if (Effects.scoreUpdateEffect) {
+            const now = performance.now();
+            const progress = (now - Effects.scoreUpdateEffect.startTime) / Effects.scoreUpdateEffect.duration;
+
+            if (progress < 1) {
+                textScale = 1 + Math.sin(progress * Math.PI) * CONFIG.effects.scoreUpdateScaleFactor; // Scale effect
+                const opacity = 1 - progress;
+                textColor = `rgba(255, 255, 0, ${opacity})`; // Yellow fading out
+            }
+        }
+
+        uiCtx.fillStyle = textColor;
+        uiCtx.textAlign = 'left';
+        uiCtx.textBaseline = 'top';
+
+        // Position the text in the same area as the old score display
+        const nextBoxElement = document.getElementById('next-box');
+        if (nextBoxElement) {
+            const nextBoxRect = nextBoxElement.getBoundingClientRect();
+            const wrapper = document.getElementById('overall-game-wrapper');
+            if (wrapper) {
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const x = nextBoxRect.left - wrapperRect.left;
+                const y = nextBoxRect.bottom - wrapperRect.top;
+
+                // Apply scale effect by transforming the context
+                uiCtx.save();
+                uiCtx.translate(x, y);
+                uiCtx.scale(textScale, textScale);
+
+                // Draw each line separately
+                const lines = uiText.split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                    uiCtx.fillText(lines[i], 0, i * 20);
+                }
+
+                uiCtx.restore();
+            }
+        } else {
+            // Fallback position if next-box element is not found
+            uiCtx.fillText(uiText, 10, 10);
+        }
+    }
 }
 
 function drawAttackBar() {
@@ -258,33 +340,26 @@ function drawNextPieces() {
     if (!nextCtx) return;
     nextCtx.clearRect(0, 0, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT);
     drawUITitledBox(nextCtx, 0, 0, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT, 'NEXT');
-    const boxCellHeight = NEXT_BOX_HEIGHT / CONFIG.game.nextPiecesCount;
+    
+    // Estimate space for the title to prevent overlap with the first piece
+    const titleReserveHeight = CELL_SIZE * (CONFIG.ui.titledBoxTitleOffset + CONFIG.ui.titledBoxFontScale * 0.5); // title offset + half font height
+    
+    const remainingHeight = NEXT_BOX_HEIGHT - titleReserveHeight;
+    const boxCellHeight = remainingHeight / CONFIG.game.nextPiecesCount;
+
     for (let i = 0; i < CONFIG.game.nextPiecesCount; i++) {
         if (nextPieces[i]) {
-            drawMiniPiece(nextCtx, nextPieces[i], 0, i * boxCellHeight, NEXT_BOX_WIDTH, boxCellHeight);
+            drawMiniPiece(nextCtx, nextPieces[i], 0, titleReserveHeight + i * boxCellHeight, NEXT_BOX_WIDTH, boxCellHeight);
         }
     }
 }
 
 function drawScore() {
-    if (!scoreDisplay) return;
-    const stats = getStats();
-    scoreDisplay.innerHTML = `Time: ${stats.time}<br>Score: ${stats.score}<br>Lines: ${stats.lines}<br>Level: ${stats.level}<br>PPS: ${stats.pps}<br>APM: ${stats.apm}`;
-
-    // Apply score update effect
-    if (Effects.scoreUpdateEffect) {
-        const now = performance.now();
-        const progress = (now - Effects.scoreUpdateEffect.startTime) / Effects.scoreUpdateEffect.duration;
-
-        if (progress < 1) {
-            const scale = 1 + Math.sin(progress * Math.PI) * CONFIG.effects.scoreUpdateScaleFactor; // Scale up and down
-            const opacity = 1 - progress; // Fade out
-            scoreDisplay.style.transform = `scale(${scale})`;
-            scoreDisplay.style.color = `rgba(255, 255, 0, ${opacity})`; // Yellow fading out
-        } else {
-            scoreDisplay.style.transform = ''; // Reset transform
-            scoreDisplay.style.color = ''; // Reset color
-        }
+    // Score display is now handled on the UI canvas in drawUIElements
+    // Update the HTML element for screen readers/accessibility but keep it visually hidden via CSS
+    if (scoreDisplay) {
+        const stats = getStats();
+        scoreDisplay.innerHTML = `Time: ${stats.time}<br>Score: ${stats.score}<br>Lines: ${stats.lines}<br>Level: ${stats.level}<br>PPS: ${stats.pps}<br>APM: ${stats.apm}`;
     }
 }
 
