@@ -179,6 +179,28 @@ socket.on("BoardStatusBulk", (bulkBoards) => {
 
 socket.on("ranking", (data) => {
   rankingData = data;
+
+  // Update KO status for each player based on ranking data
+  if (data.yourRankMap) {
+    for (const userId in data.yourRankMap) {
+      const rank = data.yourRankMap[userId];
+      if (rank !== null && rank > 1) {
+        // Player is KO'd, find their slot and update isGameOver
+        const slot = miniboardSlots.find(s => s.userId === userId);
+        if (slot && !slot.isGameOver) {
+          slot.isGameOver = true;
+          slot.dirty = true;
+        }
+      } else if (rank !== null && rank === 1) {
+        // Player is still in the game (rank 1 means still playing)
+        const slot = miniboardSlots.find(s => s.userId === userId);
+        if (slot && slot.isGameOver) {
+          slot.isGameOver = false;
+          slot.dirty = true;
+        }
+      }
+    }
+  }
 });
 
 socket.on("CountDown", (count) => {
