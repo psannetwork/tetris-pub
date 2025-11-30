@@ -57,7 +57,9 @@ function renderRoomList() {
     roomList.forEach((room) => {
       const roomItem = document.createElement('div');
       roomItem.className = 'room-item';
-      roomItem.textContent = `ID: ${room.roomId} | Players: ${room.playersCount} | Started: ${room.isGameStarted ? '済' : '待機'}`;
+      const roomStatus = room.isGameStarted ? '進行中' : '待機中';
+      const privacyStatus = room.isPrivate ? ' [プライベート]' : ' [パブリック]';
+      roomItem.textContent = `ID: ${room.roomId} | Players: ${room.playersCount} | ${roomStatus}${privacyStatus}`;
 
       roomItem.addEventListener('click', () => {
         spectateRoom(room.roomId);
@@ -133,7 +135,7 @@ socket.on("connect", () => {
 
 socket.on("spectateRoomInfo", (data) => {
   console.log(`観戦中: ${data.roomId}`);
-  spectateInfo.textContent = `観戦中: ${data.roomId} | Players: ${data.playersCount}`;
+  spectateInfo.textContent = `観戦中: ${data.roomId} | Players: ${data.playersCount}${data.isPrivate ? ' | [プライベート]' : ''}`;
   gameStarted = data.isGameStarted;
 });
 

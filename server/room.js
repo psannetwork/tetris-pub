@@ -6,6 +6,8 @@ const rooms = new Map();
 const playerRoom = new Map();
 const playerRanks = new Map();
 const spectators = new Map();
+const playerLastActive = new Map(); // Track last activity time for each player
+const socketConnections = new Map(); // Track socket connections with timestamps
 // let roomCounter = 0; // Removed roomCounter as IDs will be random
 
 const { bots } = require('./bots.js');
@@ -32,8 +34,76 @@ function generateUniqueRoomId() {
 // Global io reference to be set by the main server file
 let ioRef = null;
 
+// Timeout duration in milliseconds
+const PLAYER_TIMEOUT_MS = 15000; // 15 seconds
+
 function setIoReference(io) {
     ioRef = io;
+}
+
+// Function to update player activity timestamp
+function updatePlayerActivity(playerId) {
+    playerLastActive.set(playerId, Date.now());
+}
+
+// Function to check for inactive players and handle timeouts
+function checkPlayerTimeouts(roomId) {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    const now = Date.now();
+    for (const playerId of room.players) {
+        // Skip bots
+        if (bots.has(playerId)) continue;
+
+        const lastActive = playerLastActive.get(playerId);
+        if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
+            // Only timeout during game (after game started)
+            if (room.isGameStarted) {
+                console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no activity for ${Math.floor((now - lastActive)/1000)}s)`);
+                handlePlayerTimeout(ioRef, playerId, roomId);
+            } else {
+                // During pre-game phase, just update activity to prevent timeout
+                updatePlayerActivity(playerId);
+            }
+        }
+    }
+}
+
+// Function to handle a player timeout
+function handlePlayerTimeout(io, playerId, roomId) {
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    // If the player is still in the room, process the timeout
+    if (room.players.has(playerId)) {
+        // Make sure the playerRoom mapping exists before handling timeout
+        if (!playerRoom.has(playerId)) {
+            playerRoom.set(playerId, roomId);
+        }
+
+        // Create a temporary socket object to pass to handleGameOver
+        const tempSocket = {
+            id: playerId,
+        };
+
+        // Use ioRef if io is null (e.g. in timeout scenarios)
+        const effectiveIo = io || ioRef;
+
+        // Send a connection error message to the player before handling game over
+        if (effectiveIo && !bots.has(playerId)) {
+            effectiveIo.to(playerId).emit('uiMessage', {
+                type: 'error',
+                message: 'タイムアウトしました。ロビーに戻ります。'
+            });
+
+            // Send matching event to return to lobby after timeout
+            effectiveIo.to(playerId).emit('matching');
+        }
+
+        // Handle as if the player lost connection and was eliminated
+        handleGameOver(effectiveIo, tempSocket, "connection timeout", null);
+    }
 }
 
 function createRoom(playerId, isPrivate = false, password = null, hostId = null) {
@@ -57,8 +127,14 @@ function createRoom(playerId, isPrivate = false, password = null, hostId = null)
         password: password, // New: Hashed password for private rooms
         hostId: hostId || playerId, // New: Host of the room
         creationTime: Date.now(), // New: Track room creation time for timeout
-        timeoutId: null // New: Track timeout ID for cleanup
+        timeoutId: null, // New: Track timeout ID for cleanup
+        activityCheckInterval: null // Track activity check interval
     };
+
+    // Set up periodic activity checking for this room
+    room.activityCheckInterval = setInterval(() => {
+        checkPlayerTimeouts(roomId);
+    }, 2000); // Check every 2 seconds
 
     // Set timeout to clean up the room after a specified time
     const timeoutDuration = isPrivate ? 2 * 60 * 60 * 1000 : 30 * 60 * 1000; // 2 hours for private, 30 mins for public
@@ -66,6 +142,11 @@ function createRoom(playerId, isPrivate = false, password = null, hostId = null)
         const roomToClean = rooms.get(roomId);
         if (roomToClean) {
             console.log(`⏱️ Room ${roomId} has timed out and will be cleaned up.`);
+
+            // Clean up activity check interval
+            if (roomToClean.activityCheckInterval) {
+                clearInterval(roomToClean.activityCheckInterval);
+            }
 
             // Clean up countdown interval if it exists
             if (roomToClean.countdownInterval) {
@@ -113,6 +194,8 @@ function createRoom(playerId, isPrivate = false, password = null, hostId = null)
     }, timeoutDuration);
 
     rooms.set(roomId, room);
+    // Update player activity for the initial player
+    updatePlayerActivity(playerId);
     return room;
 }
 
@@ -152,7 +235,7 @@ function getAvailableRoom() {
 }
 
 function emitToSpectators(io, roomId, event, data) {
-    if (spectators.has(roomId)) {
+    if (io && spectators.has(roomId)) {
         for (const specId of spectators.get(roomId)) {
             io.to(specId).emit(event, data);
         }
@@ -166,11 +249,13 @@ function emitToRoom(io, room, event, data) { // `io` parameter added
     for (const playerId of playersToEmit) {
         if (bots.has(playerId)) {
             bots.get(playerId).emit(event, data);
-        } else {
+        } else if (io) {
             io.to(playerId).emit(event, data);
         }
     }
-    emitToSpectators(io, room.roomId, event, data);
+    if (io) {
+        emitToSpectators(io, room.roomId, event, data);
+    }
 }
 
 function startCountdown(io, room) {
@@ -314,7 +399,7 @@ function handleGameOver(io, socket, reason, stats) {
         if (winnerId) { // Check if winnerId exists
             if (bots.has(winnerId)) {
                 bots.get(winnerId).emit("YouWin");
-            } else {
+            } else if (io) {
                 io.to(winnerId).emit("YouWin");
             }
         }
@@ -323,19 +408,109 @@ function handleGameOver(io, socket, reason, stats) {
             if (playerId !== winnerId) {
                 if (bots.has(playerId)) {
                     bots.get(playerId).emit("GameOver");
-                } else {
+                } else if (io) {
                     io.to(playerId).emit("GameOver");
                 }
             }
         }
-        emitToSpectators(io, room.roomId, "GameOver");
+        if (io) {
+            emitToSpectators(io, room.roomId, "GameOver");
+        }
+
+        // For private rooms, do not reset isGameOver so players can start a new game in the same room
+        if (room.isPrivate) {
+            console.log(`[Private Room] Keeping room ${roomId} open for next game.`);
+            // Reset game state but keep the room open
+            room.isGameOver = false; // Don't keep it as game over so new games can start
+            room.isGameStarted = false;
+            room.isCountingDown = false;
+            if (room.countdownInterval) {
+                clearInterval(room.countdownInterval);
+                room.countdownInterval = null;
+            }
+            // Reset the initialPlayers for the next game
+            room.initialPlayers = new Set(room.players); // Use current player for next game
+            room.boards = {};
+            room.stats.clear();
+            // Clear player ranks but don't delete the map
+            if (playerRanks.has(roomId)) {
+                playerRanks.get(roomId).length = 0;
+            }
+
+            // Set a new timeout for the private room to remain available
+            if (room.timeoutId) {
+                clearTimeout(room.timeoutId);
+            }
+            const timeoutDuration = 2 * 60 * 60 * 1000; // 2 hours for private room
+            room.timeoutId = setTimeout(() => {
+                const roomToClean = rooms.get(roomId);
+                if (roomToClean && roomToClean.players.size === 0) {
+                    console.log(`⏱️ Private room ${roomId} has timed out and will be cleaned up.`);
+
+                    // Clean up activity check interval
+                    if (roomToClean.activityCheckInterval) {
+                        clearInterval(roomToClean.activityCheckInterval);
+                    }
+
+                    // Clean up countdown interval if it exists
+                    if (roomToClean.countdownInterval) {
+                        clearInterval(roomToClean.countdownInterval);
+                    }
+
+                    // Notify all players in the room about timeout
+                    for (const playerId of roomToClean.players) {
+                        if (bots.has(playerId)) {
+                            bots.get(playerId).emit('roomTimeout');
+                        } else if (ioRef) {
+                            const socket = ioRef.sockets.sockets.get(playerId);
+                            if (socket) {
+                                socket.emit('roomTimeout');
+                                socket.leave(roomId);
+                            }
+                        }
+                    }
+
+                    // Clean up spectators
+                    if (spectators.has(roomId) && ioRef) {
+                        for (const specId of spectators.get(roomId)) {
+                            const specSocket = ioRef.sockets.sockets.get(specId);
+                            if (specSocket) {
+                                specSocket.emit('roomTimeout');
+                                specSocket.leave(roomId);
+                            }
+                        }
+                        spectators.delete(roomId);
+                    }
+
+                    // Remove room from all tracking maps
+                    rooms.delete(roomId);
+                    for (const [playerId, roomPlayerId] of playerRoom.entries()) {
+                        if (roomPlayerId === roomId) {
+                            playerRoom.delete(playerId);
+                        }
+                    }
+                    if (playerRanks.has(roomId)) {
+                        playerRanks.delete(roomId);
+                    }
+
+                    console.log(`🗑️ Private room ${roomId} has been completely cleaned up due to timeout.`);
+                }
+            }, timeoutDuration);
+            return; // Don't clear timeout if private room is kept open
+        }
     }
 
-    // Clear the timeout when the game is over
+    // Clear the activity check interval when the game is over
+    if (room.activityCheckInterval) {
+        clearInterval(room.activityCheckInterval);
+        room.activityCheckInterval = null;
+    }
+
+    // Clear the timeout when the game is over (only for public rooms or when not keeping private room open)
     if (room.timeoutId) {
         clearTimeout(room.timeoutId);
         room.timeoutId = null;
-        console.log(`⏱️ Timeout cleared for room ${room.roomId} since the game is over.`);
+        console.log(`⏱️ Timeout cleared for room ${roomId} since the game is over.`);
     }
 }
 
@@ -351,16 +526,24 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
     room.initialPlayers.delete(playerIdToKick); // Also remove from initial players
     playerRoom.delete(playerIdToKick);
     delete room.boards[playerIdToKick];
+    // Clear player's activity tracking
+    playerLastActive.delete(playerIdToKick);
 
     // Find the socket of the kicked player and disconnect them from the room
-    const kickedSocket = io.sockets.sockets.get(playerIdToKick);
-    if (kickedSocket) {
-        kickedSocket.leave(roomId);
-        kickedSocket.emit('kicked', { roomId, reason }); // Notify kicked player
-        console.log(`🚪 Player ${playerIdToKick} was kicked from room ${roomId}.`);
-    } else if (bots.has(playerIdToKick)) {
+    if (io) {
+        const kickedSocket = io.sockets.sockets.get(playerIdToKick);
+        if (kickedSocket) {
+            kickedSocket.leave(roomId);
+            kickedSocket.emit('kicked', { roomId, reason }); // Notify kicked player
+            console.log(`🚪 Player ${playerIdToKick} was kicked from room ${roomId}.`);
+        }
+    }
+
+    if (bots.has(playerIdToKick)) {
         // Handle kicked bot
         bots.get(playerIdToKick).emit('kicked', { roomId, reason });
+        // Also untrack the bot socket connection
+        untrackSocketConnection(playerIdToKick);
         bots.delete(playerIdToKick);
         console.log(`🤖 Bot ${playerIdToKick} was kicked from room ${roomId}.`);
     }
@@ -390,6 +573,68 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
     return true;
 }
 
+// Track connected sockets
+function trackSocketConnection(socketId) {
+    socketConnections.set(socketId, Date.now());
+}
+
+// Remove disconnected socket from tracking
+function untrackSocketConnection(socketId) {
+    socketConnections.delete(socketId);
+}
+
+// 30-minute cleanup function for orphaned sockets
+function startSocketCleanupInterval() {
+    setInterval(() => {
+        const now = Date.now();
+        const THIRTY_MINUTES = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+        for (const [socketId, connectTime] of socketConnections.entries()) {
+            if (now - connectTime > THIRTY_MINUTES) {
+                console.log(`⏰ Cleaning up orphaned socket ${socketId} (connected for ${Math.floor((now - connectTime)/1000/60)} minutes)`);
+
+                // Clean up any room references to this socket
+                if (playerRoom.has(socketId)) {
+                    const roomId = playerRoom.get(socketId);
+                    const room = rooms.get(roomId);
+                    if (room) {
+                        room.players.delete(socketId);
+                        room.initialPlayers.delete(socketId);
+                        delete room.boards[socketId];
+
+                        // If the room becomes empty and game is not over, clean it up
+                        if (room.players.size === 0 && !room.isGameOver) {
+                            clearInterval(room.countdownInterval);
+                            if (room.timeoutId) {
+                                clearTimeout(room.timeoutId);
+                                room.timeoutId = null;
+                            }
+                            spectators.delete(roomId);
+                            setTimeout(() => {
+                                rooms.delete(roomId);
+                                console.log(`🗑️ Room ${roomId} deleted due to being empty after socket cleanup.`);
+                            }, 5000);
+                        }
+                    }
+                    playerRoom.delete(socketId);
+                }
+
+                // Clean up activity tracking
+                playerLastActive.delete(socketId);
+                playerRanks.forEach((rankArray, roomKey) => {
+                    const index = rankArray.indexOf(socketId);
+                    if (index > -1) {
+                        rankArray.splice(index, 1);
+                    }
+                });
+
+                // Remove socket from tracking
+                socketConnections.delete(socketId);
+            }
+        }
+    }, 60000); // Check every minute
+}
+
 module.exports = {
     MAX_PLAYERS, // Export MAX_PLAYERS
     MIN_PLAYERS_TO_START, // Export MIN_PLAYERS_TO_START
@@ -397,6 +642,8 @@ module.exports = {
     playerRoom,
     playerRanks,
     spectators,
+    playerLastActive, // Export player activity tracking map
+    socketConnections, // Export socket connections tracking map
     createRoom,
     createPrivateRoom, // New export
     getRoomByIdAndPassword, // New export
@@ -406,5 +653,9 @@ module.exports = {
     handleGameOver,
     emitToRoom,
     kickPlayer, // New export
-    setIoReference // Export function to set io reference
+    setIoReference, // Export function to set io reference
+    updatePlayerActivity, // Export function to update player activity
+    trackSocketConnection, // Export function to track socket connections
+    untrackSocketConnection, // Export function to untrack socket connections
+    startSocketCleanupInterval // Export function to start socket cleanup interval
 };

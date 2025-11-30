@@ -3,6 +3,7 @@ const {
     playerRoom,
     playerRanks,
     spectators,
+    socketConnections, // Import socket connections tracking map
     createRoom,
     createPrivateRoom, // New import
     getRoomByIdAndPassword, // New import
@@ -13,8 +14,18 @@ const {
     emitToRoom,
     MAX_PLAYERS, // Import MAX_PLAYERS
     MIN_PLAYERS_TO_START, // Import MIN_PLAYERS_TO_START
-    kickPlayer // New import
+    kickPlayer, // New import
+    updatePlayerActivity, // Import function to update player activity
+    trackSocketConnection, // Import function to track socket connections
+    untrackSocketConnection, // Import function to untrack socket connections
+    startSocketCleanupInterval, // Import function to start socket cleanup interval
+    playerLastActive // Import the player activity tracking map
 } = require('./room.js');
+
+// Rate limiting and validation data
+const playerActivity = new Map(); // Track player stats for validation
+const MAX_UPDATES_PER_SECOND = 60; // Max board updates per second
+const MAX_GARBAGE_LINES_SINGLE_ATTACK = 10; // Max lines that can be sent in single attack
 const { bots } = require('./bots.js');
 
 
@@ -22,18 +33,24 @@ const { bots } = require('./bots.js');
 function handleSocketConnection(io, socket) {
     console.log("🚀 User connected:", socket.id);
 
+    // Track the socket connection with timestamp
+    trackSocketConnection(socket.id);
+
     socket.on('setTarget', (targetId) => {
         const roomId = playerRoom.get(socket.id);
         if (!roomId || !rooms.has(roomId)) return;
         const room = rooms.get(roomId);
         if (!room || room.isGameOver) return;
 
+        // Update player activity
+        updatePlayerActivity(socket.id);
+
         // Set the target for the current player
         room.playerTargets.set(socket.id, targetId);
 
         // Broadcast the change
         emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
-        console.log(`🎯 ${socket.id} is now targeting ${targetId}`);
+        //console.log(`🎯 ${socket.id} is now targeting ${targetId}`);
     });
 
     socket.on("matching", () => {
@@ -259,7 +276,8 @@ function handleSocketConnection(io, socket) {
             return socket.emit("uiMessage", { type: 'error', message: `指定されたルーム (${roomId}) は存在しません。` }); // Use uiMessage
         }
         const room = rooms.get(roomId);
-        if (room.players.size === 0 || room.isGameOver) {
+        // For private rooms that are in progress, allow spectator mode even if game has started
+        if (room.players.size === 0 || (room.isGameOver && !room.isPrivate)) {
             return socket.emit("uiMessage", { type: 'error', message: `指定されたルーム (${roomId}) は終了しています。` }); // Use uiMessage
         }
         if (playerRoom.has(socket.id)) {
@@ -285,7 +303,8 @@ function handleSocketConnection(io, socket) {
         socket.emit("spectateRoomInfo", {
             roomId: room.roomId,
             playersCount: room.players.size,
-            isGameStarted: room.isGameStarted
+            isGameStarted: room.isGameStarted,
+            isPrivate: room.isPrivate
         });
         socket.emit("BoardStatusBulk", room.boards);
         socket.emit('uiMessage', { type: 'info', message: `${roomId} を観戦しています。` });
@@ -297,6 +316,39 @@ function handleSocketConnection(io, socket) {
         if (!roomId || !rooms.has(roomId)) return;
         const room = rooms.get(roomId);
         if (!room || room.isGameOver) return;
+
+        // Update player activity
+        updatePlayerActivity(socket.id);
+
+        // Initialize player activity tracking
+        if (!playerActivity.has(socket.id)) {
+            playerActivity.set(socket.id, {
+                lastUpdate: Date.now(),
+                updateCount: 0,
+                updateResetTime: Date.now()
+            });
+        }
+
+        const activity = playerActivity.get(socket.id);
+        const now = Date.now();
+
+        // Rate limiting: reset counter every second
+        if (now - activity.updateResetTime >= 1000) {
+            activity.updateResetTime = now;
+            activity.updateCount = 0;
+        }
+
+        // Check if player is sending too many updates
+        activity.updateCount++;
+        if (activity.updateCount > MAX_UPDATES_PER_SECOND) {
+            console.warn(`⚠️ Player ${socket.id} exceeded board update rate limit in room ${roomId}`);
+            // Optionally kick player for spamming updates
+            kickPlayer(io, roomId, socket.id, "通信が異常な速度で送信されました。");
+            return;
+        }
+
+        // Store the last update time for potential further checks
+        activity.lastUpdate = now;
 
         room.boards[socket.id] = board;
 
@@ -313,7 +365,7 @@ function handleSocketConnection(io, socket) {
 
     socket.on("PlayerGameStatus", (status) => {
         if (status === 'gameover') {
-            console.log(`[Ranking] Received 'PlayerGameStatus: gameover' from ${socket.id}`);
+            //console.log(`[Ranking] Received 'PlayerGameStatus: gameover' from ${socket.id}`);
             handleGameOver(io, socket, "bot game over", null);
         }
     });
@@ -323,6 +375,16 @@ function handleSocketConnection(io, socket) {
         if (!roomId || !rooms.has(roomId)) return;
         const room = rooms.get(roomId);
         if (!room || room.isGameOver || room.players.size <= 1) return;
+
+        // Update player activity
+        updatePlayerActivity(socket.id);
+
+        // Validate that lines is a reasonable number to prevent cheating
+        if (typeof lines !== 'number' || lines <= 0 || lines > MAX_GARBAGE_LINES_SINGLE_ATTACK) {
+            console.warn(`⚠️ Player ${socket.id} sent invalid garbage amount (${lines}) in room ${roomId}`);
+            kickPlayer(io, roomId, socket.id, "不正な攻撃データを送信しました。");
+            return;
+        }
 
         const ranks = playerRanks.get(roomId) || [];
         // Prioritize explicit targetId, then stored target, then random
@@ -344,11 +406,11 @@ function handleSocketConnection(io, socket) {
         } else {
             io.to(recipient).emit("ReceiveGarbage", emitData);
         }
-        
+
         // Broadcast the transfer to the whole room for visual effects
         emitToRoom(io, room, "GarbageTransfer", { from: socket.id, to: recipient, lines });
 
-        console.log(`💥 ${socket.id} sent ${lines} garbage to ${recipient} in ${roomId}`);
+        //console.log(`💥 ${socket.id} sent ${lines} garbage to ${recipient} in ${roomId}`);
     });
 
     socket.on("requestRoomInfo", () => {
@@ -384,26 +446,74 @@ function handleSocketConnection(io, socket) {
                 }
             }
 
-            // Remove player from room FIRST
-            room.players.delete(socket.id);
+            // THEN handle game over logic
+            if (wasInGame) {
+                // Send a connection error message to the player who disconnected during game
+                io.to(socket.id).emit('uiMessage', {
+                    type: 'error',
+                    message: 'タイムアウトしました。ロビーに戻ります。'
+                });
+
+                // Send matching event to return to lobby after disconnect
+                io.to(socket.id).emit('matching');
+
+                handleGameOver(io, socket, reason, null);
+            }
+
+            // Now fully remove the player
             playerRoom.delete(socket.id);
             delete room.boards[socket.id]; // Clear board data when player disconnects
             socket.leave(roomId);
             console.log(`🚪 ${socket.id} left room ${roomId} on disconnect.`);
 
-            // THEN handle game over logic
-            if (wasInGame) {
-                    handleGameOver(io, socket, reason, null);
-            }
-
             if (targetsChanged) {
                  emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
             }
-            
+
             // Note: We don't delete from initialPlayers so ranking works correctly.
             // The room cleanup logic will handle it later.
 
-            if (room.players.size === 0 && !room.isGameOver) {
+            // If the host (creator) of a private room leaves before the game starts, delete the room
+            if (room.hostId === socket.id && room.isPrivate && !room.isGameStarted) {
+                // Clear any existing countdown
+                if (room.countdownInterval) {
+                    clearInterval(room.countdownInterval);
+                }
+                // Notify all players in the room about the room closure
+                for (const playerId of room.players) {
+                    if (bots.has(playerId)) {
+                        bots.get(playerId).emit('roomClosed');
+                    } else {
+                        const playerSocket = io.sockets.sockets.get(playerId);
+                        if (playerSocket) {
+                            playerSocket.emit('roomClosed');
+                            playerSocket.leave(roomId);
+                        }
+                    }
+                }
+                // Clean up spectators
+                if (spectators.has(roomId)) {
+                    for (const specId of spectators.get(roomId)) {
+                        const specSocket = io.sockets.sockets.get(specId);
+                        if (specSocket) {
+                            specSocket.emit('roomClosed');
+                            specSocket.leave(roomId);
+                        }
+                    }
+                    spectators.delete(roomId);
+                }
+                // Remove room from all tracking maps
+                rooms.delete(roomId);
+                for (const [playerId, roomPlayerId] of playerRoom.entries()) {
+                    if (roomPlayerId === roomId) {
+                        playerRoom.delete(playerId);
+                    }
+                }
+                if (playerRanks.has(roomId)) {
+                    playerRanks.delete(roomId);
+                }
+                console.log(`🗑️ Private room ${roomId} deleted because host left before game started.`);
+            } else if (room.players.size === 0 && !room.isGameOver) {
                 clearInterval(room.countdownInterval);
                 spectators.delete(roomId);
                 setTimeout(() => {
@@ -417,6 +527,11 @@ function handleSocketConnection(io, socket) {
                 spectators.delete(rId);
             }
         }
+        // Clean up player activity tracking
+        playerActivity.delete(socket.id);
+        playerLastActive.delete(socket.id);
+        // Untrack socket connection
+        untrackSocketConnection(socket.id);
         if (bots.has(socket.id)) {
             bots.delete(socket.id);
         }
@@ -425,6 +540,9 @@ function handleSocketConnection(io, socket) {
 }
 
 function initializeSocket(io) {
+    // Start the 30-minute socket cleanup interval
+    startSocketCleanupInterval();
+
     io.on("connection", (socket) => {
         handleSocketConnection(io, socket);
     });

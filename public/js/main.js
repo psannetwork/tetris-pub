@@ -1,5 +1,5 @@
 import { setGameGetStatsCallback } from './game.js';
-import { setOnlineGetStatsCallback } from './online.js';
+import { setOnlineGetStatsCallback, setCloseMenuCallback, setRoomClosedCallback, initializeSocket, setUIMessageCallback } from './online.js';
 import { CONFIG } from './config.js';
 import { 
     gameState, setGameState, resetGame,
@@ -58,6 +58,35 @@ let piecesPlaced = 0;
 let pps = '0.00';
 let apm = '0.0';
 let time = '00:00';
+
+// --- Function to close menu when game starts ---
+function closeMenuWhenGameStarts() {
+    if (lobbyOverlay) {
+        lobbyOverlay.classList.add('hidden');
+    }
+    if (mainMenuButtons) {
+        mainMenuButtons.style.display = 'none';
+    }
+    // Also hide room info if it's still showing the start button
+    if (hostStartGameButton) {
+        setButtonState(hostStartGameButton, false);
+    }
+    if (adminStartGameButton) {
+        setButtonState(adminStartGameButton, false);
+    }
+    if (hamburgerMenuButton) {
+        hamburgerMenuButton.style.display = 'none';
+    }
+}
+
+// --- Function to handle room closure ---
+function handleRoomClosed() {
+    setGameState('LOBBY');
+    resetGame();
+    setRoomDisplayState(false); // Go back to main lobby view
+    updateButtonStates();
+    showMessage({ type: 'info', message: 'ルームがホストによって閉鎖されました。' });
+}
 
 let currentRoomId = null; // To keep track of the current room
 
@@ -304,8 +333,7 @@ function init() {
     setGameGetStatsCallback(getStats);
     setOnlineGetStatsCallback(getStats);
     setupCanvases();
-    // initializeSocket(); // Should be called once, connectToServer handles it
-    connectToServer();
+    initializeSocket(); // Should be called once, connectToServer handles it
     gameEndOverlay.classList.remove('visible');
     setGameState('LOBBY');
     resetGame();
@@ -314,7 +342,16 @@ function init() {
     updateButtonStates(); // Initial button state update
     if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Ensure hamburger is hidden initially
     if (messageDisplay) messageDisplay.style.display = 'none'; // Ensure message display is hidden initially
-    
+
+    // Register the callback to close menu when game starts
+    setCloseMenuCallback(closeMenuWhenGameStarts);
+
+    // Register the callback for room closed event
+    setRoomClosedCallback(handleRoomClosed);
+
+    // NEW: Register the callback for uiMessage events
+    setUIMessageCallback(showMessage);
+
     // --- Event Listeners ---
     joinPublicMatchButton.onclick = () => {
         // For public matches, hamburger button should not be shown.
@@ -377,8 +414,11 @@ function init() {
     retryButton.onclick = () => {
         setManualDisconnect(true);
         setAutoMatchOnReconnect(true); // Do auto-match when retrying
-        socket.disconnect();
+        if (socket) {
+            socket.disconnect();
+        }
         gameEndOverlay.classList.remove('visible');
+        initializeSocket(); // Reinitialize socket to ensure clean state
         connectToServer(); // Reconnect will be handled by connect event in online.js
         setButtonState(retryButton, false);
         setButtonState(lobbyButton, false);
@@ -387,7 +427,9 @@ function init() {
     lobbyButton.onclick = () => {
         setManualDisconnect(true);
         setAutoMatchOnReconnect(false); // Don't auto-match when going back to lobby
-        socket.disconnect();
+        if (socket) {
+            socket.disconnect();
+        }
         gameEndOverlay.classList.remove('visible');
         setGameState('LOBBY');
         resetGame();
@@ -396,43 +438,11 @@ function init() {
         setButtonState(retryButton, false);
         setButtonState(joinPublicMatchButton, true);
         // Reconnect the socket after disconnecting to allow new matching
+        initializeSocket(); // Reinitialize socket to ensure clean state
         connectToServer();
     };
 
-    // --- Socket Event Handlers ---
-    socket.on('roomInfo', (data) => {
-        currentRoomId = data.roomId;
-        const isHost = data.hostId === socket.id;
-        setRoomDisplayState(true, isHost, data.roomId, data.members, data.isPrivate); // Pass isPrivate
-        
-        // Additional logic for public room matching start countdown
-        if (!data.isPrivate && !data.isGameStarted && !data.isCountingDown && data.members.length >= CONFIG.MIN_PLAYERS_TO_START) {
-            // Public matching rooms start countdown automatically once enough players join
-            // No host button needed for public rooms
-        }
-    });
 
-
-
-
-    socket.on('kicked', ({ reason }) => { // New handler for kicked players
-        showMessage({ type: 'error', message: `キックされました: ${reason}` });
-        setGameState('LOBBY');
-        resetGame();
-        setRoomDisplayState(false);
-        updateButtonStates();
-    });
-
-    socket.on('uiMessage', (data) => { // New generic message handler
-        showMessage(data);
-    });
-
-    socket.on('disconnect', () => {
-        setGameState('LOBBY');
-        resetGame();
-        setRoomDisplayState(false); // Reset to lobby view
-        updateButtonStates();
-    });
 }
 
 // --- Public Functions ---

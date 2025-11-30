@@ -10,12 +10,19 @@ import { drawUI } from './draw.js';
 export let socket;
 let shouldAutoMatchOnReconnect = true; // Flag to control auto-matching
 
+let currentSocketId = null; // To track current socket ID
+const myPastSocketIds = new Set(); // To store past socket IDs of this client
+
 export function setAutoMatchOnReconnect(value) {
     shouldAutoMatchOnReconnect = value;
 }
 
 export function initializeSocket() {
     if (socket) {
+        // If socket exists and is connected, record its ID before disconnecting
+        if (socket.connected && currentSocketId) {
+            myPastSocketIds.add(currentSocketId);
+        }
         socket.disconnect();
     }
 
@@ -32,6 +39,13 @@ export function initializeSocket() {
     // --- Socket Event Handlers ---
     socket.on("connect", () => {
         console.log("✅ サーバーに接続:", socket.id);
+        
+        // Update currentSocketId and clear past IDs if this is a fresh connection (or not a reconnect)
+        if (currentSocketId && currentSocketId !== socket.id) {
+            myPastSocketIds.add(currentSocketId); // Add previous ID to past IDs
+        }
+        currentSocketId = socket.id; // Update current ID
+
         miniboardSlots.forEach(slot => {
             slot.userId = null;
             slot.dirty = true;
@@ -53,216 +67,665 @@ export function initializeSocket() {
         }
     });
 
-    socket.on('targetsUpdate', (targets) => {
-        playerTargets = new Map(targets);
-        // We need to redraw the miniboards to update their target styles
-        miniboardSlots.forEach(slot => slot.dirty = true);
-        startAnimationIfNeeded();
-    });
+        socket.on('targetsUpdate', (targets) => {
 
-    socket.on("roomInfo", (data) => {
-        currentRoomId = data.roomId; // Store the current room ID
-        const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
-        const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+            playerTargets = new Map(targets);
 
-        // Add new opponents
-        newOpponentIds.forEach(id => {
-            if (!currentOpponents.has(id)) addOpponent(id);
+            // We need to redraw the miniboards to update their target styles
+
+            miniboardSlots.forEach(slot => slot.dirty = true);
+
+            startAnimationIfNeeded();
+
         });
 
-        // Remove disconnected opponents
-        currentOpponents.forEach(id => {
-            if (!newOpponentIds.has(id)) removeOpponent(id);
+    
+
+        socket.on("roomInfo", (data) => {
+
+            currentRoomId = data.roomId; // Store the current room ID
+
+            const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+
+            const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+
+    
+
+            // Add new opponents
+
+            newOpponentIds.forEach(id => {
+
+                if (!currentOpponents.has(id)) addOpponent(id);
+
+            });
+
+    
+
+            // Remove disconnected opponents
+
+            currentOpponents.forEach(id => {
+
+                if (!newOpponentIds.has(id)) removeOpponent(id);
+
+            });
+
         });
-    });
 
-    socket.on("StartGame", () => {
-        currentCountdown = null;
-        showCountdown(null);
-        hideGameEndScreen(); // Hide end screen
-        resetGame(); // Changed to resetGame()
-        setHoldPiece(null); // Moved from CountDown
-        drawUI();           // Moved from CountDown
-        setGameState('PLAYING');
-        miniboardSlots.forEach(slot => {
-            if (slot.userId) { // Only reset boards for active opponents
-                slot.isGameOver = false;
-                slot.boardState.forEach(row => row.fill(0)); // Clear the board state
-                slot.dirty = true;
-            }
-        });
-        startAnimationIfNeeded();
-        finalRanking = {}; // Reset for new game
-        lastSentBoard = null; // Ensure board history is cleared for the new game
-    });
+    
 
-    socket.on("ranking", (data) => {
-        const { yourRankMap, statsMap, roomId } = data;
-        if (roomId !== currentRoomId) {
-            return;
-        }
+        socket.on("StartGame", () => {
 
-        Object.assign(finalRanking, yourRankMap);
-        
-        miniboardSlots.forEach(slot => {
-            if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
-                finalRanking[slot.userId] = null;
-            }
-        });
-        if (!finalRanking.hasOwnProperty(socket.id)) {
-            finalRanking[socket.id] = null;
-        }
+            currentCountdown = null;
 
-        miniboardSlots.forEach(slot => {
-            if (slot.userId && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
-                slot.isGameOver = true;
-                slot.dirty = true;
-            }
-        });
-        startAnimationIfNeeded();
+            showCountdown(null);
 
-        const myRank = finalRanking[socket.id];
-        
-        if (myRank === null || myRank === undefined) {
+            hideGameEndScreen(); // Hide end screen
+
+            resetGame(); // Changed to resetGame()
+
+            setHoldPiece(null); // Moved from CountDown
+
+            drawUI();           // Moved from CountDown
+
             setGameState('PLAYING');
-            return;
-        }
 
-        const totalPlayers = Object.keys(finalRanking).length;
-        const knockedOutPlayers = Object.values(finalRanking).filter(r => r > 1).length;
-        const isMatchOver = (knockedOutPlayers >= totalPlayers - 1 && totalPlayers > 1);
-        const amKnockedOut = myRank > 1;
+            // Close menu when game starts
 
-        if (isMatchOver) {
-            setGameState('GAME_OVER');
-            const isWin = myRank === 1;
-            const title = isWin ? 'You Win!' : 'Game Over';
-            if (isWin) setGameClear(true);
-            showGameEndScreen(title, isWin, finalRanking, socket.id, statsMap || {});
-        } else if (amKnockedOut) {
-            setGameState('GAME_OVER');
-            const gameEndOverlay = document.getElementById('game-end-overlay');
-            if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
-                showGameEndScreen('Game Over', false, finalRanking, socket.id, statsMap || {});
+            if (closeMenuCallback) {
+
+                closeMenuCallback();
+
             }
-        } else {
-            setGameState('PLAYING');
-        }
-    });
 
-    socket.on("BoardStatus", (data) => {
-        if (gameState !== 'PLAYING') return; // Ignore if not in a game
-        const { UserID, board, diff } = data;
-        let slot = miniboardSlots.find(s => s.userId === UserID);
-        if (!slot) {
-            addOpponent(UserID);
-            slot = miniboardSlots.find(s => s.userId === UserID);
-        }
-        if (slot) updateSlotBoard(slot, board, diff);
-    });
+            miniboardSlots.forEach(slot => {
 
-    socket.on("BoardStatusBulk", (boards) => {
-        if (gameState !== 'PLAYING') return; // Ignore if not in a game
-        for (const userId in boards) {
-            const boardData = boards[userId];
-            if (!boardData) continue;
-            let slot = miniboardSlots.find(s => s.userId === userId);
-            if (!slot) {
-                addOpponent(userId);
-                slot = miniboardSlots.find(s => s.userId === userId);
-            }
-            if (slot) updateSlotBoard(slot, boardData.board, boardData.diff);
-        }
-    });
+                if (slot.userId) { // Only reset boards for active opponents
 
-    socket.on("PlayerDisconnected", ({ userId }) => {
-        removeOpponent(userId);
-    });
+                    slot.isGameOver = false;
 
-    socket.on("CountDown", (count) => {
-        currentCountdown = count;
-        showCountdown(count);
-    });
+                    slot.boardState.forEach(row => row.fill(0)); // Clear the board state
 
-    socket.on("ReceiveGarbage", ({ from, lines }) => {
-        addAttackBar(lines);
+                    slot.dirty = true;
 
-        let attackerPos;
-        if (from) {
-            attackerPos = getBoardCenterPosition(from);
-        } else {
-            // ターゲットがいない場合は、画面上部中央へ
-            attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
-        }
-
-        // Use the local player's board position instead of static coordinates
-        const myPos = getBoardCenterPosition(socket.id);
-        if (myPos) {
-            createLightOrb(attackerPos, myPos);
-        } else {
-            // Fallback to center of main board if getBoardCenterPosition fails
-            const wrapper = document.getElementById('overall-game-wrapper');
-            if (wrapper) {
-                const wrapperRect = wrapper.getBoundingClientRect();
-                const mainBoard = document.getElementById('main-game-board');
-                if (mainBoard) {
-                    const boardRect = mainBoard.getBoundingClientRect();
-                    const x = boardRect.left - wrapperRect.left + boardRect.width / 2;
-                    const y = boardRect.top - wrapperRect.top + boardRect.height / 2;
-                    createLightOrb(attackerPos, { x, y });
                 }
+
+            });
+
+            startAnimationIfNeeded();
+
+            finalRanking = {}; // Reset for new game
+
+            lastSentBoard = null; // Ensure board history is cleared for the new game
+
+        });
+
+    
+
+        socket.on("ranking", (data) => {
+
+            const { yourRankMap, statsMap, roomId } = data;
+
+            if (roomId !== currentRoomId) {
+
+                return;
+
             }
-        }
-    });
 
-    socket.on("GarbageTransfer", ({ from, to, lines }) => {
-        // Don't draw the effect if I am the one receiving it,
-        // as ReceiveGarbage already handles that.
-        if (to === socket.id) return;
+    
 
-        const fromPos = getBoardCenterPosition(from);
-        const toPos = getBoardCenterPosition(to);
+                
 
-        if (fromPos && toPos) {
-            createLightOrb(fromPos, toPos);
-        }
-    });
+    
 
-    socket.on("disconnect", (reason) => {
-        console.log(`❌ サーバーから切断されました: ${reason}`);
-        if (!wasManualDisconnect()) {
+                    Object.assign(finalRanking, yourRankMap);
+
+    
+
+                    Object.assign(finalStatsMap, statsMap); // NEW
+
+    
+
+                    
+
+    
+
+                    miniboardSlots.forEach(slot => {
+
+    
+
+                        if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
+
+    
+
+                            finalRanking[slot.userId] = null;
+
+    
+
+                        }
+
+    
+
+                    });
+
+    
+
+                    if (!finalRanking.hasOwnProperty(socket.id)) {
+
+    
+
+                        finalRanking[socket.id] = null;
+
+    
+
+                    }
+
+    
+
+            
+
+    
+
+                    miniboardSlots.forEach(slot => {
+
+    
+
+                        if (slot.userId && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
+
+    
+
+                            slot.isGameOver = true;
+
+    
+
+                            slot.dirty = true;
+
+    
+
+                        }
+
+    
+
+                    });
+
+    
+
+                    startAnimationIfNeeded();
+
+    
+
+            
+
+    
+
+                    const myRank = finalRanking[socket.id];
+
+    
+
+                    
+
+    
+
+                    if (myRank === null || myRank === undefined) {
+
+    
+
+                        setGameState('PLAYING');
+
+    
+
+                        return;
+
+    
+
+                    }
+
+    
+
+            
+
+    
+
+                    const totalPlayers = Object.keys(finalRanking).length;
+
+    
+
+                    const knockedOutPlayers = Object.values(finalRanking).filter(r => r > 1).length;
+
+    
+
+                    const isMatchOver = (knockedOutPlayers >= totalPlayers - 1 && totalPlayers > 1);
+
+    
+
+                    const amKnockedOut = myRank > 1;
+
+    
+
+            
+
+    
+
+                    if (isMatchOver) {
+
+    
+
+                        setGameState('GAME_OVER');
+
+    
+
+                        const isWin = myRank === 1;
+
+    
+
+                        const title = isWin ? 'You Win!' : 'Game Over';
+
+    
+
+                        if (isWin) setGameClear(true);
+
+    
+
+                        showGameEndScreen(title, isWin, finalRanking, socket.id, finalStatsMap || {});
+
+    
+
+                    } else if (amKnockedOut) {
+
+    
+
+                        setGameState('GAME_OVER');
+
+    
+
+                        const gameEndOverlay = document.getElementById('game-end-overlay');
+
+    
+
+                        if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
+
+    
+
+                            showGameEndScreen('Game Over', false, finalRanking, socket.id, finalStatsMap || {});
+
+    
+
+                        }
+
+    
+
+                    } else {
+
+    
+
+                        setGameState('PLAYING');
+
+    
+
+                    }
+
+    
+
+                });
+
+    
+
+            
+
+    
+
+                socket.on("YouWin", () => {
+
+    
+
+                    setGameState('GAME_OVER');
+
+    
+
+                    showGameEndScreen('You Win!', true, finalRanking, socket.id, finalStatsMap || {});
+
+    
+
+                });
+
+    
+
+            
+
+    
+
+                socket.on("GameOver", () => {
+
+    
+
+                    setGameState('GAME_OVER');
+
+    
+
+                    showGameEndScreen('Game Over', false, finalRanking, socket.id, finalStatsMap || {});
+
+    
+
+                });
+
+    
+
+        socket.on("BoardStatus", (data) => {
+
+            if (gameState !== 'PLAYING') return; // Ignore if not in a game
+
+            const { UserID, board, diff } = data;
+
+            let slot = miniboardSlots.find(s => s.userId === UserID);
+
+            if (!slot) {
+
+                // Only add opponent if this isn't our own board data
+
+                // This prevents duplicate creation during game state transitions
+
+                if (UserID !== socket.id) {
+
+                    addOpponent(UserID);
+
+                    slot = miniboardSlots.find(s => s.userId === UserID);
+
+                }
+
+            }
+
+            if (slot) updateSlotBoard(slot, board, diff);
+
+        });
+
+    
+
+        socket.on("BoardStatusBulk", (boards) => {
+
+            if (gameState !== 'PLAYING') return; // Ignore if not in a game
+
+            for (const userId in boards) {
+
+                const boardData = boards[userId];
+
+                if (!boardData) continue;
+
+                let slot = miniboardSlots.find(s => s.userId === userId);
+
+                if (!slot) {
+
+                    // Only add opponent if this isn't our own board data
+
+                    // This prevents duplicate creation during game state transitions
+
+                    if (userId !== socket.id) {
+
+                        addOpponent(userId);
+
+                        slot = miniboardSlots.find(s => s.userId === userId);
+
+                    }
+
+                }
+
+                if (slot) updateSlotBoard(slot, boardData.board, boardData.diff);
+
+            }
+
+        });
+
+    
+
+        socket.on("PlayerDisconnected", ({ userId }) => {
+
+            removeOpponent(userId);
+
+        });
+
+    
+
+        socket.on("CountDown", (count) => {
+
+            currentCountdown = count;
+
+            showCountdown(count);
+
+        });
+
+    
+
+        socket.on("ReceiveGarbage", ({ from, lines }) => {
+
+            addAttackBar(lines);
+
+    
+
+            let attackerPos;
+
+            if (from) {
+
+                attackerPos = getBoardCenterPosition(from);
+
+            } else {
+
+                // ターゲットがいない場合は、画面上部中央へ
+
+                attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
+
+            }
+
+    
+
+            // Use the local player's board position instead of static coordinates
+
+            const myPos = getBoardCenterPosition(socket.id);
+
+            if (myPos) {
+
+                createLightOrb(attackerPos, myPos);
+
+            } else {
+
+                // Fallback to center of main board if getBoardCenterPosition fails
+
+                const wrapper = document.getElementById('overall-game-wrapper');
+
+                if (wrapper) {
+
+                    const wrapperRect = wrapper.getBoundingClientRect();
+
+                    const mainBoard = document.getElementById('main-game-board');
+
+                    if (mainBoard) {
+
+                        const boardRect = mainBoard.getBoundingClientRect();
+
+                        const x = boardRect.left - wrapperRect.left + boardRect.width / 2;
+
+                        const y = boardRect.top - wrapperRect.top + boardRect.height / 2;
+
+                        createLightOrb(attackerPos, { x, y });
+
+                    }
+
+                }
+
+            }
+
+        });
+
+    
+
+        socket.on("GarbageTransfer", ({ from, to, lines }) => {
+
+            // Don't draw the effect if I am the one receiving it,
+
+            // as ReceiveGarbage already handles that.
+
+            if (to === socket.id) return;
+
+    
+
+            const fromPos = getBoardCenterPosition(from);
+
+            const toPos = getBoardCenterPosition(to);
+
+    
+
+            if (fromPos && toPos) {
+
+                createLightOrb(fromPos, toPos);
+
+            }
+
+        });
+
+    
+
+        socket.on("disconnect", (reason) => {
+
+            console.log(`❌ サーバーから切断されました: ${reason}`);
+
+            if (!wasManualDisconnect()) {
+
+                showConnectionError();
+
+            }
+
+        });
+
+    
+
+        socket.on("connect_error", (err) => {
+
+            console.error(`接続エラー: ${err.message}`);
+
             showConnectionError();
-        }
-    });
 
-    socket.on("connect_error", (err) => {
-        console.error(`接続エラー: ${err.message}`);
-        showConnectionError();
-    });
+        });
 
-    socket.on("reconnect", (attemptNumber) => {
-        console.log("✅ サーバーに再接続しました", `Attempt #${attemptNumber}`);
-        hideConnectionError();
-        socket.emit('requestRoomInfo');
-        resetGame();
-        setGameState('LOBBY'); // Ensure client is in lobby state on reconnect
+    
 
-        // If was manually disconnected but not through UI actions, attempt to rejoin
-        if (!wasManualDisconnect()) {
-            // Check if we were in a room before, and rejoin if needed
+        socket.on("reconnect", (attemptNumber) => {
+
+            console.log("✅ サーバーに再接続しました", `Attempt #${attemptNumber}`);
+
+            hideConnectionError();
+
             socket.emit('requestRoomInfo');
-        }
-    });
 
-    socket.on("reconnect_failed", () => {
-        console.error("再接続に失敗しました");
-        showConnectionError();
-    });
-}
+            resetGame();
 
-initializeSocket();
+            setGameState('LOBBY'); // Ensure client is in lobby state on reconnect
 
-export let playerTargets = new Map();
+    
+
+            // If was manually disconnected but not through UI actions, attempt to rejoin
+
+            if (!wasManualDisconnect()) {
+
+                // Check if we were in a room before, and rejoin if needed
+
+                socket.emit('requestRoomInfo');
+
+            }
+
+        });
+
+    
+
+            socket.on("reconnect_failed", () => {
+
+    
+
+                console.error("再接続に失敗しました");
+
+    
+
+                showConnectionError();
+
+    
+
+            });
+
+    
+
+        
+
+    
+
+            // NEW: uiMessage handler
+
+    
+
+            socket.on('uiMessage', (data) => {
+
+    
+
+                if (uiMessageCallback) {
+
+    
+
+                    uiMessageCallback(data);
+
+    
+
+                } else {
+
+    
+
+                    console.warn("uiMessage received but no callback registered:", data);
+
+    
+
+                }
+
+    
+
+            });
+
+    
+
+        
+
+    
+
+            socket.on("roomClosed", () => {
+
+            console.log("ルームが閉鎖されました");
+
+            // Set game state to lobby and reset game
+
+            setGameState('LOBBY');
+
+            resetGame();
+
+            // Call the callback if available
+
+            if (roomClosedCallback) {
+
+                roomClosedCallback();
+
+            } else {
+
+                // Fallback - this shouldn't happen if main.js sets the callback
+
+                alert('ルームがホストによって閉鎖されました。');
+
+            }
+
+        });
+
+    
+
+        socket.connect(); // Connect the socket after all event handlers are registered
+
+    }
+
+    
+
+    export let playerTargets = new Map();
+
+    
 
 export let currentCountdown = null;
 
@@ -281,8 +744,30 @@ export let isManualDisconnect = false; // New flag for manual disconnect
 // --- Callback for stats ---
 let getStatsCallback = () => ({ score: 0, lines: 0, level: 1, time: '0.00', pps: 0, apm: 0 });
 
+// --- Callback for closing menu when game starts ---
+let closeMenuCallback = null;
+
+// --- Callback for room closed event ---
+let roomClosedCallback = null;
+
+// NEW: Callback for uiMessage
+let uiMessageCallback = null;
+
 export function setOnlineGetStatsCallback(callback) {
     getStatsCallback = callback;
+}
+
+export function setCloseMenuCallback(callback) {
+    closeMenuCallback = callback;
+}
+
+export function setRoomClosedCallback(callback) {
+    roomClosedCallback = callback;
+}
+
+// NEW: Export function to set uiMessage callback
+export function setUIMessageCallback(callback) {
+    uiMessageCallback = callback;
 }
 
 // --- Opponent State Management ---
@@ -439,12 +924,15 @@ function setupMiniboardSlots() {
 // Setup slots on initial load
 window.addEventListener('load', setupMiniboardSlots);
 
-export function connectToServer() {
-    socket.connect();
-}
+
 
 function addOpponent(userId) {
     if (userId === socket.id) return;
+    // NEW: Also check if userId is one of our past socket IDs
+    if (myPastSocketIds.has(userId)) {
+        console.warn(`Attempted to add old self (ID: ${userId}) as opponent. Ignoring.`);
+        return;
+    }
     const existingSlot = miniboardSlots.find(slot => slot.userId === userId);
     if (existingSlot) return;
 
@@ -711,25 +1199,6 @@ function getAttackBarPosition() {
     };
 }
 
-// --- Socket Event Handlers ---
-socket.on("connect", () => {
-    console.log("✅ サーバーに接続:", socket.id);
-    miniboardSlots.forEach(slot => {
-        slot.userId = null;
-        slot.dirty = true;
-    });
-    startAnimationIfNeeded();
-    finalRanking = {}; // Reset on new connection
-    
-    if (wasManualDisconnect()) {
-        setManualDisconnect(false);
-        startMatching(); // auto-retry
-    } else {
-        setGameState('LOBBY'); // Ensure client is in lobby state on connect
-        hideConnectionError();
-    }
-});
-
 export function startMatching() {
     miniboardSlots.forEach(slot => {
         slot.userId = null;
@@ -738,87 +1207,6 @@ export function startMatching() {
     startAnimationIfNeeded(); // Redraw to show them empty
     socket.emit("matching");
 }
-
-socket.on('targetsUpdate', (targets) => {
-    playerTargets = new Map(targets);
-    // We need to redraw the miniboards to update their target styles
-    miniboardSlots.forEach(slot => slot.dirty = true);
-    startAnimationIfNeeded();
-});
-
-socket.on("roomInfo", (data) => {
-    currentRoomId = data.roomId; // Store the current room ID
-    const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
-    const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
-
-    // Add new opponents
-    newOpponentIds.forEach(id => {
-        if (!currentOpponents.has(id)) addOpponent(id);
-    });
-
-    // Remove disconnected opponents
-    currentOpponents.forEach(id => {
-        if (!newOpponentIds.has(id)) removeOpponent(id);
-    });
-});
-
-socket.on("StartGame", () => {
-    currentCountdown = null;
-    showCountdown(null);
-    hideGameEndScreen(); // Hide end screen
-    resetGame(); // Changed to resetGame()
-    setHoldPiece(null); // Moved from CountDown
-    drawUI();           // Moved from CountDown
-    setGameState('PLAYING');
-    miniboardSlots.forEach(slot => {
-        if (slot.userId) { // Only reset boards for active opponents
-            slot.isGameOver = false;
-            slot.boardState.forEach(row => row.fill(0)); // Clear the board state
-            slot.dirty = true;
-        }
-    });
-    startAnimationIfNeeded();
-    finalRanking = {}; // Reset for new game
-    lastSentBoard = null; // Ensure board history is cleared for the new game
-});
-
-
-
-socket.on("BoardStatus", (data) => {
-    if (gameState !== 'PLAYING') return; // Ignore if not in a game
-    const { UserID, board, diff } = data;
-    let slot = miniboardSlots.find(s => s.userId === UserID);
-    if (!slot) {
-        addOpponent(UserID);
-        slot = miniboardSlots.find(s => s.userId === UserID);
-    }
-    if (slot) updateSlotBoard(slot, board, diff);
-});
-
-socket.on("BoardStatusBulk", (boards) => {
-    if (gameState !== 'PLAYING') return; // Ignore if not in a game
-    for (const userId in boards) {
-        const boardData = boards[userId];
-        if (!boardData) continue;
-        let slot = miniboardSlots.find(s => s.userId === userId);
-        if (!slot) {
-            addOpponent(userId);
-            slot = miniboardSlots.find(s => s.userId === userId);
-        }
-        if (slot) updateSlotBoard(slot, boardData.board, boardData.diff);
-    }
-});
-
-socket.on("PlayerDisconnected", ({ userId }) => {
-    removeOpponent(userId);
-});
-
-// --- Rest of the file is the same as before (sending data, error handling) ---
-
-socket.on("CountDown", (count) => {
-    currentCountdown = count;
-    showCountdown(count);
-});
 
 let lastSentBoard = null;
 function getBoardWithCurrentPiece(board, currentPiece) {
@@ -920,5 +1308,12 @@ function hideConnectionError() {
     errorOverlay.style.display = 'none';
 }
 // Reconnection logic is handled in the initializeSocket function
+
+// Function to connect to server (if not already connected)
+export function connectToServer() {
+    if (socket && !socket.connected) {
+        socket.connect();
+    }
+}
 
 export { connectionError, startAnimationIfNeeded, addOpponent, removeOpponent, updateSlotBoard };

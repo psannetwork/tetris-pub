@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 
 // --- Bot Configuration ---
 const ENABLE_BOTS = false;
-const BOT_COUNT = 98;
+const BOT_COUNT = 15;
 // -------------------------
 
 const PORT = process.env.PORT || 6000;
@@ -32,7 +32,8 @@ app.get("/rooms", (req, res) => {
     .map(room => ({
       roomId: room.roomId,
       playersCount: room.players.size,
-      isGameStarted: room.isGameStarted
+      isGameStarted: room.isGameStarted,
+      isPrivate: room.isPrivate
     }));
   res.json({ rooms: roomInfo });
 });
@@ -68,6 +69,9 @@ if (ENABLE_BOTS) {
         new TetrisBot(i, Math.floor(Math.random() * 101), BASE_AI_PARAMETERS, botSocket);
 
         handleSocketConnection(io, botSocket);
+
+        // Track bot socket connection
+        trackSocketConnection(botSocket.id);
 
         setImmediate(() => {
             botSocket.emit('matching');
