@@ -4,7 +4,7 @@ import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect, miniboardEntryEffects } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
 import { drawUI } from './draw.js';
 import { setRoomDisplayState } from './main.js'; // Import setRoomDisplayState
 
@@ -1173,11 +1173,11 @@ export function drawAllMiniBoards() {
     const currentTime = performance.now();
     miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
 
-    // Check if there are any active effects OR if the game is playing and there are opponents
-    const hasActiveEffects = false; // Miniboard entry effects are now managed in effects.js
+    // Check if there are any active effects OR if the game is playing/spectating and there are opponents
+    const hasActiveEffects = miniboardEntryEffects.some(effect => effect.isActive()); // NEW: Check active miniboard effects
     const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
 
-    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents)) {
+    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents) || (gameState === 'SPECTATING' && hasActiveOpponents)) { // NEW: Add SPECTATING state
         animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     } else {
         animationFrameId = null;
