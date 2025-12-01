@@ -423,22 +423,26 @@ class TetrisBot {
   }
 
   async playLoop() {
-    while(isValidPosition(this.currentPiece,this.board,0,0)) {
-      const best=this.findBestMove();
-      if(best) await this.animateMove(best);
-      else hardDrop(this.currentPiece,this.board);
-      mergePiece(this.currentPiece,this.board);
-      const cleared=clearLines(this.board);
-      this.gameStats.totalCleared += cleared;
-      this.gameStats.renChain=cleared?this.gameStats.renChain+1:0;
-      const boardCopy=this.board.map(r=>r.slice());
-      const sendG=computeSendGarbage(this.currentPiece,cleared,this.gameStats.renChain,boardCopy);
-      if(sendG>0) this.socket.emit('SendGarbage',{targetId:null,lines:sendG});
-      this.socket.emit('BoardStatus',{UserID:this.socket.id,board:drawBoard(this.board)});
-      if(this.pendingGarbage>0) this.applyGarbage();
-      this.currentPiece=spawnPiece();
-      if(!isValidPosition(this.currentPiece,this.board,0,0)) break;
-      await delay(this.moveDelay);
+    try {
+        while(isValidPosition(this.currentPiece,this.board,0,0)) {
+          const best=this.findBestMove();
+          if(best) await this.animateMove(best);
+          else hardDrop(this.currentPiece,this.board);
+          mergePiece(this.currentPiece,this.board);
+          const cleared=clearLines(this.board);
+          this.gameStats.totalCleared += cleared;
+          this.gameStats.renChain=cleared?this.gameStats.renChain+1:0;
+          const boardCopy=this.board.map(r=>r.slice());
+          const sendG=computeSendGarbage(this.currentPiece,cleared,this.gameStats.renChain,boardCopy);
+          if(sendG>0) this.socket.emit('SendGarbage',{targetId:null,lines:sendG});
+          this.socket.emit('BoardStatus',{UserID:this.socket.id,board:drawBoard(this.board)});
+          if(this.pendingGarbage>0) this.applyGarbage();
+          this.currentPiece=spawnPiece();
+          if(!isValidPosition(this.currentPiece,this.board,0,0)) break;
+          await delay(this.moveDelay);
+        }
+    } catch (error) {
+        console.error(`[Bot ${this.index}] Error in playLoop:`, error);
     }
     this.socket.emit('PlayerGameStatus','gameover');
     this.socket.disconnect();

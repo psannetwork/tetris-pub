@@ -7,6 +7,7 @@ const playerRoom = new Map();
 const playerRanks = new Map();
 const spectators = new Map();
 const playerLastActive = new Map(); // Track last activity time for each player
+const playerBoardLastUpdated = new Map(); // Track last board update time
 const socketConnections = new Map(); // Track socket connections with timestamps
 // let roomCounter = 0; // Removed roomCounter as IDs will be random
 
@@ -35,7 +36,8 @@ function generateUniqueRoomId() {
 let ioRef = null;
 
 // Timeout duration in milliseconds
-const PLAYER_TIMEOUT_MS = 30000; // 30 seconds
+const PLAYER_TIMEOUT_MS = 40000; // 40 seconds
+const BOARD_UPDATE_TIMEOUT_MS = 15000; // 15 seconds
 
 function setIoReference(io) {
     ioRef = io;
@@ -56,13 +58,19 @@ function checkPlayerTimeouts(roomId) {
         // Skip bots
         if (bots.has(playerId)) continue;
 
-        const lastActive = playerLastActive.get(playerId);
-        if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
-            console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no activity for ${Math.floor((now - lastActive)/1000)}s)`);
-            if (room.isGameStarted) {
+        if (room.isGameStarted && !room.isGameOver) {
+            // --- In-Game Timeout Logic (Board Updates) ---
+            const lastBoardUpdate = playerBoardLastUpdated.get(playerId);
+
+            if (lastBoardUpdate && (now - lastBoardUpdate > BOARD_UPDATE_TIMEOUT_MS)) {
+                console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no board update for 15s)`);
                 handlePlayerTimeout(ioRef, playerId, roomId);
-            } else {
-                // If game hasn't started, just kick the player
+            }
+        } else {
+            // --- Lobby Timeout Logic (General Activity) ---
+            const lastActive = playerLastActive.get(playerId);
+            if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
+                console.log(`⏰ Player ${playerId} timed out in lobby of room ${roomId} (no activity for 40s)`);
                 kickPlayer(ioRef, roomId, playerId, "活動がないため部屋から退出させられました。");
             }
         }
@@ -312,6 +320,11 @@ function startCountdown(io, room) {
                 room.isCountingDown = false;
                 room.isGameStarted = true;
                 room.totalPlayers = room.initialPlayers.size;
+                // Initialize board update timestamps for all players
+                const now = Date.now();
+                for (const playerId of room.players) {
+                    playerBoardLastUpdated.set(playerId, now);
+                }
                 emitToRoom(io, room, "StartGame");
                 console.log(`🎮 Room ${room.roomId} game started (totalPlayers: ${room.totalPlayers}).`);
 
@@ -506,6 +519,7 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
     delete room.boards[playerIdToKick];
     // Clear player's activity tracking
     playerLastActive.delete(playerIdToKick);
+    playerBoardLastUpdated.delete(playerIdToKick);
 
     // Find the socket of the kicked player and disconnect them from the room
     if (io) {
@@ -595,6 +609,7 @@ function startSocketCleanupInterval() {
 
                 // Clean up activity tracking
                 playerLastActive.delete(socketId);
+                playerBoardLastUpdated.delete(socketId);
                 playerRanks.forEach((rankArray, roomKey) => {
                     const index = rankArray.indexOf(socketId);
                     if (index > -1) {
@@ -617,6 +632,7 @@ module.exports = {
     playerRanks,
     spectators,
     playerLastActive, // Export player activity tracking map
+    playerBoardLastUpdated, // Export board update tracking map
     socketConnections, // Export socket connections tracking map
     createRoom,
     createPrivateRoom, // New export

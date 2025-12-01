@@ -19,7 +19,8 @@ const {
     trackSocketConnection, // Import function to track socket connections
     untrackSocketConnection, // Import function to untrack socket connections
     startSocketCleanupInterval, // Import function to start socket cleanup interval
-    playerLastActive // Import the player activity tracking map
+    playerLastActive, // Import the player activity tracking map
+    playerBoardLastUpdated // Import board update tracking map
 } = require('./room.js');
 
 // Rate limiting and validation data
@@ -320,6 +321,9 @@ function handleSocketConnection(io, socket) {
         const room = rooms.get(roomId);
         if (!room || room.isGameOver) return;
 
+        // Update player board activity timestamp
+        playerBoardLastUpdated.set(socket.id, Date.now());
+
         // Update player activity
         updatePlayerActivity(socket.id);
 
@@ -533,6 +537,7 @@ function handleSocketConnection(io, socket) {
         // Clean up player activity tracking
         playerActivity.delete(socket.id);
         playerLastActive.delete(socket.id);
+        playerBoardLastUpdated.delete(socket.id);
         // Untrack socket connection
         untrackSocketConnection(socket.id);
         if (bots.has(socket.id)) {
