@@ -19,6 +19,19 @@ export function initEffects(canvas) {
     effectsCtx = effectsCanvas.getContext('2d');
 }
 
+/**
+ * Clears all active visual effects from the screen.
+ */
+export function clearAllEffects() {
+    effects.length = 0;
+    textEffects.length = 0;
+    orbs.length = 0;
+    tspinEffect = null;
+    scoreUpdateEffect = null;
+    targetAttackFlashes.clear();
+    console.log("Cleared all visual effects.");
+}
+
 // --- Text Effect ---
 export function addTextEffect(text, { style = 'default', duration = 1500, x, y } = {}) {
     const offset = getMainBoardOffset();

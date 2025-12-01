@@ -49,8 +49,11 @@ function handleSocketConnection(io, socket) {
         room.playerTargets.set(socket.id, targetId);
 
         // Broadcast the change
-        emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
         //console.log(`🎯 ${socket.id} is now targeting ${targetId}`);
+    });
+
+    socket.on("heartbeat", () => {
+        updatePlayerActivity(socket.id);
     });
 
     socket.on("matching", () => {

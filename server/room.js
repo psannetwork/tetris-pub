@@ -58,13 +58,12 @@ function checkPlayerTimeouts(roomId) {
 
         const lastActive = playerLastActive.get(playerId);
         if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
-            // Only timeout during game (after game started)
+            console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no activity for ${Math.floor((now - lastActive)/1000)}s)`);
             if (room.isGameStarted) {
-                console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no activity for ${Math.floor((now - lastActive)/1000)}s)`);
                 handlePlayerTimeout(ioRef, playerId, roomId);
             } else {
-                // During pre-game phase, just update activity to prevent timeout
-                updatePlayerActivity(playerId);
+                // If game hasn't started, just kick the player
+                kickPlayer(ioRef, roomId, playerId, "活動がないため部屋から退出させられました。");
             }
         }
     }
@@ -361,26 +360,9 @@ function handleGameOver(io, socket, reason, stats) {
     const stillPlaying = [...room.initialPlayers].filter(id => !ranks.includes(id));
     const finalRanks = [...stillPlaying, ...ranks.slice().reverse()];
     
-    const yourRankMap = Object.fromEntries(
-        [...room.initialPlayers].map(id => {
-            const rank = finalRanks.indexOf(id) + 1;
-            // If player is still playing, their rank is provisional (e.g., "1-3")
-            // If they are eliminated, they have a fixed rank.
-            return [id, rank > 0 ? rank : null];
-        })
-    );
-    
-    // For players still playing, instead of a number, we can show a range.
-    // Let's adjust the rank map for this.
-    const eliminatedCount = ranks.length;
-    [...room.initialPlayers].forEach(id => {
-        if(stillPlaying.includes(id)) {
-            // Still playing, rank is 1
-            yourRankMap[id] = 1;
-        } else {
-            // Eliminated, rank is total players - their position in reversed ranks list
-            yourRankMap[id] = stillPlaying.length + ranks.slice().reverse().indexOf(id) + 1;
-        }
+    const yourRankMap = {};
+    finalRanks.forEach((playerId, index) => {
+        yourRankMap[playerId] = index + 1;
     });
 
     console.log(`[Ranking] Emitting ranks for room ${roomId}. Rank Map:`, yourRankMap);
@@ -556,7 +538,7 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
         hostId: room.hostId
     });
 
-    // If the room becomes empty and game is not over, clean it up
+        // If the room becomes empty and game is not over, clean it up
     if (room.players.size === 0 && !room.isGameOver) {
         clearInterval(room.countdownInterval);
         // Clear the timeout when the room is getting cleaned up
@@ -565,10 +547,8 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
             room.timeoutId = null;
         }
         spectators.delete(roomId);
-        setTimeout(() => {
-            rooms.delete(roomId);
-            console.log(`🗑️ Room ${roomId} deleted due to being empty after a player was kicked.`);
-        }, 5000);
+        rooms.delete(roomId);
+        console.log(`🗑️ Room ${roomId} deleted due to being empty after a player was kicked.`);
     }
     return true;
 }
@@ -610,10 +590,8 @@ function startSocketCleanupInterval() {
                                 room.timeoutId = null;
                             }
                             spectators.delete(roomId);
-                            setTimeout(() => {
-                                rooms.delete(roomId);
-                                console.log(`🗑️ Room ${roomId} deleted due to being empty after socket cleanup.`);
-                            }, 5000);
+                            rooms.delete(roomId);
+                            console.log(`🗑️ Room ${roomId} deleted due to being empty after socket cleanup.`);
                         }
                     }
                     playerRoom.delete(socketId);

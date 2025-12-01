@@ -4,14 +4,18 @@ import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect } from './effects.js';
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects } from './effects.js'; // Added clearAllEffects
 import { drawUI } from './draw.js';
+import { setRoomDisplayState } from './main.js'; // Import setRoomDisplayState
 
 export let socket;
 let shouldAutoMatchOnReconnect = true; // Flag to control auto-matching
 
 let currentSocketId = null; // To track current socket ID
 const myPastSocketIds = new Set(); // To store past socket IDs of this client
+
+const HEARTBEAT_INTERVAL_MS = 5000; // Send heartbeat every 5 seconds
+let heartbeatIntervalId = null; // To store the interval ID
 
 export function setAutoMatchOnReconnect(value) {
     shouldAutoMatchOnReconnect = value;
@@ -52,6 +56,17 @@ export function initializeSocket() {
         });
         startAnimationIfNeeded();
         finalRanking = {}; // Reset on new connection
+        finalStatsMap = {}; // Reset on new connection
+
+        // Start heartbeat
+        if (heartbeatIntervalId) {
+            clearInterval(heartbeatIntervalId);
+        }
+        heartbeatIntervalId = setInterval(() => {
+            if (socket.connected) {
+                socket.emit('heartbeat');
+            }
+        }, HEARTBEAT_INTERVAL_MS);
 
         if (wasManualDisconnect() && shouldAutoMatchOnReconnect) {
             setManualDisconnect(false);
@@ -91,25 +106,59 @@ export function initializeSocket() {
 
     
 
-            // Add new opponents
-
-            newOpponentIds.forEach(id => {
-
-                if (!currentOpponents.has(id)) addOpponent(id);
-
-            });
+                        // Add new opponents
 
     
 
-            // Remove disconnected opponents
+                        newOpponentIds.forEach(id => {
 
-            currentOpponents.forEach(id => {
+    
 
-                if (!newOpponentIds.has(id)) removeOpponent(id);
+                            if (!currentOpponents.has(id)) addOpponent(id);
 
-            });
+    
 
-        });
+                        });
+
+    
+
+                
+
+    
+
+                        // Remove disconnected opponents
+
+    
+
+                        currentOpponents.forEach(id => {
+
+    
+
+                            if (!newOpponentIds.has(id)) removeOpponent(id);
+
+    
+
+                        });
+
+    
+
+            
+
+    
+
+                        // Update UI with room info
+
+    
+
+                        setGameState('ROOM_LOBBY');
+
+    
+
+                        setRoomDisplayState(true, data.hostId === socket.id, data.roomId, data.members, data.isPrivate);
+
+    
+
+                    });
 
     
 
@@ -154,6 +203,7 @@ export function initializeSocket() {
             startAnimationIfNeeded();
 
             finalRanking = {}; // Reset for new game
+            finalStatsMap = {}; // Reset for new game
 
             lastSentBoard = null; // Ensure board history is cleared for the new game
 
@@ -581,27 +631,79 @@ export function initializeSocket() {
 
     
 
-        socket.on("disconnect", (reason) => {
-
-            console.log(`❌ サーバーから切断されました: ${reason}`);
-
-            if (!wasManualDisconnect()) {
-
-                showConnectionError();
-
-            }
-
-        });
+                socket.on("disconnect", (reason) => {
 
     
 
-        socket.on("connect_error", (err) => {
+                    console.log(`❌ サーバーから切断されました: ${reason}`);
 
-            console.error(`接続エラー: ${err.message}`);
+    
 
-            showConnectionError();
+                    if (heartbeatIntervalId) {
 
-        });
+    
+
+                        clearInterval(heartbeatIntervalId);
+
+    
+
+                        heartbeatIntervalId = null;
+
+    
+
+                    }
+
+    
+
+        
+
+    
+
+                    if (!wasManualDisconnect()) {
+
+    
+
+                        showConnectionError();
+
+    
+
+                    }
+
+    
+
+                });
+
+    
+
+                socket.on("connect_error", (err) => {
+
+    
+
+                    console.error(`接続エラー: ${err.message}`);
+
+    
+
+                    if (heartbeatIntervalId) {
+
+    
+
+                        clearInterval(heartbeatIntervalId);
+
+    
+
+                        heartbeatIntervalId = null;
+
+    
+
+                    }
+
+    
+
+                    showConnectionError();
+
+    
+
+                });
 
     
 
@@ -633,19 +735,35 @@ export function initializeSocket() {
 
     
 
-            socket.on("reconnect_failed", () => {
+                        socket.on("reconnect_failed", () => {
 
     
 
-                console.error("再接続に失敗しました");
+                            console.error("再接続に失敗しました");
 
     
 
-                showConnectionError();
+                            if (heartbeatIntervalId) {
 
     
 
-            });
+                                clearInterval(heartbeatIntervalId);
+
+    
+
+                                heartbeatIntervalId = null;
+
+    
+
+                            }
+
+    
+
+                            showConnectionError();
+
+    
+
+                        });
 
     
 
@@ -1081,7 +1199,8 @@ function startAnimationIfNeeded() {
 
 
 let finalRanking = {}; // To store all player ranks
-let currentRoomId = null; // To store the current room ID
+let finalStatsMap = {}; // To store all player stats
+export let currentRoomId = null; // To store the current room ID
 
 export function drawTargetLines(ctx) {
     if (!ctx || !socket.connected) {
@@ -1200,6 +1319,16 @@ function getAttackBarPosition() {
 }
 
 export function startMatching() {
+    // Clear main game board
+    resetGame();
+    // Clear effects
+    clearAllEffects();
+    // Clear player targets and flashes
+    playerTargets.clear();
+    targetAttackFlashes.clear();
+    // Hide game end screen
+    hideGameEndScreen();
+
     miniboardSlots.forEach(slot => {
         slot.userId = null;
         slot.dirty = true;

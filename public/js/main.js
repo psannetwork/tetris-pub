@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects, initEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, currentRoomId } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -88,7 +88,7 @@ function handleRoomClosed() {
     showMessage({ type: 'info', message: 'ルームがホストによって閉鎖されました。' });
 }
 
-let currentRoomId = null; // To keep track of the current room
+
 
 // --- Helper function to set button state ---
 function setButtonState(button, enabled) {
@@ -119,7 +119,7 @@ function showMessage({ type, message }) {
 }
 
 // --- UI Display State Management ---
-function setRoomDisplayState(inRoom, isHost = false, roomId = null, members = [], isPrivate = false) { // Added isPrivate
+export function setRoomDisplayState(inRoom, isHost = false, roomId = null, members = [], isPrivate = false) { // Added isPrivate
     if (inRoom) {
         lobbyOverlay.classList.add('hidden');
         mainMenuButtons.style.display = 'none';
