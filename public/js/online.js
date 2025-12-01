@@ -16,6 +16,11 @@ const myPastSocketIds = new Set(); // To store past socket IDs of this client
 
 const HEARTBEAT_INTERVAL_MS = 5000; // Send heartbeat every 5 seconds
 let heartbeatIntervalId = null; // To store the interval ID
+export let isSpectating = false; // NEW: Track if current client is spectating
+
+export function setSpectating(value) { // NEW: Setter for isSpectating
+    isSpectating = value;
+}
 
 export function setAutoMatchOnReconnect(value) {
     shouldAutoMatchOnReconnect = value;
@@ -485,9 +490,15 @@ export function initializeSocket() {
 
     
 
-        socket.on("BoardStatus", (data) => {
+                socket.on("BoardStatus", (data) => {
 
-            if (gameState !== 'PLAYING') return; // Ignore if not in a game
+    
+
+                    if (gameState !== 'PLAYING' && gameState !== 'SPECTATING') return; // NEW: Allow spectating
+
+    
+
+        
 
             const { UserID, board, diff } = data;
 
@@ -515,9 +526,15 @@ export function initializeSocket() {
 
     
 
-        socket.on("BoardStatusBulk", (boards) => {
+                socket.on("BoardStatusBulk", (boards) => {
 
-            if (gameState !== 'PLAYING') return; // Ignore if not in a game
+    
+
+                    if (gameState !== 'PLAYING' && gameState !== 'SPECTATING') return; // NEW: Allow spectating
+
+    
+
+        
 
             for (const userId in boards) {
 
@@ -858,15 +875,51 @@ export function initializeSocket() {
 
                 alert('ルームがホストによって閉鎖されました。');
 
-            }
+                        }
 
-        });
+                    });
 
-    
+            
 
-        socket.connect(); // Connect the socket after all event handlers are registered
+                    // NEW: publicRoomsList handler
 
-    }
+                    socket.on('publicRoomsList', (rooms) => {
+
+                        if (publicRoomsListCallback) {
+
+                            publicRoomsListCallback(rooms);
+
+                        } else {
+
+                            console.warn("publicRoomsList received but no callback registered:", rooms);
+
+                        }
+
+                    });
+
+            
+
+                    // NEW: spectateRoomInfo handler
+
+                    socket.on('spectateRoomInfo', (data) => {
+
+                        if (spectateRoomInfoCallback) {
+
+                            spectateRoomInfoCallback(data);
+
+                        } else {
+
+                            console.warn("spectateRoomInfo received but no callback registered:", data);
+
+                        }
+
+                    });
+
+            
+
+                    socket.connect(); // Connect the socket after all event handlers are registered
+
+                }
 
     
 
@@ -1277,6 +1330,7 @@ export function startMatching() {
     targetAttackFlashes.clear();
     // Hide game end screen
     hideGameEndScreen();
+    setSpectating(false); // NEW: Reset spectating state
 
     miniboardSlots.forEach(slot => {
         slot.userId = null;
@@ -1359,6 +1413,29 @@ export function sendAttack(targetId, lines, clearedLines = null) {
     }
 
     createLightOrb(myPos, targetPos);
+}
+
+// NEW: Spectator functions
+export function spectateRoom(roomId) {
+    if (!socket.connected) return;
+    socket.emit('spectateRoom', roomId);
+}
+
+export function requestPublicRooms() {
+    if (!socket.connected) return;
+    socket.emit('requestPublicRooms');
+}
+
+// NEW: Callbacks for spectator related events
+let publicRoomsListCallback = null;
+let spectateRoomInfoCallback = null;
+
+export function setPublicRoomsListCallback(callback) {
+    publicRoomsListCallback = callback;
+}
+
+export function setSpectateRoomInfoCallback(callback) {
+    spectateRoomInfoCallback = callback;
 }
 
 let connectionError = false;

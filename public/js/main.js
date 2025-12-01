@@ -7,9 +7,9 @@ import {
     board, score, linesCleared
 } from './game.js';
 import { drawGame, drawUI, setupCanvases } from './draw.js';
-import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects } from './effects.js';
+import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -48,6 +48,15 @@ let gameEndOverlay;
 let retryButton;
 let lobbyButton;
 
+// NEW: Spectator related variables
+let spectateButton;
+let joinPublicSpectateButton;
+let spectateRoomsModal;
+let publicRoomsList;
+let noPublicRoomsMessage;
+let spectatorMenuModal;
+let spectatorBackToLobbyButton;
+let spectatorRankingList;
 
 // --- Stats State ---
 let lastTime = 0;
@@ -83,6 +92,7 @@ function closeMenuWhenGameStarts() {
 function handleRoomClosed() {
     setGameState('LOBBY');
     resetGame();
+    setSpectating(false); // NEW: Reset spectating state
     setRoomDisplayState(false); // Go back to main lobby view
     updateButtonStates();
     showMessage({ type: 'info', message: 'ルームがホストによって閉鎖されました。' });
@@ -103,7 +113,7 @@ function setButtonState(button, enabled) {
 
 // --- Message Display Function ---
 let messageTimeout;
-function showMessage({ type, message }) {
+function showMessage({ type, message, data }) { // Added 'data' parameter
     clearTimeout(messageTimeout);
     if (messageDisplay) { // Ensure messageDisplay is defined
         messageDisplay.textContent = message;
@@ -113,6 +123,9 @@ function showMessage({ type, message }) {
 
         if (type === 'timeout') { // NEW: Trigger timeout effect
             startTimeoutEffect(message);
+        } else if (type === 'publicRoomsList' && data) { // NEW: Handle publicRoomsList
+            populatePublicRoomsList(data);
+            openModal(spectateRoomsModal);
         }
 
         messageTimeout = setTimeout(() => {
@@ -131,14 +144,14 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         currentRoomIdDisplay.textContent = roomId;
         adminRoomIdDisplay.textContent = roomId; // Update admin modal room ID
 
-        // Hamburger button visibility based on room type
-        if (isPrivate) {
+        // Hamburger button visibility based on room type or if spectating
+        if (isPrivate || gameState === 'SPECTATING') { // NEW: show hamburger if spectating
             hamburgerMenuButton.style.display = 'block';
         } else {
             hamburgerMenuButton.style.display = 'none'; // No hamburger for public matches
         }
 
-        if (isHost) {
+        if (isHost && !isSpectating) { // NEW: only show host buttons if not spectating
             roomHostStatusDisplay.textContent = '(ホスト)';
             hostStartGameButton.style.display = 'block';
             setButtonState(hostStartGameButton, true);
@@ -147,16 +160,29 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
             roomHostStatusDisplay.textContent = '';
             hostStartGameButton.style.display = 'none';
             // Non-hosts can still see the hamburger for private rooms to check members, etc.
-            if (isPrivate) { // Only show hamburger to non-hosts in private rooms
+            if (isPrivate && !isSpectating) { // Only show hamburger to non-hosts in private rooms
                 hamburgerMenuButton.style.display = 'block'; 
+            } else if (gameState === 'SPECTATING') { // NEW: if spectating, hamburger is for spectator menu
+                hamburgerMenuButton.style.display = 'block';
             } else {
                 hamburgerMenuButton.style.display = 'none'; // Ensure hidden for non-hosts in public rooms
             }
             setButtonState(adminStartGameButton, false); // Admin menu start button disabled for non-host
         }
+        
+        // Hide game-related panels if spectating
+        if (isSpectating) {
+            document.getElementById('game-left-panel').style.display = 'none';
+            document.getElementById('game-right-panel').style.display = 'none';
+            document.getElementById('attack-bar').style.display = 'none';
+        } else {
+            document.getElementById('game-left-panel').style.display = 'block';
+            document.getElementById('game-right-panel').style.display = 'block';
+            document.getElementById('attack-bar').style.display = 'block';
+        }
 
-        // Populate member list in admin modal
-        if (memberListUl) { // Guard against null
+        // Populate member list in admin modal (only if not spectating and host)
+        if (memberListUl && !isSpectating) { // NEW: Only show member list if not spectating
             memberListUl.innerHTML = '';
             members.forEach(memberId => {
                 const li = document.createElement('li');
@@ -185,6 +211,11 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         hostStartGameButton.style.display = 'none';
         if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Hide hamburger when not in a room
         setCurrentRoomId(null);
+        setSpectating(false); // NEW: Ensure spectating state is false
+        // Restore game-related panels if they were hidden
+        document.getElementById('game-left-panel').style.display = 'block';
+        document.getElementById('game-right-panel').style.display = 'block';
+        document.getElementById('attack-bar').style.display = 'block';
     }
 }
 
@@ -195,6 +226,12 @@ function openModal(modal) {
     mainMenuButtons.style.display = 'none';
     roomInfoDisplay.style.display = 'none'; // Also hide room info if showing
     if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Hide hamburger when other modals open
+    if (isSpectating) { // NEW: hide game-related elements if spectating
+        document.getElementById('game-left-panel').style.display = 'none';
+        document.getElementById('game-right-panel').style.display = 'none';
+        document.getElementById('attack-bar').style.display = 'none';
+        document.getElementById('main-game-board').style.display = 'none';
+    }
 }
 
 function closeModal(modal) {
@@ -217,12 +254,25 @@ function closeModal(modal) {
         joinRoomIdInput.value = '';
         joinRoomPasswordInput.value = '';
     }
+    // NEW: Clear spectator rooms list
+    if (modal === spectateRoomsModal) {
+        publicRoomsList.innerHTML = '';
+        noPublicRoomsMessage.style.display = 'none';
+    }
+    // NEW: Restore game-related elements if spectating and closing spectator menu
+    if (isSpectating && (modal === spectatorMenuModal || modal === spectateRoomsModal)) {
+        document.getElementById('game-left-panel').style.display = 'none'; // Should already be none
+        document.getElementById('game-right-panel').style.display = 'none'; // Should already be none
+        document.getElementById('attack-bar').style.display = 'none'; // Should already be none
+        document.getElementById('main-game-board').style.display = 'block'; // Restore main board
+    }
 }
 
 
 // --- Game Loop ---
 function update(now = performance.now()) {
-    if (gameState === 'PLAYING') {
+    // If spectating, do not run player-specific game logic
+    if (gameState === 'PLAYING' && !isSpectating) { // NEW: Add !isSpectating
         if (gameStartTime === 0) {
             gameStartTime = now;
         }
@@ -256,8 +306,15 @@ function update(now = performance.now()) {
         pps = (piecesPlaced / elapsedTime || 0).toFixed(2);
         apm = ((keyPresses * 60) / elapsedTime || 0).toFixed(1);
 
+    } else if (gameState === 'SPECTATING') { // NEW: Handle spectating state
+        // In spectating mode, only effects are updated and miniboards drawn
+        updateEffects();
+        // Stats are reset as no active player game is running
+        gameStartTime = 0;
+        piecesPlaced = 0;
+        keyPresses = 0;
     } else {
-        // Reset stats when not playing
+        // Reset stats when not playing (or spectating)
         gameStartTime = 0;
         piecesPlaced = 0;
         keyPresses = 0;
@@ -281,18 +338,33 @@ function updateButtonStates() {
         setButtonState(joinPublicMatchButton, true);
         setButtonState(retryButton, false);
         setButtonState(lobbyButton, false);
-    } else if (gameState === 'PLAYING') {
+        setButtonState(spectateButton, false); // NEW
+        setButtonState(joinPublicSpectateButton, true); // NEW
+    } else if (gameState === 'PLAYING' && !isSpectating) { // NEW: Check !isSpectating
         setButtonState(joinPublicMatchButton, false);
         setButtonState(retryButton, false);
         setButtonState(lobbyButton, false);
+        setButtonState(spectateButton, false); // NEW
+        setButtonState(joinPublicSpectateButton, false); // NEW
         setButtonState(hostStartGameButton, false);
         setButtonState(adminStartGameButton, false);
-    } else if (gameState === 'GAME_OVER') {
+    } else if (gameState === 'GAME_OVER' && !isSpectating) { // NEW: Check !isSpectating
         setButtonState(joinPublicMatchButton, false);
         setButtonState(retryButton, true);
         setButtonState(lobbyButton, true);
+        setButtonState(spectateButton, true); // NEW
+        setButtonState(joinPublicSpectateButton, false); // NEW
         setButtonState(hostStartGameButton, false);
         setButtonState(adminStartGameButton, false);
+    } else if (gameState === 'SPECTATING') { // NEW: Spectating state
+        setButtonState(joinPublicMatchButton, false);
+        setButtonState(retryButton, false);
+        setButtonState(lobbyButton, false);
+        setButtonState(spectateButton, false); // NEW
+        setButtonState(joinPublicSpectateButton, false); // NEW
+        setButtonState(hostStartGameButton, false);
+        setButtonState(adminStartGameButton, false);
+        // spectatorBackToLobbyButton is only enabled when spectatorMenuModal is open, handled by modal logic
     }
 }
 
@@ -329,6 +401,17 @@ function init() {
     finalRankingList = document.getElementById('final-ranking-list'); // Assigned here
     gameEndTitle = document.getElementById('game-end-title');     // Assigned here
 
+    // NEW: Spectator related DOM elements
+    spectateButton = document.getElementById('spectate-button');
+    joinPublicSpectateButton = document.getElementById('join-public-spectate-button');
+    spectateRoomsModal = document.getElementById('spectate-rooms-modal');
+    publicRoomsList = document.getElementById('public-rooms-list');
+    noPublicRoomsMessage = document.getElementById('no-public-rooms-message');
+    spectatorMenuModal = document.getElementById('spectator-menu-modal');
+    spectatorRankingList = document.getElementById('spectator-ranking-list');
+    spectatorBackToLobbyButton = document.getElementById('spectator-back-to-lobby-button');
+    // END NEW
+
     messageDisplay = document.getElementById('message-display');
     gameEndOverlay = document.getElementById('game-end-overlay');
     retryButton = document.getElementById('retry-button');
@@ -361,6 +444,8 @@ function init() {
 
     // NEW: Register the callback for uiMessage events
     setUIMessageCallback(showMessage);
+    setPublicRoomsListCallback(populatePublicRoomsList); // NEW: Register public rooms list callback
+    setSpectateRoomInfoCallback(handleSpectateRoomInfo); // NEW: Register spectate room info callback
 
     // --- Event Listeners ---
     joinPublicMatchButton.onclick = () => {
@@ -378,8 +463,20 @@ function init() {
         openModal(joinRoomModal);
     };
 
-    hamburgerMenuButton.onclick = () => { // New: Open admin menu
-        if (getCurrentRoomId()) {
+    // NEW: Public Spectate Button
+    joinPublicSpectateButton.onclick = () => {
+        requestPublicRooms(); // Request list of public rooms
+        openModal(spectateRoomsModal);
+    };
+
+    hamburgerMenuButton.onclick = () => { // New: Open admin menu OR spectator menu
+        if (gameState === 'SPECTATING') {
+            openModal(spectatorMenuModal);
+            // Populate spectator ranking list if data is available
+            if (finalRanking) {
+                displaySpectatorRanking(finalRanking, socket.id, finalStatsMap);
+            }
+        } else if (getCurrentRoomId()) {
             openModal(adminMenuModal);
         } else {
             showMessage({ type: 'info', message: 'ルームに参加していません。' });
@@ -388,7 +485,11 @@ function init() {
 
     closeModalButtons.forEach(button => {
         button.onclick = (event) => {
-            closeModal(event.target.closest('.modal'));
+            const modal = event.target.closest('.modal');
+            closeModal(modal);
+            if (modal === spectateRoomsModal) { // Clear list when closing
+                publicRoomsList.innerHTML = '';
+            }
         };
     });
 
@@ -432,6 +533,19 @@ function init() {
         connectToServer(); // Reconnect will be handled by connect event in online.js
         setButtonState(retryButton, false);
         setButtonState(lobbyButton, false);
+        setButtonState(spectateButton, false); // NEW
+    };
+
+    // NEW: Spectate Button on Game Over screen
+    spectateButton.onclick = () => {
+        const currentId = getCurrentRoomId();
+        if (currentId) {
+            startSpectating(currentId);
+            gameEndOverlay.classList.remove('visible');
+            setButtonState(retryButton, false);
+            setButtonState(lobbyButton, false);
+            setButtonState(spectateButton, false);
+        }
     };
 
     lobbyButton.onclick = () => {
@@ -447,8 +561,25 @@ function init() {
         setButtonState(lobbyButton, false);
         setButtonState(retryButton, false);
         setButtonState(joinPublicMatchButton, true);
+        setButtonState(spectateButton, false); // NEW
         // Reconnect the socket after disconnecting to allow new matching
         initializeSocket(); // Reinitialize socket to ensure clean state
+        connectToServer();
+    };
+
+    // NEW: Spectator Back to Lobby Button
+    spectatorBackToLobbyButton.onclick = () => {
+        setManualDisconnect(true);
+        setAutoMatchOnReconnect(false);
+        if (socket) {
+            socket.disconnect();
+        }
+        closeModal(spectatorMenuModal);
+        setGameState('LOBBY');
+        resetGame();
+        setSpectating(false); // Clear spectating state
+        setRoomDisplayState(false);
+        initializeSocket();
         connectToServer();
     };
 
@@ -470,6 +601,110 @@ export function getStats() {
         apm,
         pps
     };
+}
+
+// NEW: startSpectating function
+function startSpectating(roomId) {
+    setGameState('SPECTATING');
+    resetGame();
+    clearAllEffects();
+    setSpectating(true); // Set spectating state
+    setRoomDisplayState(true, false, roomId, [], false); // Update UI for spectating
+    spectateRoom(roomId); // Tell server to spectate
+    updateButtonStates();
+    // Hide main game elements not needed for spectating
+    document.getElementById('main-game-board').style.display = 'block'; // Ensure board itself is visible
+    document.getElementById('score-display').style.display = 'none'; // Hide score for player, show only opponent boards
+    if (finalRankingList) { // Clear old ranking if any
+        finalRankingList.innerHTML = '';
+    }
+}
+
+// NEW: populatePublicRoomsList function
+function populatePublicRoomsList(rooms) {
+    publicRoomsList.innerHTML = '';
+    if (rooms && rooms.length > 0) {
+        noPublicRoomsMessage.style.display = 'none';
+        rooms.forEach(room => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span>ID: ${room.roomId}</span>
+                <span>(${room.playersCount}人プレイ中)</span>
+                <button class="join-spectate-room-button" data-room-id="${room.roomId}">観戦</button>
+            `;
+            const spectateBtn = li.querySelector('.join-spectate-room-button');
+            spectateBtn.onclick = () => {
+                startSpectating(room.roomId);
+                closeModal(spectateRoomsModal);
+            };
+            publicRoomsList.appendChild(li);
+        });
+    } else {
+        noPublicRoomsMessage.style.display = 'block';
+    }
+}
+
+// NEW: handleSpectateRoomInfo function
+function handleSpectateRoomInfo(data) {
+    setCurrentRoomId(data.roomId);
+    setGameState('SPECTATING');
+    setSpectating(true);
+    setRoomDisplayState(true, false, data.roomId, [], false); // Host is always false for spectators
+    clearAllEffects();
+    resetGame(); // Clear client-side game state
+    updateButtonStates();
+
+    // Hide unnecessary game elements for spectators
+    document.getElementById('main-game-board').style.display = 'block'; // Ensure board itself is visible
+    document.getElementById('score-display').style.display = 'none'; // Hide score for player, show only opponent boards
+
+    // Clear and re-add miniboards based on spectated room members
+    const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+    const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+
+    currentOpponents.forEach(id => {
+        if (!newOpponentIds.has(id)) removeOpponent(id);
+    });
+    newOpponentIds.forEach(id => {
+        if (!currentOpponents.has(id)) addOpponent(id);
+    });
+}
+
+// NEW: displaySpectatorRanking function
+function displaySpectatorRanking(ranking, myId, statsMap) {
+    if (!spectatorRankingList) return;
+
+    spectatorRankingList.innerHTML = ''; // Clear previous ranking
+
+    // Sort players by rank (lower number is better)
+    const sortedPlayers = Object.keys(ranking).sort((a, b) => {
+        // Players still in game (rank null/undefined) go first
+        if (!ranking[a] && ranking[b]) return -1;
+        if (ranking[a] && !ranking[b]) return 1;
+        if (!ranking[a] && !ranking[b]) return 0;
+        return ranking[a] - ranking[b];
+    });
+
+    sortedPlayers.forEach(playerId => {
+        const rank = ranking[playerId];
+        const stats = statsMap[playerId];
+        const listItem = document.createElement('div');
+        listItem.classList.add('ranking-item');
+        if (playerId === myId) {
+            listItem.classList.add('self');
+        }
+        
+        const rankText = rank ? `Rank: ${rank}` : 'プレイ中';
+        const statsText = stats ? 
+            `スコア: ${stats.score}, ライン: ${stats.lines}, レベル: ${stats.level}, 時間: ${stats.time}` : '';
+        
+        listItem.innerHTML = `
+            <span>${playerId === myId ? '(あなた)' : playerId}</span>
+            <span>${rankText}</span>
+            <span>${statsText}</span>
+        `;
+        spectatorRankingList.appendChild(listItem);
+    });
 }
 
 init();

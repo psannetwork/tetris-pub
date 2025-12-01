@@ -33,6 +33,7 @@ const { bots } = require('./bots.js');
 
 function handleSocketConnection(io, socket) {
     console.log("🚀 User connected:", socket.id);
+    socket.isSpectator = false; // NEW: Initialize spectator flag
 
     // Track the socket connection with timestamp
     trackSocketConnection(socket.id);
@@ -277,42 +278,64 @@ function handleSocketConnection(io, socket) {
 
     socket.on("spectateRoom", (roomId) => {
         if (!rooms.has(roomId)) {
-            return socket.emit("uiMessage", { type: 'error', message: `指定されたルーム (${roomId}) は存在しません。` }); // Use uiMessage
+            return socket.emit("uiMessage", { type: 'error', message: `指定されたルーム (${roomId}) は存在しません。` });
         }
         const room = rooms.get(roomId);
-        // For private rooms that are in progress, allow spectator mode even if game has started
-        if (room.players.size === 0 || (room.isGameOver && !room.isPrivate)) {
-            return socket.emit("uiMessage", { type: 'error', message: `指定されたルーム (${roomId}) は終了しています。` }); // Use uiMessage
+        // Allow spectating even if game has started
+        if (room.players.size === 0 && room.isGameOver) { // Only allow spectating if game is over AND empty
+             return socket.emit("uiMessage", { type: 'error', message: `指定されたルーム (${roomId}) は終了しています。` });
         }
-        if (playerRoom.has(socket.id)) {
-            const prevRoomId = playerRoom.get(socket.id);
-            const prevRoom = rooms.get(prevRoomId);
-            if (prevRoom) {
-                const wasInGame = prevRoom.isGameStarted && !prevRoom.isGameOver;
-                // Delete player from active players list
-                prevRoom.players.delete(socket.id);
+
+        // If player is currently in a room (as a player or spectator), disconnect them first
+        const oldRoomId = playerRoom.get(socket.id);
+        if (oldRoomId && rooms.has(oldRoomId)) {
+            const oldRoom = rooms.get(oldRoomId);
+            // If they were a player, handle game over and remove from player lists
+            if (oldRoom.players.has(socket.id)) {
+                if (oldRoom.isGameStarted && !oldRoom.isGameOver) {
+                    handleGameOver(io, socket, "converted to spectator", null);
+                }
+                oldRoom.players.delete(socket.id);
+                oldRoom.initialPlayers.delete(socket.id);
                 playerRoom.delete(socket.id);
-                socket.leave(prevRoomId);
-                console.log(`🔄 ${socket.id} converted from player to spectator for ${roomId}`);
-                // Handle game over for the previous room
-                if (wasInGame) {
-                    handleGameOver(io, socket, "spectating", null);
+                delete oldRoom.boards[socket.id];
+            } else if (spectators.has(oldRoomId) && spectators.get(oldRoomId).has(socket.id)) {
+                // If they were a spectator, just remove from spectator list
+                spectators.get(oldRoomId).delete(socket.id);
+                if (spectators.get(oldRoomId).size === 0) {
+                    spectators.delete(oldRoomId);
                 }
             }
+            socket.leave(oldRoomId);
+            console.log(`🔄 ${socket.id} left room ${oldRoomId} to spectate ${roomId}`);
         }
+
+        // Add to new room as spectator
         if (!spectators.has(roomId)) spectators.set(roomId, new Set());
         spectators.get(roomId).add(socket.id);
-
         socket.join(roomId);
+        socket.isSpectator = true; // Set spectator flag
+
+        // Send room info and current board states to the new spectator
         socket.emit("spectateRoomInfo", {
             roomId: room.roomId,
-            playersCount: room.players.size,
+            members: [...room.players], // Members are players, not spectators
             isGameStarted: room.isGameStarted,
-            isPrivate: room.isPrivate
+            isPrivate: room.isPrivate,
+            finalRanking: room.isGameOver ? Object.fromEntries(playerRanks.get(roomId).map((id, index) => [id, index + 1])) : null,
+            finalStatsMap: room.isGameOver ? Object.fromEntries(room.stats) : null
         });
         socket.emit("BoardStatusBulk", room.boards);
         socket.emit('uiMessage', { type: 'info', message: `${roomId} を観戦しています。` });
-        console.log(`👀 ${socket.id} is spectating ${roomId}`);
+        console.log(`👀 ${socket.id} is now spectating ${roomId}`);
+
+        // Notify players in the room about the new spectator (optional)
+        emitToRoom(io, room, "roomInfo", {
+            roomId: room.roomId,
+            members: [...room.players],
+            isPrivate: room.isPrivate,
+            hostId: room.hostId
+        });
     });
 
     socket.on("BoardStatus", (board) => {
@@ -434,6 +457,20 @@ function handleSocketConnection(io, socket) {
         }
     });
 
+    // NEW: requestPublicRooms handler
+    socket.on("requestPublicRooms", () => {
+        const publicRooms = [...rooms.values()]
+            .filter(room => !room.isPrivate && room.players.size > 0 && room.isGameStarted && !room.isGameOver)
+            .map(room => ({
+                roomId: room.roomId,
+                playersCount: room.players.size,
+                isGameStarted: room.isGameStarted,
+                isPrivate: room.isPrivate
+            }));
+        // Send public rooms list to the client via uiMessage
+        socket.emit('uiMessage', { type: 'publicRoomsList', message: '公開ルームリスト', data: publicRooms });
+    });
+
     socket.on("disconnect", (reason) => {
         const roomId = playerRoom.get(socket.id);
         if (roomId && rooms.has(roomId)) {
@@ -452,83 +489,87 @@ function handleSocketConnection(io, socket) {
                     targetsChanged = true;
                 }
             }
+            
+            // IF PLAYER WAS A PLAYER
+            if (room.players.has(socket.id)) {
+                // THEN handle game over logic
+                if (wasInGame) {
+                    // Send a connection error message to the player who disconnected during game
+                    io.to(socket.id).emit('uiMessage', {
+                        type: 'error',
+                        message: 'タイムアウトしました。ロビーに戻ります。'
+                    });
 
-            // THEN handle game over logic
-            if (wasInGame) {
-                // Send a connection error message to the player who disconnected during game
-                io.to(socket.id).emit('uiMessage', {
-                    type: 'error',
-                    message: 'タイムアウトしました。ロビーに戻ります。'
-                });
+                    // Send matching event to return to lobby after disconnect
+                    io.to(socket.id).emit('matching');
 
-                // Send matching event to return to lobby after disconnect
-                io.to(socket.id).emit('matching');
-
-                handleGameOver(io, socket, reason, null);
-            }
-
-            // Now fully remove the player
-            playerRoom.delete(socket.id);
-            delete room.boards[socket.id]; // Clear board data when player disconnects
-            socket.leave(roomId);
-            console.log(`🚪 ${socket.id} left room ${roomId} on disconnect.`);
-
-            if (targetsChanged) {
-                 emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
-            }
-
-            // Note: We don't delete from initialPlayers so ranking works correctly.
-            // The room cleanup logic will handle it later.
-
-            // If the host (creator) of a private room leaves before the game starts, delete the room
-            if (room.hostId === socket.id && room.isPrivate && !room.isGameStarted) {
-                // Clear any existing countdown
-                if (room.countdownInterval) {
-                    clearInterval(room.countdownInterval);
+                    handleGameOver(io, socket, reason, null);
                 }
-                // Notify all players in the room about the room closure
-                for (const playerId of room.players) {
-                    if (bots.has(playerId)) {
-                        bots.get(playerId).emit('roomClosed');
-                    } else {
-                        const playerSocket = io.sockets.sockets.get(playerId);
-                        if (playerSocket) {
-                            playerSocket.emit('roomClosed');
-                            playerSocket.leave(roomId);
+
+                // Now fully remove the player
+                playerRoom.delete(socket.id);
+                delete room.boards[socket.id]; // Clear board data when player disconnects
+                room.players.delete(socket.id); // Remove from players Set
+                room.initialPlayers.delete(socket.id); // Also remove from initial players
+                socket.leave(roomId);
+                console.log(`🚪 ${socket.id} left room ${roomId} on disconnect.`);
+
+                if (targetsChanged) {
+                     emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
+                }
+
+                // If the host (creator) of a private room leaves before the game starts, delete the room
+                if (room.hostId === socket.id && room.isPrivate && !room.isGameStarted) {
+                    // Clear any existing countdown
+                    if (room.countdownInterval) {
+                        clearInterval(room.countdownInterval);
+                    }
+                    // Notify all players in the room about the room closure
+                    for (const playerId of room.players) {
+                        if (bots.has(playerId)) {
+                            bots.get(playerId).emit('roomClosed');
+                        } else {
+                            const playerSocket = io.sockets.sockets.get(playerId);
+                            if (playerSocket) {
+                                playerSocket.emit('roomClosed');
+                                playerSocket.leave(roomId);
+                            }
                         }
                     }
-                }
-                // Clean up spectators
-                if (spectators.has(roomId)) {
-                    for (const specId of spectators.get(roomId)) {
-                        const specSocket = io.sockets.sockets.get(specId);
-                        if (specSocket) {
-                            specSocket.emit('roomClosed');
-                            specSocket.leave(roomId);
+                    // Clean up spectators
+                    if (spectators.has(roomId)) {
+                        for (const specId of spectators.get(roomId)) {
+                            const specSocket = io.sockets.sockets.get(specId);
+                            if (specSocket) {
+                                specSocket.emit('roomClosed');
+                                specSocket.leave(roomId);
+                            }
                         }
+                        spectators.delete(roomId);
                     }
-                    spectators.delete(roomId);
-                }
-                // Remove room from all tracking maps
-                rooms.delete(roomId);
-                for (const [playerId, roomPlayerId] of playerRoom.entries()) {
-                    if (roomPlayerId === roomId) {
-                        playerRoom.delete(playerId);
-                    }
-                }
-                if (playerRanks.has(roomId)) {
-                    playerRanks.delete(roomId);
-                }
-                console.log(`🗑️ Private room ${roomId} deleted because host left before game started.`);
-            } else if (room.players.size === 0 && !room.isGameOver) {
-                clearInterval(room.countdownInterval);
-                spectators.delete(roomId);
-                setTimeout(() => {
+                    // Remove room from all tracking maps
                     rooms.delete(roomId);
-                    console.log(`🗑️ Room ${roomId} deleted due to being empty.`);
-                }, 5000);
+                    for (const [playerId, roomPlayerId] of playerRoom.entries()) {
+                        if (roomPlayerId === roomId) {
+                            playerRoom.delete(playerId);
+                        }
+                    }
+                    if (playerRanks.has(roomId)) {
+                        playerRanks.delete(roomId);
+                    }
+                    console.log(`🗑️ Private room ${roomId} deleted because host left before game started.`);
+                } else if (room.players.size === 0 && !room.isGameOver) {
+                    clearInterval(room.countdownInterval);
+                    spectators.delete(roomId);
+                    setTimeout(() => {
+                        rooms.delete(roomId);
+                        console.log(`🗑️ Room ${roomId} deleted due to being empty.`);
+                    }, 5000);
+                }
             }
         }
+        
+        // IF PLAYER WAS A SPECTATOR
         for (const [rId, set] of spectators.entries()) {
             if (set.delete(socket.id) && set.size === 0) {
                 spectators.delete(rId);

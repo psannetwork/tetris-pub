@@ -260,6 +260,7 @@ function emitToRoom(io, room, event, data) { // `io` parameter added
             io.to(playerId).emit(event, data);
         }
     }
+    // Always emit to spectators as well
     if (io) {
         emitToSpectators(io, room.roomId, event, data);
     }
@@ -388,7 +389,8 @@ function handleGameOver(io, socket, reason, stats) {
 
     const statsMap = Object.fromEntries(room.stats);
     const rankingData = { ranking: finalRanks, yourRankMap, statsMap, roomId: room.roomId, isGameOver: room.isGameOver };
-    emitToRoom(io, room, "ranking", rankingData);
+    emitToRoom(io, room, "ranking", rankingData); // To players
+    emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
 
     // If the game is now over, handle final win/loss emits
     if (activePlayersCount <= 1) {

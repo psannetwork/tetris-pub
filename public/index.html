@@ -36,6 +36,7 @@
         <button id="join-public-match-button" class="lobby-button">公開マッチ</button>
         <button id="create-room-button" class="lobby-button">部屋作成</button>
         <button id="join-room-button" class="lobby-button">部屋IDで参加</button>
+        <button id="join-public-spectate-button" class="lobby-button">公開ルーム観戦</button> <!-- NEW -->
       </div>
 
       <div id="room-info-display" style="display: none;">
@@ -77,12 +78,34 @@
     </div>
   </div>
 
+  <!-- NEW: Spectate Rooms Modal -->
+  <div id="spectate-rooms-modal" class="modal">
+    <div class="modal-content">
+      <h2>観戦可能な公開ルーム</h2>
+      <ul id="public-rooms-list"></ul>
+      <p id="no-public-rooms-message" style="display: none;">現在、観戦可能な公開ルームはありません。</p>
+      <button class="close-modal">閉じる</button>
+    </div>
+  </div>
+
+  <!-- NEW: Spectator Menu Modal (for hamburger icon while spectating) -->
+  <div id="spectator-menu-modal" class="modal">
+    <div class="modal-content">
+      <h2>観戦メニュー</h2>
+      <h3>現在の順位</h3>
+      <div id="spectator-ranking-list"></div>
+      <button id="spectator-back-to-lobby-button" class="lobby-button">ロビーに戻る</button>
+      <button class="close-modal">閉じる</button>
+    </div>
+  </div>
+
   <div id="game-end-overlay">
     <div class="overlay-content">
       <div id="game-end-title" class="menu-title"></div>
       <div id="final-ranking-list"></div>
       <div class="menu-buttons">
         <button id="retry-button">Play Again</button>
+        <button id="spectate-button">観戦する</button> <!-- NEW -->
         <button id="lobby-button">Back to Lobby</button>
       </div>
     </div>

@@ -56,6 +56,11 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
 
     // 4. Show the overlay
     gameEndOverlay.classList.add('visible');
+    // NEW: Enable spectate button if it exists
+    const spectateBtn = document.getElementById('spectate-button');
+    if (spectateBtn) {
+        spectateBtn.style.display = 'block';
+    }
   }
 }
 
