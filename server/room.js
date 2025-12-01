@@ -588,9 +588,15 @@ function startSocketCleanupInterval() {
                     const roomId = playerRoom.get(socketId);
                     const room = rooms.get(roomId);
                     if (room) {
-                        room.players.delete(socketId);
-                        room.initialPlayers.delete(socketId);
-                        delete room.boards[socketId];
+                        if (room.isGameStarted && !room.isGameOver) {
+                            console.log(`⏰ Orphaned socket ${socketId} is in an active game in room ${roomId}. Timing them out.`);
+                            handlePlayerTimeout(ioRef, socketId, roomId);
+                        } else {
+                            // Game not started or already over, safe to remove
+                            room.players.delete(socketId);
+                            room.initialPlayers.delete(socketId);
+                            delete room.boards[socketId];
+                        }
 
                         // If the room becomes empty and game is not over, clean it up
                         if (room.players.size === 0 && !room.isGameOver) {
