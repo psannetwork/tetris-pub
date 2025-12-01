@@ -95,6 +95,8 @@ export const CONFIG = {
         enableComboEffects: true,
         enablePerfectClearEffects: true,
         enableAttackEffects: true,
+        enableTimeoutEffects: true, // NEW: Enable timeout effects
+        enableMiniboardEntryEffects: true, // NEW: Enable miniboard entry effects
         maxParticlesPerClear: 100,
         maxOrbs: 20,
         appearanceParticleCount: 6,

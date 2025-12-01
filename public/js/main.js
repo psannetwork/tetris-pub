@@ -7,7 +7,7 @@ import {
     board, score, linesCleared
 } from './game.js';
 import { drawGame, drawUI, setupCanvases } from './draw.js';
-import { updateEffects, initEffects } from './effects.js';
+import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects } from './effects.js';
 import { handleInput } from './input.js';
 import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId } from './online.js';
 import { showCountdown } from './ui.js';
@@ -110,6 +110,10 @@ function showMessage({ type, message }) {
         messageDisplay.className = ''; // Clear previous classes
         messageDisplay.classList.add('show', type);
         messageDisplay.style.display = 'block';
+
+        if (type === 'timeout') { // NEW: Trigger timeout effect
+            startTimeoutEffect(message);
+        }
 
         messageTimeout = setTimeout(() => {
             messageDisplay.classList.remove('show');
@@ -265,6 +269,7 @@ function update(now = performance.now()) {
     // Drawing is now separated and happens every frame regardless of state
     drawGame();
     drawUI();
+    drawMiniboardEntryEffects(now); // NEW: Draw miniboard entry effects
     startAnimationIfNeeded();
 
     requestAnimationFrame(update);
@@ -333,6 +338,11 @@ function init() {
     setGameGetStatsCallback(getStats);
     setOnlineGetStatsCallback(getStats);
     setupCanvases();
+    // NEW: Initialize effects canvas
+    const effectCanvas = document.getElementById('effect-canvas');
+    if (effectCanvas) {
+        initEffects(effectCanvas);
+    }
     initializeSocket(); // Should be called once, connectToServer handles it
     gameEndOverlay.classList.remove('visible');
     setGameState('LOBBY');

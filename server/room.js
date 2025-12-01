@@ -37,7 +37,7 @@ let ioRef = null;
 
 // Timeout duration in milliseconds
 const PLAYER_TIMEOUT_MS = 40000; // 40 seconds
-const BOARD_UPDATE_TIMEOUT_MS = 15000; // 15 seconds
+const BOARD_UPDATE_TIMEOUT_MS = 10000; // 10 seconds
 
 function setIoReference(io) {
     ioRef = io;
@@ -100,7 +100,7 @@ function handlePlayerTimeout(io, playerId, roomId) {
         // Send a connection error message to the player before handling game over
         if (effectiveIo && !bots.has(playerId)) {
             effectiveIo.to(playerId).emit('uiMessage', {
-                type: 'error',
+                type: 'timeout',
                 message: 'タイムアウトしました。ロビーに戻ります。'
             });
 
@@ -355,8 +355,11 @@ function handleGameOver(io, socket, reason, stats) {
 
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
-    if (!ranks.includes(socket.id)) {
-        ranks.push(socket.id);
+    // Only add to ranks if not a connection timeout
+    if (reason !== "connection timeout") {
+        if (!ranks.includes(socket.id)) {
+            ranks.push(socket.id);
+        }
     }
 
     // Ensure the player is removed from active players map for targeting purposes

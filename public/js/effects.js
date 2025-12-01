@@ -1,7 +1,7 @@
 import { CONFIG } from './config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from './layout.js';
 import { getMainBoardOffset, tetrominoTypeToIndex } from './draw.js';
-import { currentCountdown } from './online.js';
+import { currentCountdown, getBoardCenterPosition } from './online.js';
 
 export let effects = [];
 export let textEffects = [];
@@ -10,9 +10,11 @@ export let scoreUpdateEffect = null;
 export let targetAttackFlashes = new Map(); // attackerId -> flashEndTime
 
 export let orbs = [];
+export let activeTimeoutEffect = null; // New: Track the active TimeoutEffect
+export let miniboardEntryEffects = []; // New: Track miniboard entry effects
 
 let effectsCanvas;
-export let effectsCtx;
+export let effectsCtx; // Export effectsCtx globally
 
 export function initEffects(canvas) {
     effectsCanvas = canvas;
@@ -29,6 +31,8 @@ export function clearAllEffects() {
     tspinEffect = null;
     scoreUpdateEffect = null;
     targetAttackFlashes.clear();
+    activeTimeoutEffect = null; // New: Clear the timeout effect
+    miniboardEntryEffects = []; // New: Clear miniboard entry effects
     console.log("Cleared all visual effects.");
 }
 
@@ -252,6 +256,155 @@ class LightOrb {
     }
 }
 
+// --- New: Timeout Effect ---
+class TimeoutParticle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 2 + 1;
+        this.vx = (Math.random() - 0.5) * 2;
+        this.vy = (Math.random() - 0.5) * 2;
+        this.alpha = 1;
+        this.life = Math.random() * 60 + 30; // frames
+        this.color = color;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= 1 / this.life;
+        return this.alpha > 0;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+class TimeoutEffect {
+    // ... (TimeoutEffectのコードは省略) ...
+}
+
+export function startTimeoutEffect(message) {
+    if (effectsCtx && CONFIG.effects.enableTimeoutEffects) { // Check if new effect type should be enabled via config
+        activeTimeoutEffect = new TimeoutEffect(effectsCtx, message);
+    }
+}
+
+export function drawTimeoutEffect() {
+    if (activeTimeoutEffect && activeTimeoutEffect.active) {
+        activeTimeoutEffect.draw();
+    }
+}
+
+// --- New: Miniboard Entry Effect ---
+class MiniboardEntryEffect {
+    constructor(userId, x, y, width, height) {
+        this.userId = userId;
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.startTime = performance.now();
+        this.lifeTime = 1500; // 1.5秒
+        this.particles = [];
+        this.particleCount = 30;
+        this.active = true;
+
+        for (let i = 0; i < this.particleCount; i++) {
+            this.particles.push({
+                angle: Math.random() * Math.PI * 2,
+                distance: Math.random() * 40 + 20,
+                size: Math.random() * 2 + 1,
+                speed: Math.random() * 0.02 + 0.01,
+                phase: Math.random() * Math.PI * 2,
+                opacity: 1
+            });
+        }
+    }
+
+    update(currentTime) {
+        if (!this.active) return;
+        
+        const elapsed = currentTime - this.startTime;
+        const progress = Math.min(1, elapsed / this.lifeTime);
+
+        if (progress >= 1) {
+            this.active = false;
+            return;
+        }
+
+        this.particles.forEach(particle => {
+            particle.phase += particle.speed;
+            particle.currentDistance = particle.distance * (0.3 + 0.7 * Math.sin(progress * Math.PI));
+        });
+    }
+
+    draw(currentTime) {
+        if (!this.active) return;
+
+        const elapsed = currentTime - this.startTime;
+        const progress = Math.min(1, elapsed / this.lifeTime);
+        const time = elapsed * 0.001;
+
+        effectsCtx.save();
+        effectsCtx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+        // 中心の光
+        const centerSize = 8 + Math.sin(time * 10) * 3;
+        const centerAlpha = 0.7 * (1 - progress * 0.5);
+        effectsCtx.beginPath();
+        effectsCtx.arc(0, 0, centerSize, 0, Math.PI * 2);
+        effectsCtx.fillStyle = `rgba(255, 255, 255, ${centerAlpha})`;
+        effectsCtx.fill();
+
+        // パーティクル描画
+        this.particles.forEach((particle, index) => {
+            const angle = particle.angle + particle.phase;
+            const distance = particle.currentDistance || particle.distance;
+            const px = Math.cos(angle) * distance;
+            const py = Math.sin(angle) * distance;
+
+            const particleAlpha = particle.opacity * (0.7 + 0.3 * Math.sin(time * 5 + index));
+            const fadeAlpha = particleAlpha * (1 - progress * 0.8);
+
+            effectsCtx.beginPath();
+            effectsCtx.arc(px, py, particle.size, 0, Math.PI * 2);
+            effectsCtx.fillStyle = `rgba(0, 200, 255, ${fadeAlpha})`;
+            effectsCtx.fill();
+        });
+
+        effectsCtx.restore();
+    }
+
+    isActive() {
+        return this.active;
+    }
+}
+
+export function startMiniboardEntryEffect(userId, x, y, width, height) {
+    if (effectsCtx && CONFIG.effects.enableMiniboardEntryEffects) { // New config flag
+        miniboardEntryEffects.push(new MiniboardEntryEffect(userId, x, y, width, height));
+    }
+}
+
+export function drawMiniboardEntryEffects(currentTime) {
+    miniboardEntryEffects.forEach(effect => {
+        if (effect.isActive()) {
+            effect.update(currentTime);
+            effect.draw(currentTime);
+        }
+    });
+    // Remove inactive effects
+    miniboardEntryEffects = miniboardEntryEffects.filter(effect => effect.isActive());
+}
+
 export function createLightOrb(startPos, endPos) {
     if (!CONFIG.effects.enableOrbEffects) return; // Check if orb effects are enabled
 
@@ -311,6 +464,7 @@ export function drawOrbs() {
     }
 
     orbs.forEach(orb => orb.draw(effectsCtx));
+    drawTimeoutEffect(); // Draw timeout effect here
 }
 
 // --- Line Clear and Particle Effects ---
@@ -754,6 +908,18 @@ export function updateEffects() {
     if (scoreUpdateEffect && now - scoreUpdateEffect.startTime >= scoreUpdateEffect.duration) {
         scoreUpdateEffect = null;
     }
+
+    if (activeTimeoutEffect && !activeTimeoutEffect.update()) { // Update timeout effect
+        activeTimeoutEffect = null;
+    }
+
+    // Update miniboard entry effects
+    miniboardEntryEffects.forEach(effect => {
+        if (effect.isActive()) {
+            effect.update(now);
+        }
+    });
+    miniboardEntryEffects = miniboardEntryEffects.filter(effect => effect.isActive());
 
     // Clean up expired flashes
     for (const [key, value] of targetAttackFlashes.entries()) {

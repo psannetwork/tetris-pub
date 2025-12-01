@@ -4,7 +4,7 @@ import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
 import { drawUI } from './draw.js';
 import { setRoomDisplayState } from './main.js'; // Import setRoomDisplayState
 
@@ -930,97 +930,6 @@ export let MINIBOARD_GAP;
 const MINIBOARDS_PER_COLUMN = 7;
 const NUM_GAPS_PER_COLUMN = MINIBOARDS_PER_COLUMN - 1;
 
-class MiniboardEntryEffect {
-    constructor(ctx, width, height) {
-        this.ctx = ctx;
-        this.x = width / 2;
-        this.y = height / 2;
-        this.startTime = performance.now();
-        this.lifeTime = 1500; // 1.5秒
-        this.particles = [];
-        this.particleCount = 30; // パーティクル数をさらに減らす
-        this.active = true;
-
-        // パーティクル初期化
-        for (let i = 0; i < this.particleCount; i++) {
-            this.particles.push({
-                angle: Math.random() * Math.PI * 2,
-                distance: Math.random() * 40 + 20,
-                size: Math.random() * 2 + 1,
-                speed: Math.random() * 0.02 + 0.01,
-                phase: Math.random() * Math.PI * 2,
-                opacity: 1
-            });
-        }
-    }
-
-    update(currentTime) {
-        if (!this.active) return; // 既に非アクティブなら何もしない
-        
-        const elapsed = currentTime - this.startTime;
-        const progress = Math.min(1, elapsed / this.lifeTime);
-
-        // 終了チェック
-        if (progress >= 1) {
-            this.active = false;
-            return;
-        }
-
-        // パーティクル更新
-        this.particles.forEach(particle => {
-            particle.phase += particle.speed;
-            particle.currentDistance = particle.distance * (0.3 + 0.7 * Math.sin(progress * Math.PI));
-        });
-    }
-
-    draw(currentTime) {
-        if (!this.active) return;
-
-        const elapsed = currentTime - this.startTime;
-        const progress = Math.min(1, elapsed / this.lifeTime);
-        const time = elapsed * 0.001;
-
-        // 中心の光
-        const centerSize = 8 + Math.sin(time * 10) * 3;
-        const centerAlpha = 0.7 * (1 - progress * 0.5);
-        this.ctx.beginPath();
-        this.ctx.arc(this.x, this.y, centerSize, 0, Math.PI * 2);
-        this.ctx.fillStyle = `rgba(255, 255, 255, ${centerAlpha})`;
-        this.ctx.fill();
-
-        // DEBUG: Draw a crosshair at the effect's perceived center
-        this.ctx.strokeStyle = 'red';
-        this.ctx.lineWidth = 1;
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.x - 5, this.y);
-        this.ctx.lineTo(this.x + 5, this.y);
-        this.ctx.moveTo(this.x, this.y - 5);
-        this.ctx.lineTo(this.x, this.y + 5);
-        this.ctx.stroke();
-
-        // パーティクル描画
-        this.particles.forEach((particle, index) => {
-            const angle = particle.angle + particle.phase;
-            const distance = particle.currentDistance || particle.distance;
-            const px = this.x + Math.cos(angle) * distance;
-            const py = this.y + Math.sin(angle) * distance;
-
-            // 透明度調整
-            const particleAlpha = particle.opacity * (0.7 + 0.3 * Math.sin(time * 5 + index));
-            const fadeAlpha = particleAlpha * (1 - progress * 0.8);
-
-            this.ctx.beginPath();
-            this.ctx.arc(px, py, particle.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = `rgba(0, 200, 255, ${fadeAlpha})`;
-            this.ctx.fill();
-        });
-    }
-
-    isActive() {
-        return this.active;
-    }
-}
-
 function setupMiniboardDimensions() {
     MINIBOARD_CELL_SIZE = 3.5; // Keep this for canvas drawing dimensions
     MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE; // e.g. 20 * 3.5 = 70
@@ -1097,9 +1006,12 @@ function addOpponent(userId) {
         emptySlot.isNew = true; // Add this flag for the effect
         emptySlot.dirty = true;
 
-        // Only start the effect if the game is not yet playing
+        // Start the effect via effects.js
         if (gameState !== 'PLAYING') { // Check gameState here
-            emptySlot.effect = new MiniboardEntryEffect(emptySlot.ctx, emptySlot.canvas.width, emptySlot.canvas.height);
+            const pos = getBoardCenterPosition(userId); // Get center position of the miniboard
+            if (pos) {
+                startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
+            }
         }
         startAnimationIfNeeded();
     }
@@ -1209,7 +1121,7 @@ export function drawAllMiniBoards() {
     miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
 
     // Check if there are any active effects OR if the game is playing and there are opponents
-    const hasActiveEffects = miniboardSlots.some(slot => slot.effect && slot.effect.isActive());
+    const hasActiveEffects = false; // Miniboard entry effects are now managed in effects.js
     const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
 
     if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents)) {
