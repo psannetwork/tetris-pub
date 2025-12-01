@@ -87,6 +87,25 @@ export const CONFIG = {
         lightenDarkenAmount: 30, // Amount to lighten/darken colors
         scoreUpdateEffectDuration: 200, // ms
         scoreUpdateScaleFactor: 0.2, // Max scale increase for score update
+        // Performance-related effect settings
+        enableParticleEffects: true,
+        enableOrbEffects: true,
+        enableTextEffects: true,
+        enableAppearanceEffects: true,
+        enableComboEffects: true,
+        enablePerfectClearEffects: true,
+        enableAttackEffects: true,
+        maxParticlesPerClear: 100,
+        maxOrbs: 20,
+        appearanceParticleCount: 6,
+        appearanceDuration: 500,
+        appearanceFlashDuration: 300,
+        comboTextDuration: 1000,
+        perfectClearParticleCount: 100,
+        perfectClearDuration: 1500,
+        perfectClearTextDuration: 2000,
+        perfectClearFlashDuration: 800,
+        attackFlashDuration: 250,
     },
     // UI設定
     ui: {

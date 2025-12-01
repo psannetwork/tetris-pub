@@ -90,6 +90,7 @@ export function getNextPieceFromBag() {
 export function initializePieces() {
     refillBag(); // Ensure pieceBag is populated
     currentPiece = getNextPieceFromBag();
+    Effects.triggerPieceAppearanceEffect(currentPiece); // Add appearance effect for first piece
     for (let i = 0; i < CONFIG.game.nextPiecesCount; i++) {
         nextPieces.push(getNextPieceFromBag());
     }
@@ -285,10 +286,12 @@ export function hold() {
         holdPiece = currentPiece;
         currentPiece = nextPieces.shift();
         nextPieces.push(getNextPieceFromBag());
+        Effects.triggerPieceAppearanceEffect(currentPiece); // Add appearance effect for new piece
     } else {
         const temp = currentPiece;
         currentPiece = holdPiece;
         holdPiece = temp;
+        Effects.triggerPieceAppearanceEffect(currentPiece); // Add appearance effect for held piece
     }
     currentPiece.rotation = 0;
     currentPiece.isRotation = false;
@@ -363,7 +366,12 @@ export function lockPiece() {
             const tSpinScore = tSpin.mini ? CONFIG.scoring.tspinMini : CONFIG.scoring.tspin;
             score += tSpinScore;
             if (tSpinScore > 0) Effects.triggerScoreUpdateEffect();
-            Effects.triggerTspinEffect(lockedPiece.x * CELL_SIZE + (CONFIG.layout.boardWidth / 2) - (CONFIG.board.cols / 2 * CELL_SIZE) , lockedPiece.y * CELL_SIZE + (CONFIG.layout.boardHeight / 2) - (CONFIG.board.rows / 2 * CELL_SIZE));
+            // Calculate position relative to the board center
+            const boardOffsetX = (CONFIG.layout.boardWidth - CONFIG.board.cols * CELL_SIZE) / 2;
+            const boardOffsetY = (CONFIG.layout.boardHeight - CONFIG.board.visibleRows * CELL_SIZE) / 2;
+            const x = lockedPiece.x * CELL_SIZE + boardOffsetX;
+            const y = (lockedPiece.y - (CONFIG.board.rows - CONFIG.board.visibleRows)) * CELL_SIZE + boardOffsetY;
+            Effects.triggerTspinEffect(x, y);
         }
     }
 
@@ -420,6 +428,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
 
         if (ren > 1) {
             Effects.addTextEffect(`${ren} COMBO`, { style: 'combo', duration: 600 });
+            Effects.triggerComboEffect(ren); // Add combo visual effect
         }
 
 
@@ -435,6 +444,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
             showPerfectClearMessage(); // Call the UI function
             score += CONFIG.scoring.perfectClear; // Add score for perfect clear
             if (CONFIG.scoring.perfectClear > 0) Effects.triggerScoreUpdateEffect();
+            Effects.triggerPerfectClearEffect(); // Add perfect clear visual effect
         }
 
         let pts = 0;
@@ -460,6 +470,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
 
         currentPiece = nextPieces.shift();
         nextPieces.push(getNextPieceFromBag());
+        Effects.triggerPieceAppearanceEffect(currentPiece); // Add appearance effect for new piece
         holdUsed = false;
         previousClearWasB2B = isB2BCandidate;
         currentPiece.combo = ren;
@@ -469,6 +480,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
     } else {
         currentPiece = nextPieces.shift();
         nextPieces.push(getNextPieceFromBag());
+        Effects.triggerPieceAppearanceEffect(currentPiece); // Add appearance effect for new piece
         holdUsed = false;
         const garbageToAdd = processFlashingGarbage();
         if (garbageToAdd > 0) {

@@ -4,7 +4,7 @@ import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
-import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects } from './effects.js'; // Added clearAllEffects
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
 import { drawUI } from './draw.js';
 import { setRoomDisplayState } from './main.js'; // Import setRoomDisplayState
 
@@ -626,6 +626,9 @@ export function initializeSocket() {
                 }
 
             }
+
+            // Trigger visual effect for received attack
+            triggerReceivedAttackEffect();
 
         });
 

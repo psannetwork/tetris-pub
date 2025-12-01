@@ -180,28 +180,16 @@ export function drawGame() {
         drawPiece(gameCtx, currentPiece, 0, 0);
     }
 
-    // --- Draw effects (line clears) ---
-    Effects.effects.forEach(effect => {
-        const progress = (now - effect.startTime) / effect.duration;
-        if (progress >= 1) return; // Skip finished effects
-
-        const alpha = Math.max(0, 1 - progress);
-
-        if (effect.type === 'lineClear') {
-            gameCtx.fillStyle = `rgba(255, 255, 255, ${alpha * CONFIG.effects.lineClearEffectOpacity})`;
-            const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
-            effect.rows.forEach(row => {
-                const y = (row - startRow) * CELL_SIZE;
-                if (y >= 0) gameCtx.fillRect(0, y, BOARD_WIDTH, CELL_SIZE);
-            });
-        }
-    });
 
     // Draw light orbs, particles, text effects, T-Spin effect, and target attack flashes on the effects canvas
     if (effectsCtx) {
         effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
         Effects.drawOrbs();
         Effects.drawParticles();
+        Effects.drawLineClearEffects();
+        Effects.drawPieceAppearanceEffects();
+        Effects.drawPerfectClearEffects();
+        Effects.drawReceivedAttackEffects();
         Effects.drawTextEffects();
         Effects.drawTspinEffect();
         Effects.drawTargetAttackFlashes();

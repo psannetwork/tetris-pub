@@ -1,6 +1,6 @@
 import { CONFIG } from './config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from './layout.js';
-import { getMainBoardOffset } from './draw.js';
+import { getMainBoardOffset, tetrominoTypeToIndex } from './draw.js';
 import { currentCountdown } from './online.js';
 
 export let effects = [];
@@ -50,14 +50,17 @@ export function addTextEffect(text, { style = 'default', duration = 1500, x, y }
 }
 
 export function drawTextEffects() {
+    if (!CONFIG.effects.enableTextEffects) return; // Check if text effects are enabled
+
     const now = performance.now();
-    textEffects.forEach(effect => {
+    for (let i = 0; i < textEffects.length; i++) {
+        const effect = textEffects[i];
         const progress = (now - effect.startTime) / effect.duration;
-        if (progress >= 1) return;
+        if (progress >= 1) continue;
 
         effectsCtx.save();
         effectsCtx.textAlign = 'center';
-        
+
         let fontSize, fillStyle, strokeStyle, lineWidth, currentY;
 
         // ... (rest of the switch statement is the same)
@@ -114,11 +117,50 @@ export function drawTextEffects() {
         effectsCtx.fillText(effect.text, effect.x, currentY);
         effectsCtx.strokeText(effect.text, effect.x, currentY);
         effectsCtx.restore();
-    });
+    }
 }
 
 
 
+
+// Orb pool to reduce object creation
+const orbPool = [];
+const maxOrbPoolSize = 50;
+
+function getOrb() {
+    if (orbPool.length > 0) {
+        return orbPool.pop();
+    }
+    return {
+        startX: 0,
+        startY: 0,
+        targetX: 0,
+        targetY: 0,
+        currentX: 0,
+        currentY: 0,
+        progress: 0,
+        velocity: 0,
+        acceleration: 0.003, // 加速度 (減速)
+        completed: false,
+        arrived: false,
+        arrivalTime: 0,
+        size: 0,
+        alpha: 1,
+        trail: [],
+        maxTrailLength: 15,
+        angle: 0,
+        // Pre-allocate trail array to avoid repeated allocations
+        trail: []
+    };
+}
+
+function releaseOrb(orb) {
+    if (orbPool.length < maxOrbPoolSize) {
+        // Clear trail array
+        orb.trail.length = 0;
+        orbPool.push(orb);
+    }
+}
 
 // 光玉クラス
 class LightOrb {
@@ -131,14 +173,14 @@ class LightOrb {
         this.currentY = startY;
         this.progress = 0;
         this.velocity = 0;
-        this.acceleration = 0.003; // 加速度 (減速)
+        this.acceleration = CONFIG.effects.orbAcceleration || 0.003; // 加速度 (減速)
         this.completed = false;
         this.arrived = false;
         this.arrivalTime = 0;
-        this.size = 15 + Math.random() * 10;
+        this.size = (CONFIG.effects.orbBaseSize || 15) + Math.random() * (CONFIG.effects.orbRandomSize || 10);
         this.alpha = 1;
         this.trail = [];
-        this.maxTrailLength = 15;
+        this.maxTrailLength = CONFIG.effects.orbMaxTrailLength || 15;
         this.angle = Math.atan2(targetY - startY, targetX - startX);
     }
 
@@ -146,11 +188,11 @@ class LightOrb {
         if (!this.arrived) {
             this.velocity += this.acceleration;
             this.progress += this.velocity;
-            
+
             if (this.progress >= 1) {
                 this.progress = 1;
                 this.arrived = true;
-                this.arrivalTime = Date.now();
+                this.arrivalTime = performance.now();
                 this.velocity = 0;
             }
 
@@ -158,8 +200,8 @@ class LightOrb {
             this.currentX = this.startX + (this.targetX - this.startX) * easeProgress;
             this.currentY = this.startY + (this.targetY - this.startY) * easeProgress;
 
-            this.trail.push({ 
-                x: this.currentX, 
+            this.trail.push({
+                x: this.currentX,
                 y: this.currentY,
                 size: this.size * (1 - this.progress),
                 alpha: 0.7 * (1 - this.progress)
@@ -168,9 +210,9 @@ class LightOrb {
                 this.trail.shift();
             }
         } else {
-            const elapsed = Date.now() - this.arrivalTime;
-            this.alpha = Math.max(0, 1 - elapsed / 1000);
-            this.completed = elapsed > 1000;
+            const elapsed = performance.now() - this.arrivalTime;
+            this.alpha = Math.max(0, 1 - elapsed / (CONFIG.effects.orbFadeDuration || 1000));
+            this.completed = elapsed > (CONFIG.effects.orbFadeDuration || 1000);
         }
 
         return !this.completed;
@@ -211,6 +253,8 @@ class LightOrb {
 }
 
 export function createLightOrb(startPos, endPos) {
+    if (!CONFIG.effects.enableOrbEffects) return; // Check if orb effects are enabled
+
     if (!startPos) {
         console.error("createLightOrb: Invalid start position (null or undefined)");
         return;
@@ -219,6 +263,12 @@ export function createLightOrb(startPos, endPos) {
         console.error("createLightOrb: Invalid end position (null or undefined)");
         return;
     }
+
+    // Limit orb creation for performance
+    if (orbs.length >= (CONFIG.effects.maxOrbs || 20)) {
+        return;
+    }
+
     orbs.push(new LightOrb(startPos.x, startPos.y, endPos.x, endPos.y));
 }
 
@@ -265,25 +315,65 @@ export function drawOrbs() {
 
 // --- Line Clear and Particle Effects ---
 
-function addParticle(props) {
-    const defaults = {
+// Particle pool to reduce garbage collection
+const particlePool = [];
+const maxPoolSize = 500;
+
+function getParticle() {
+    if (particlePool.length > 0) {
+        return particlePool.pop();
+    }
+    return {
         type: 'particle',
-        startTime: performance.now(),
-        duration: 500,
-        size: Math.random() * 3 + 2,
-        velocity: {
-            x: (Math.random() - 0.5) * 8,
-            y: (Math.random() - 0.5) * 8 - 3, // Move upwards initially
-        },
+        x: 0,
+        y: 0,
+        size: 0,
+        velocity: { x: 0, y: 0 },
         color: '#FFFFFF',
+        startTime: 0,
+        duration: 0
     };
-    effects.push({ ...defaults, ...props });
+}
+
+function releaseParticle(particle) {
+    if (particlePool.length < maxPoolSize) {
+        // Reset particle properties
+        particle.type = 'particle';
+        particle.x = 0;
+        particle.y = 0;
+        particle.size = 0;
+        particle.velocity.x = 0;
+        particle.velocity.y = 0;
+        particle.color = '#FFFFFF';
+        particle.startTime = 0;
+        particle.duration = 0;
+        particlePool.push(particle);
+    }
+}
+
+function addParticle(props) {
+    const particle = getParticle();
+    particle.type = 'particle';
+    particle.startTime = performance.now();
+    particle.duration = props.duration || 500;
+    particle.size = props.size || Math.random() * 3 + 2;
+    particle.velocity = {
+        x: props.velocity?.x || (Math.random() - 0.5) * 8,
+        y: props.velocity?.y || (Math.random() - 0.5) * 8 - 3, // Move upwards initially
+    };
+    particle.color = props.color || '#FFFFFF';
+    particle.x = props.x || 0;
+    particle.y = props.y || 0;
+
+    effects.push(particle);
 }
 
 export function drawParticles() {
-    effects.forEach(effect => {
+    const now = performance.now();
+    for (let i = effects.length - 1; i >= 0; i--) {
+        const effect = effects[i];
         if (effect.type === 'particle') {
-            const progress = (performance.now() - effect.startTime) / effect.duration;
+            const progress = (now - effect.startTime) / effect.duration;
             if (progress < 1) {
                 effectsCtx.save();
                 effectsCtx.globalAlpha = 1 - progress;
@@ -292,9 +382,13 @@ export function drawParticles() {
                 effectsCtx.arc(effect.x, effect.y, effect.size * (1 - progress * 0.5), 0, Math.PI * 2);
                 effectsCtx.fill();
                 effectsCtx.restore();
+            } else {
+                // Return particle to pool
+                releaseParticle(effect);
+                effects.splice(i, 1);
             }
         }
-    });
+    }
 }
 
 export function triggerLineClearEffect(rows, clearType) {
@@ -311,45 +405,58 @@ export function triggerLineClearEffect(rows, clearType) {
         style: clearType, // Pass style for special rendering (e.g., 'b2b')
     });
 
-    // Add particles based on clear type
-    rows.forEach(row => {
-        const y = (row - startRow) * CELL_SIZE + CELL_SIZE / 2;
-        let particleCount = 0;
-        let particleColors = ['#FFFFFF'];
+    // Add particles based on clear type with performance limit
+    if (CONFIG.effects.enableParticleEffects) {
+        const maxParticlesPerClear = CONFIG.effects.maxParticlesPerClear || 100;
+        let totalParticles = 0;
 
-        switch (clearType) {
-            case 'tetris':
-                particleCount = 40;
-                break;
-            case 'tspin':
-                particleCount = 30;
-                particleColors = ['#FF00FF', '#FFFFFF'];
-                break;
-            case 'b2b':
-                particleCount = 20;
-                // Rainbow colors for B2B
-                particleColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
-                break;
-            case 'combo':
-                 particleCount = 15;
-                 particleColors = ['#FFFF00'];
-                 break;
-            default: // single, double, triple
-                particleCount = rows.length * 5;
-        }
+        rows.forEach(row => {
+            const y = (row - startRow) * CELL_SIZE + CELL_SIZE / 2;
+            let particleCount = 0;
+            let particleColors = ['#FFFFFF'];
 
-        for (let i = 0; i < particleCount; i++) {
-            addParticle({
-                x: Math.random() * BOARD_WIDTH + offset.x,
-                y: y + offset.y,
-                color: particleColors[Math.floor(Math.random() * particleColors.length)],
-                duration: 400 + Math.random() * 300,
-            });
-        }
-    });
+            switch (clearType) {
+                case 'tetris':
+                    particleCount = CONFIG.effects.particleCountTetris || 40;
+                    break;
+                case 'tspin':
+                    particleCount = CONFIG.effects.particleCountTspin || 30;
+                    particleColors = ['#FF00FF', '#FFFFFF'];
+                    break;
+                case 'b2b':
+                    particleCount = CONFIG.effects.particleCountB2B || 20;
+                    // Rainbow colors for B2B
+                    particleColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
+                    break;
+                case 'combo':
+                    particleCount = CONFIG.effects.particleCountCombo || 15;
+                    particleColors = ['#FFFF00'];
+                    break;
+                default: // single, double, triple
+                    particleCount = Math.min(rows.length * (CONFIG.effects.particleCountDefaultMultiplier || 5), 20);
+            }
+
+            // Limit total particles to prevent performance issues
+            const particlesToAdd = Math.min(particleCount, maxParticlesPerClear - totalParticles);
+
+            for (let i = 0; i < particlesToAdd; i++) {
+                if (totalParticles >= maxParticlesPerClear) break;
+
+                addParticle({
+                    x: Math.random() * BOARD_WIDTH + offset.x,
+                    y: y + offset.y,
+                    color: particleColors[Math.floor(Math.random() * particleColors.length)],
+                    duration: (CONFIG.effects.particleDurationBase || 400) + Math.random() * (CONFIG.effects.particleDurationRandom || 300),
+                });
+                totalParticles++;
+            }
+        });
+    }
 }
 
 export function triggerTspinEffect(x, y) {
+    if (!CONFIG.effects.enableTextEffects) return; // Check if text effects are enabled
+
     const offset = getMainBoardOffset();
     tspinEffect = {
         type: 'tspin',
@@ -361,7 +468,9 @@ export function triggerTspinEffect(x, y) {
 }
 
 export function triggerLockPieceEffect(x, y, color) {
-    const particleCount = 5;
+    if (!CONFIG.effects.enableParticleEffects) return; // Check if particle effects are enabled
+
+    const particleCount = CONFIG.effects.lockPieceParticleCount || 5;
     const offset = getMainBoardOffset();
     for (let i = 0; i < particleCount; i++) {
         addParticle({
@@ -369,9 +478,9 @@ export function triggerLockPieceEffect(x, y, color) {
             y: y + offset.y,
             color,
             duration: 300,
-             velocity: {
-                x: (Math.random() - 0.5) * 4,
-                y: (Math.random() - 0.5) * 4
+            velocity: {
+                x: (Math.random() - 0.5) * (CONFIG.effects.lockPieceParticleVelocityFactor || 4),
+                y: (Math.random() - 0.5) * (CONFIG.effects.lockPieceParticleVelocityFactor || 4)
             },
         });
     }
@@ -384,6 +493,219 @@ export function triggerScoreUpdateEffect() {
     };
 }
 
+// Appearance effect for new piece spawning
+export function triggerPieceAppearanceEffect(piece) {
+    if (!CONFIG.effects.enableAppearanceEffects) return; // Check if appearance effects are enabled
+
+    const shape = piece.shape[0]; // Use the initial rotation
+    const offset = getMainBoardOffset();
+    const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+
+    // Create particles for each block in the piece
+    const particleCountPerBlock = CONFIG.effects.appearanceParticleCount || 6;
+
+    shape.forEach(([dx, dy]) => {
+        const x = (piece.x + dx) * CELL_SIZE + CELL_SIZE / 2;
+        const y = (piece.y + dy - startRow) * CELL_SIZE + CELL_SIZE / 2;
+
+        // Position in canvas coordinates
+        const canvasX = x + offset.x;
+        const canvasY = y + offset.y;
+
+        // Create particles around the block position
+        for (let i = 0; i < particleCountPerBlock; i++) {
+            // Create particles that move toward the center
+            const angle = Math.random() * Math.PI * 2;
+            const distance = (Math.random() * 10) + 5; // Random distance from center
+            const targetX = canvasX;
+            const targetY = canvasY;
+            const startX = targetX + Math.cos(angle) * distance;
+            const startY = targetY + Math.sin(angle) * distance;
+
+            // Get particle color based on piece type
+            const typeIndex = tetrominoTypeToIndex(piece.type);
+            const color = CONFIG.colors.tetromino[typeIndex + 1] || "#FFFFFF";
+
+            addParticle({
+                x: startX,
+                y: startY,
+                color: color,
+                duration: (CONFIG.effects.appearanceDuration || 500) + Math.random() * 200,
+                velocity: {
+                    x: (targetX - startX) / 10, // Move towards center
+                    y: (targetY - startY) / 10  // Move towards center
+                },
+            });
+        }
+    });
+
+    // Calculate the bounding box for the piece
+    const minX = Math.min(...shape.map(([x, y]) => x));
+    const maxX = Math.max(...shape.map(([x, y]) => x));
+    const minY = Math.min(...shape.map(([x, y]) => y));
+    const maxY = Math.max(...shape.map(([x, y]) => y));
+
+    // Add a brief flash at the piece location
+    effects.push({
+        type: 'pieceAppearance',
+        startTime: performance.now(),
+        duration: CONFIG.effects.appearanceFlashDuration || 300,
+        x: (piece.x + minX) * CELL_SIZE + offset.x,
+        y: (piece.y + minY - startRow) * CELL_SIZE + offset.y,
+        width: (maxX - minX + 1) * CELL_SIZE,
+        height: (maxY - minY + 1) * CELL_SIZE,
+        color: CONFIG.colors.tetromino[tetrominoTypeToIndex(piece.type) + 1] || "#FFFFFF"
+    });
+}
+
+// Combo chain effect
+export function triggerComboEffect(comboCount) {
+    if (!CONFIG.effects.enableComboEffects) return;
+
+    // Add a text effect for combo
+    if (comboCount >= 2) {
+        const comboText = `${comboCount} COMBO!`;
+        const offset = getMainBoardOffset();
+        const x = offset.x + BOARD_WIDTH / 2;
+        const y = offset.y + BOARD_HEIGHT / 3;
+
+        // Add a special combo text effect with enhanced styling
+        textEffects.push({
+            text: comboText,
+            style: 'combo',
+            duration: (CONFIG.effects.comboTextDuration || 1000) * (1 + comboCount * 0.1), // Longer for higher combos
+            startTime: performance.now(),
+            x: x,
+            y: y,
+            initialY: y,
+        });
+    }
+}
+
+// Perfect clear celebration effect
+export function triggerPerfectClearEffect() {
+    if (!CONFIG.effects.enablePerfectClearEffects) return;
+
+    const offset = getMainBoardOffset();
+    const centerX = offset.x + BOARD_WIDTH / 2;
+    const centerY = offset.y + BOARD_HEIGHT / 2;
+
+    // Create a large burst of particles
+    const particleCount = CONFIG.effects.perfectClearParticleCount || 100;
+    const colors = ['#FFD700', '#FFA500', '#FF0000', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
+
+    for (let i = 0; i < particleCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 100;
+        const targetX = centerX + Math.cos(angle) * distance;
+        const targetY = centerY + Math.sin(angle) * distance;
+
+        addParticle({
+            x: centerX,
+            y: centerY,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            duration: (CONFIG.effects.perfectClearDuration || 1500) + Math.random() * 500,
+            velocity: {
+                x: (targetX - centerX) / 20,
+                y: (targetY - centerY) / 20
+            },
+        });
+    }
+
+    // Add special text effect
+    addTextEffect('PERFECT CLEAR!', {
+        style: 'ko',
+        duration: CONFIG.effects.perfectClearTextDuration || 2000,
+        x: centerX,
+        y: centerY - 50
+    });
+
+    // Add a screen-wide flash effect
+    effects.push({
+        type: 'perfectClearFlash',
+        startTime: performance.now(),
+        duration: CONFIG.effects.perfectClearFlashDuration || 800,
+        color: '#FFFFFF'
+    });
+}
+
+// Draw perfect clear flash effect
+export function drawPerfectClearEffects() {
+    if (!CONFIG.effects.enablePerfectClearEffects) return;
+
+    const now = performance.now();
+    for (let i = effects.length - 1; i >= 0; i--) {
+        const effect = effects[i];
+        if (effect.type === 'perfectClearFlash') {
+            const progress = (now - effect.startTime) / effect.duration;
+            if (progress < 1) {
+                effectsCtx.save();
+                const opacity = (1 - progress) * 0.7 * Math.sin(progress * Math.PI); // Pulsing effect
+                effectsCtx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                effectsCtx.fillRect(0, 0, effectsCtx.canvas.width, effectsCtx.canvas.height);
+                effectsCtx.restore();
+            } else {
+                effects.splice(i, 1); // Remove finished effect
+            }
+        }
+    }
+}
+
+// Attack received effect - flash when receiving attack
+export function triggerReceivedAttackEffect() {
+    if (!CONFIG.effects.enableAttackEffects) return;
+
+    effects.push({
+        type: 'receivedAttackFlash',
+        startTime: performance.now(),
+        duration: CONFIG.effects.attackFlashDuration || 250,
+        color: '#FF0000'
+    });
+}
+
+// Draw received attack effects
+export function drawReceivedAttackEffects() {
+    if (!CONFIG.effects.enableAttackEffects) return;
+
+    const now = performance.now();
+    for (let i = effects.length - 1; i >= 0; i--) {
+        const effect = effects[i];
+        if (effect.type === 'receivedAttackFlash') {
+            const progress = (now - effect.startTime) / effect.duration;
+            if (progress < 1) {
+                effectsCtx.save();
+                const opacity = (1 - progress) * 0.4;
+                effectsCtx.fillStyle = `rgba(255, 0, 0, ${opacity})`;
+                effectsCtx.fillRect(0, 0, effectsCtx.canvas.width, effectsCtx.canvas.height);
+                effectsCtx.restore();
+            } else {
+                effects.splice(i, 1); // Remove finished effect
+            }
+        }
+    }
+}
+
+export function drawPieceAppearanceEffects() {
+    if (!CONFIG.effects.enableAppearanceEffects) return;
+
+    const now = performance.now();
+    for (let i = effects.length - 1; i >= 0; i--) {
+        const effect = effects[i];
+        if (effect.type === 'pieceAppearance') {
+            const progress = (now - effect.startTime) / effect.duration;
+            if (progress < 1) {
+                effectsCtx.save();
+                effectsCtx.globalAlpha = (1 - progress) * 0.6; // Fade out
+                effectsCtx.fillStyle = effect.color;
+                effectsCtx.fillRect(effect.x, effect.y, effect.width, effect.height);
+                effectsCtx.restore();
+            } else {
+                effects.splice(i, 1); // Remove finished effect
+            }
+        }
+    }
+}
+
 export function triggerTargetAttackFlash(attackerId) {
     targetAttackFlashes.set(attackerId, performance.now() + 200); // 200ms flash
 }
@@ -392,24 +714,35 @@ export function triggerTargetAttackFlash(attackerId) {
 
 export function updateEffects() {
     const now = performance.now();
-    
-    // Filter out expired effects
-    effects = effects.filter(e => now - e.startTime < e.duration);
-    textEffects = textEffects.filter(e => now - e.startTime < e.duration);
-    
+
     // Update active effects
-    effects.forEach(e => {
-        if (e.type === 'particle') {
+    for (let i = effects.length - 1; i >= 0; i--) {
+        const e = effects[i];
+        if (now - e.startTime >= e.duration) {
+            // Return particle to pool if it's a particle effect
+            if (e.type === 'particle') {
+                releaseParticle(e);
+            }
+            effects.splice(i, 1);
+        } else if (e.type === 'particle') {
             e.x += e.velocity.x;
             e.y += e.velocity.y;
-            e.velocity.y += CONFIG.effects.particleGravity; // Gravity
-            e.velocity.x *= CONFIG.effects.particleFriction; // Friction
+            e.velocity.y += CONFIG.effects.particleGravity || 0.1; // Gravity
+            e.velocity.x *= CONFIG.effects.particleFriction || 0.98; // Friction
         }
-    });
+    }
+
+    // Update text effects
+    for (let i = textEffects.length - 1; i >= 0; i--) {
+        if (now - textEffects[i].startTime >= textEffects[i].duration) {
+            textEffects.splice(i, 1);
+        }
+    }
 
     // Update orbs
     for (let i = orbs.length - 1; i >= 0; i--) {
         if (!orbs[i].update()) {
+            releaseOrb(orbs[i]);
             orbs.splice(i, 1);
         }
     }
@@ -450,6 +783,28 @@ export function drawTspinEffect() {
     effectsCtx.fillText('T-SPIN!', tspinEffect.x, currentY);
     effectsCtx.strokeText('T-SPIN!', tspinEffect.x, currentY);
     effectsCtx.restore();
+}
+
+export function drawLineClearEffects() {
+    const now = performance.now();
+    effects.forEach(effect => {
+        const progress = (now - effect.startTime) / effect.duration;
+        if (progress >= 1) return; // Skip finished effects
+
+        const alpha = Math.max(0, 1 - progress);
+
+        if (effect.type === 'lineClear') {
+            effectsCtx.save();
+            effectsCtx.fillStyle = `rgba(255, 255, 255, ${alpha * CONFIG.effects.lineClearEffectOpacity})`;
+            const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+            const offset = getMainBoardOffset();
+            effect.rows.forEach(row => {
+                const y = (row - startRow) * CELL_SIZE + offset.y;
+                if (y >= offset.y) effectsCtx.fillRect(offset.x, y, BOARD_WIDTH, CELL_SIZE);
+            });
+            effectsCtx.restore();
+        }
+    });
 }
 
 export function drawTargetAttackFlashes() {
