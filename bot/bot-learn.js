@@ -113,10 +113,7 @@ class BotTrainer {
                 const gamePromise = (async () => {
                     try {
                         await gameSemaphore.acquire();
-                        const score = await Promise.race([
-                            this.runGame(individual),
-                            new Promise(resolve => setTimeout(() => resolve(0), 35000)) // 35 second timeout for safety
-                        ]);
+                        const score = await this.runGame(individual);
                         return { botIndex: i, score };
                     } catch (error) {
                         console.error(`❌ Error in game ${j+1} for bot ${individual.id}:`, error.message);
@@ -165,10 +162,7 @@ class BotTrainer {
                     1 // Fast move delay to speed up training
                 );
 
-                // Add timeout to prevent hanging bots
-                setTimeout(() => {
-                    resolve(0); // Default score if game hangs
-                }, 25000); // 25 seconds timeout
+
 
             } catch (error) {
                 console.error(`❌ Error creating bot for individual ${individual.id}:`, error);

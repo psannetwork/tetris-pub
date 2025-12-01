@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects, initEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, currentRoomId } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -180,7 +180,7 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         roomInfoDisplay.style.display = 'none';
         hostStartGameButton.style.display = 'none';
         if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Hide hamburger when not in a room
-        currentRoomId = null;
+        setCurrentRoomId(null);
     }
 }
 
@@ -199,7 +199,7 @@ function closeModal(modal) {
     mainMenuButtons.style.display = 'block'; // Show main menu buttons when modal is closed
     
     // Re-evaluate hamburger button visibility based on room state
-    if (currentRoomId) { // If still in a room, hamburger might need to be shown
+    if (getCurrentRoomId()) { // If still in a room, hamburger might need to be shown
         // Re-request room info to get the latest state including isPrivate
         // This will trigger setRoomDisplayState and update hamburger visibility
         socket.emit('requestRoomInfo'); 
@@ -369,7 +369,7 @@ function init() {
     };
 
     hamburgerMenuButton.onclick = () => { // New: Open admin menu
-        if (currentRoomId) {
+        if (getCurrentRoomId()) {
             openModal(adminMenuModal);
         } else {
             showMessage({ type: 'info', message: 'ルームに参加していません。' });

@@ -267,20 +267,14 @@ export function hardDrop() {
 }
 
 function checkGameOver() {
-    if (!currentPiece || isValidPosition(currentPiece, 0, 0)) {
+    if (!currentPiece) {
+        console.warn("checkGameOver called with no currentPiece.");
         return;
     }
 
-    // Check if the piece is blocked above the visible board
-    const shape = currentPiece.shape[currentPiece.rotation];
-    const isBlockedInSpawn = shape.some(([dx, dy]) => {
-        const y = currentPiece.y + dy;
-        // The non-visible area is from row 0 to (CONFIG.board.rows - CONFIG.board.visibleRows - 1)
-        return y < (CONFIG.board.rows - CONFIG.board.visibleRows);
-    });
-
-    if (isBlockedInSpawn) {
-        console.log("Game Over reason: Piece blocked in spawn area.");
+    // Game over if the new piece cannot be placed at its initial spawn position.
+    if (!isValidPosition(currentPiece, 0, 0)) {
+        console.log("Game Over reason: New piece cannot be placed at spawn position.");
         triggerGameOver();
     }
 }

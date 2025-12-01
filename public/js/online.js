@@ -24,7 +24,7 @@ export function setAutoMatchOnReconnect(value) {
 export function initializeSocket() {
     if (socket) {
         // If socket exists and is connected, record its ID before disconnecting
-        if (socket.connected && currentSocketId) {
+        if (socket.connected && getCurrentRoomId()) {
             myPastSocketIds.add(currentSocketId);
         }
         socket.disconnect();
@@ -96,13 +96,23 @@ export function initializeSocket() {
 
     
 
-        socket.on("roomInfo", (data) => {
+                                socket.on("roomInfo", (data) => {
 
-            currentRoomId = data.roomId; // Store the current room ID
+    
 
-            const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+                                    setCurrentRoomId(data.roomId); // Use setter function to update currentRoomId
 
-            const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+    
+
+                            clearAllEffects(); // Clear all effects when entering a new room
+
+    
+
+                            const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+
+    
+
+                            const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
 
     
 
@@ -211,211 +221,227 @@ export function initializeSocket() {
 
     
 
-        socket.on("ranking", (data) => {
-
-            const { yourRankMap, statsMap, roomId } = data;
-
-            if (roomId !== currentRoomId) {
-
-                return;
-
-            }
+                        socket.on("ranking", (data) => {
 
     
 
-                
+                            const { yourRankMap, statsMap, roomId } = data;
 
     
 
-                    Object.assign(finalRanking, yourRankMap);
+                            if (roomId !== getCurrentRoomId()) {
 
     
 
-                    Object.assign(finalStatsMap, statsMap); // NEW
+                                return;
 
     
 
-                    
+                            }
 
     
 
-                    miniboardSlots.forEach(slot => {
+                            
 
     
 
-                        if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
+                            Object.assign(finalRanking, yourRankMap);
 
     
 
-                            finalRanking[slot.userId] = null;
+                            Object.assign(finalStatsMap, statsMap); // NEW
 
     
 
-                        }
+                            
 
     
 
-                    });
+                            miniboardSlots.forEach(slot => {
 
     
 
-                    if (!finalRanking.hasOwnProperty(socket.id)) {
+                                if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
 
     
 
-                        finalRanking[socket.id] = null;
+                                    finalRanking[slot.userId] = null;
 
     
 
-                    }
+                                }
 
     
 
-            
+                            });
 
     
 
-                    miniboardSlots.forEach(slot => {
+                            
 
     
 
-                        if (slot.userId && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
+                            if (!finalRanking.hasOwnProperty(socket.id)) {
 
     
 
-                            slot.isGameOver = true;
+                                finalRanking[socket.id] = null;
 
     
 
-                            slot.dirty = true;
+                            }
 
     
 
-                        }
+                            
 
     
 
-                    });
+                            miniboardSlots.forEach(slot => {
 
     
 
-                    startAnimationIfNeeded();
+                                if (slot.userId && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
 
     
 
-            
+                                    slot.isGameOver = true;
 
     
 
-                    const myRank = finalRanking[socket.id];
+                                    slot.dirty = true;
 
     
 
-                    
+                                }
 
     
 
-                    if (myRank === null || myRank === undefined) {
+                            });
 
     
 
-                        setGameState('PLAYING');
+                            
 
     
 
-                        return;
+                            startAnimationIfNeeded();
 
     
 
-                    }
+                            
 
     
 
-            
+                            const myRank = finalRanking[socket.id];
 
     
 
-                    const totalPlayers = Object.keys(finalRanking).length;
+                            
 
     
 
-                    const knockedOutPlayers = Object.values(finalRanking).filter(r => r > 1).length;
+                            if (myRank === null || myRank === undefined) {
 
     
 
-                    const isMatchOver = (knockedOutPlayers >= totalPlayers - 1 && totalPlayers > 1);
+                                setGameState('PLAYING');
 
     
 
-                    const amKnockedOut = myRank > 1;
+                                return;
 
     
 
-            
+                            }
 
     
 
-                    if (isMatchOver) {
+                            
 
     
 
-                        setGameState('GAME_OVER');
+                            const totalPlayers = Object.keys(finalRanking).length;
 
     
 
-                        const isWin = myRank === 1;
+                            const knockedOutPlayers = Object.values(finalRanking).filter(r => r > 1).length;
 
     
 
-                        const title = isWin ? 'You Win!' : 'Game Over';
+                            const isMatchOver = (knockedOutPlayers >= totalPlayers - 1 && totalPlayers > 1);
 
     
 
-                        if (isWin) setGameClear(true);
+                            const amKnockedOut = myRank > 1;
 
     
 
-                        showGameEndScreen(title, isWin, finalRanking, socket.id, finalStatsMap || {});
+                            
 
     
 
-                    } else if (amKnockedOut) {
+                            if (isMatchOver) {
 
     
 
-                        setGameState('GAME_OVER');
+                                setGameState('GAME_OVER');
 
     
 
-                        const gameEndOverlay = document.getElementById('game-end-overlay');
+                                const isWin = myRank === 1;
 
     
 
-                        if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
+                                const title = isWin ? 'You Win!' : 'Game Over';
 
     
 
-                            showGameEndScreen('Game Over', false, finalRanking, socket.id, finalStatsMap || {});
+                                if (isWin) setGameClear(true);
 
     
 
-                        }
+                                showGameEndScreen(title, isWin, finalRanking, socket.id, finalStatsMap || {});
 
     
 
-                    } else {
+                            } else if (amKnockedOut) {
 
     
 
-                        setGameState('PLAYING');
+                                setGameState('GAME_OVER');
 
     
 
-                    }
+                                const gameEndOverlay = document.getElementById('game-end-overlay');
 
     
 
-                });
+                                if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
+
+    
+
+                                    showGameEndScreen('Game Over', false, finalRanking, socket.id, finalStatsMap || {});
+
+    
+
+                                }
+
+    
+
+                            } else {
+
+    
+
+                                setGameState('PLAYING');
+
+    
+
+                            }
+
+    
+
+                        });
 
     
 
@@ -1200,7 +1226,15 @@ function startAnimationIfNeeded() {
 
 let finalRanking = {}; // To store all player ranks
 let finalStatsMap = {}; // To store all player stats
-export let currentRoomId = null; // To store the current room ID
+let currentRoomId = null; // To store the current room ID
+
+export function setCurrentRoomId(id) {
+    currentRoomId = id;
+}
+
+export function getCurrentRoomId() {
+    return currentRoomId;
+}
 
 export function drawTargetLines(ctx) {
     if (!ctx || !socket.connected) {

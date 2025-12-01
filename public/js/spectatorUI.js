@@ -218,7 +218,8 @@ export function drawRankingOverlay() {
   if (rankingData && rankingData.yourRankMap) {
     rankArr.forEach((item, idx) => {
       ctx.textAlign = "left";
-      ctx.fillText(`${idx + 1}. ${item.id} (ランク: ${item.rank})`, panelX + panelPadding, currentY);
+      const displayRank = (item.rank === 1 && rankingData && !rankingData.isGameOver) ? '-' : item.rank;
+      ctx.fillText(`${idx + 1}. ${item.id} (ランク: ${displayRank})`, panelX + panelPadding, currentY);
       currentY += rankItemHeight;
     });
   } else {

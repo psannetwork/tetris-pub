@@ -35,7 +35,7 @@ function generateUniqueRoomId() {
 let ioRef = null;
 
 // Timeout duration in milliseconds
-const PLAYER_TIMEOUT_MS = 15000; // 15 seconds
+const PLAYER_TIMEOUT_MS = 30000; // 30 seconds
 
 function setIoReference(io) {
     ioRef = io;
@@ -331,10 +331,7 @@ function handleGameOver(io, socket, reason, stats) {
     if (!roomId || !rooms.has(roomId)) return;
     const room = rooms.get(roomId);
 
-    console.log(`[Ranking] handleGameOver called for ${socket.id} in room ${roomId}. Reason: ${reason}`);
-
     if (room.isGameOver) {
-        console.log(`[Ranking] Room ${roomId} is already game over. Ignoring.`);
         return;
     }
 
@@ -347,34 +344,39 @@ function handleGameOver(io, socket, reason, stats) {
     const ranks = playerRanks.get(roomId);
     if (!ranks.includes(socket.id)) {
         ranks.push(socket.id);
-        console.log(`[Ranking] ${socket.id} added to ranks for room ${roomId}. Ranks: [${ranks.join(', ')}]`);
     }
 
     // Ensure the player is removed from active players map for targeting purposes
     playerRoom.delete(socket.id);
 
     const activePlayersCount = room.initialPlayers.size - ranks.length;
-    console.log(`[Ranking] Active players left in ${roomId}: ${activePlayersCount}`);
 
     // Construct the current ranking order
     const stillPlaying = [...room.initialPlayers].filter(id => !ranks.includes(id));
-    const finalRanks = [...stillPlaying, ...ranks.slice().reverse()];
-    
     const yourRankMap = {};
-    finalRanks.forEach((playerId, index) => {
-        yourRankMap[playerId] = index + 1;
+
+    // Players still in the game share the top rank
+    stillPlaying.forEach(playerId => {
+        yourRankMap[playerId] = 1;
     });
 
-    console.log(`[Ranking] Emitting ranks for room ${roomId}. Rank Map:`, yourRankMap);
-    
+    // Assign ranks to knocked-out players
+    const knockedOutPlayers = ranks.length;
+    ranks.slice().reverse().forEach((playerId, index) => {
+        yourRankMap[playerId] = stillPlaying.length + index + 1;
+    });
+
+    // Create a sorted list of players by rank for display
+    const finalRanks = [...room.initialPlayers]
+        .sort((a, b) => yourRankMap[a] - yourRankMap[b]);
+
     const statsMap = Object.fromEntries(room.stats);
-    const rankingData = { ranking: finalRanks, yourRankMap, statsMap, roomId: room.roomId };
+    const rankingData = { ranking: finalRanks, yourRankMap, statsMap, roomId: room.roomId, isGameOver: room.isGameOver };
     emitToRoom(io, room, "ranking", rankingData);
 
     // If the game is now over, handle final win/loss emits
     if (activePlayersCount <= 1) {
         room.isGameOver = true;
-        console.log(`[Ranking] Game over in room ${roomId}.`);
 
         const winnerId = finalRanks[0];
 
@@ -401,7 +403,6 @@ function handleGameOver(io, socket, reason, stats) {
 
         // For private rooms, do not reset isGameOver so players can start a new game in the same room
         if (room.isPrivate) {
-            console.log(`[Private Room] Keeping room ${roomId} open for next game.`);
             // Reset game state but keep the room open
             room.isGameOver = false; // Don't keep it as game over so new games can start
             room.isGameStarted = false;
@@ -427,8 +428,6 @@ function handleGameOver(io, socket, reason, stats) {
             room.timeoutId = setTimeout(() => {
                 const roomToClean = rooms.get(roomId);
                 if (roomToClean && roomToClean.players.size === 0) {
-                    console.log(`⏱️ Private room ${roomId} has timed out and will be cleaned up.`);
-
                     // Clean up activity check interval
                     if (roomToClean.activityCheckInterval) {
                         clearInterval(roomToClean.activityCheckInterval);
@@ -474,8 +473,6 @@ function handleGameOver(io, socket, reason, stats) {
                     if (playerRanks.has(roomId)) {
                         playerRanks.delete(roomId);
                     }
-
-                    console.log(`🗑️ Private room ${roomId} has been completely cleaned up due to timeout.`);
                 }
             }, timeoutDuration);
             return; // Don't clear timeout if private room is kept open
@@ -492,7 +489,6 @@ function handleGameOver(io, socket, reason, stats) {
     if (room.timeoutId) {
         clearTimeout(room.timeoutId);
         room.timeoutId = null;
-        console.log(`⏱️ Timeout cleared for room ${roomId} since the game is over.`);
     }
 }
 
