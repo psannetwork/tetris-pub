@@ -193,6 +193,7 @@ export function drawGame() {
         Effects.drawTextEffects();
         Effects.drawTspinEffect();
         Effects.drawTargetAttackFlashes();
+        Effects.drawTimeoutEffect(); // NEW: Draw timeout effect
         drawTargetLines(effectsCtx); // Pass effectsCtx
     }
 

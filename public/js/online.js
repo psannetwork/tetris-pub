@@ -59,7 +59,6 @@ export function initializeSocket() {
             slot.userId = null;
             slot.dirty = true;
         });
-        startAnimationIfNeeded();
         finalRanking = {}; // Reset on new connection
         finalStatsMap = {}; // Reset on new connection
 
@@ -94,8 +93,6 @@ export function initializeSocket() {
             // We need to redraw the miniboards to update their target styles
 
             miniboardSlots.forEach(slot => slot.dirty = true);
-
-            startAnimationIfNeeded();
 
         });
 
@@ -215,8 +212,6 @@ export function initializeSocket() {
 
             });
 
-            startAnimationIfNeeded();
-
             finalRanking = {}; // Reset for new game
             finalStatsMap = {}; // Reset for new game
 
@@ -329,12 +324,6 @@ export function initializeSocket() {
                             
 
     
-
-                            startAnimationIfNeeded();
-
-    
-
-                            
 
     
 
@@ -586,68 +575,199 @@ export function initializeSocket() {
 
     
 
-        socket.on("ReceiveGarbage", ({ from, lines }) => {
-
-            addAttackBar(lines);
+                socket.on("ReceiveGarbage", ({ from, lines, to }) => { // Added 'to'
 
     
 
-            let attackerPos;
-
-            if (from) {
-
-                attackerPos = getBoardCenterPosition(from);
-
-            } else {
-
-                // ターゲットがいない場合は、画面上部中央へ
-
-                attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
-
-            }
+                    if (!isSpectating) { // Only players have an attack bar
 
     
 
-            // Use the local player's board position instead of static coordinates
+                        addAttackBar(lines);
 
-            const myPos = getBoardCenterPosition(socket.id);
-
-            if (myPos) {
-
-                createLightOrb(attackerPos, myPos);
-
-            } else {
-
-                // Fallback to center of main board if getBoardCenterPosition fails
-
-                const wrapper = document.getElementById('overall-game-wrapper');
-
-                if (wrapper) {
-
-                    const wrapperRect = wrapper.getBoundingClientRect();
-
-                    const mainBoard = document.getElementById('main-game-board');
-
-                    if (mainBoard) {
-
-                        const boardRect = mainBoard.getBoundingClientRect();
-
-                        const x = boardRect.left - wrapperRect.left + boardRect.width / 2;
-
-                        const y = boardRect.top - wrapperRect.top + boardRect.height / 2;
-
-                        createLightOrb(attackerPos, { x, y });
+    
 
                     }
 
-                }
+    
 
-            }
+        
 
-            // Trigger visual effect for received attack
-            triggerReceivedAttackEffect();
+    
 
-        });
+                    let attackerPos;
+
+    
+
+                    if (from) {
+
+    
+
+                        attackerPos = getBoardCenterPosition(from);
+
+    
+
+                    } else {
+
+    
+
+                        // If no attacker (e.g., system garbage), use a default position
+
+    
+
+                        attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
+
+    
+
+                    }
+
+    
+
+        
+
+    
+
+                    // Determine the target position for the light orb effect
+
+    
+
+                    let targetForOrbPos;
+
+    
+
+                    if (isSpectating) {
+
+    
+
+                        // In spectator mode, the 'to' field indicates who received garbage
+
+    
+
+                        targetForOrbPos = getBoardCenterPosition(to);
+
+    
+
+                    } else {
+
+    
+
+                        // In player mode, the local player is the recipient
+
+    
+
+                        targetForOrbPos = getBoardCenterPosition(socket.id);
+
+    
+
+                    }
+
+    
+
+        
+
+    
+
+                    if (targetForOrbPos) {
+
+    
+
+                        createLightOrb(attackerPos, targetForOrbPos);
+
+    
+
+                    } else {
+
+    
+
+                        // Fallback for createLightOrb if target position cannot be determined
+
+    
+
+                        // This fallback logic was originally for 'myPos' (local player)
+
+    
+
+                        // For spectators, if 'to' does not yield a position,
+
+    
+
+                        // and for players if 'socket.id' does not yield a position,
+
+    
+
+                        // we use a general center position on the main board.
+
+    
+
+                        const wrapper = document.getElementById('overall-game-wrapper');
+
+    
+
+                        if (wrapper) {
+
+    
+
+                            const wrapperRect = wrapper.getBoundingClientRect();
+
+    
+
+                            const mainBoard = document.getElementById('main-game-board');
+
+    
+
+                            if (mainBoard) {
+
+    
+
+                                const boardRect = mainBoard.getBoundingClientRect();
+
+    
+
+                                const x = boardRect.left - wrapperRect.left + boardRect.width / 2;
+
+    
+
+                                const y = boardRect.top - wrapperRect.top + boardRect.height / 2;
+
+    
+
+                                createLightOrb(attackerPos, { x, y });
+
+    
+
+                            }
+
+    
+
+                        }
+
+    
+
+                    }
+
+    
+
+        
+
+    
+
+                    // Trigger visual effect for received attack only for the actual player
+
+    
+
+                    if (!isSpectating) {
+
+    
+
+                        triggerReceivedAttackEffect();
+
+    
+
+                    }
+
+    
+
+                });
 
     
 
@@ -1066,7 +1186,6 @@ function addOpponent(userId) {
                 startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
             }
         }
-        startAnimationIfNeeded();
     }
 }
 
@@ -1075,7 +1194,6 @@ function removeOpponent(userId) {
     if (slot) {
         slot.userId = null;
         slot.dirty = true;
-        startAnimationIfNeeded();
     }
 }
 
@@ -1088,7 +1206,6 @@ function updateSlotBoard(slot, boardData, diffData) {
         });
     }
     slot.dirty = true;
-    startAnimationIfNeeded();
 }
 
 function drawMiniBoard(slot, currentTime) {
@@ -1104,7 +1221,6 @@ function drawMiniBoard(slot, currentTime) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
-        // if (effect) slot.effect = null; // effect is no longer managed here
         slot.dirty = false;
         return;
     }
@@ -1119,52 +1235,55 @@ function drawMiniBoard(slot, currentTime) {
         ctx.textBaseline = "middle";
         ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
         // Do not set dirty to false, so it persists
-        return; 
+        return;
     }
 
     // Draw the actual miniboard content
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Pre-calculate values to avoid repeated calculations
     const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+    const garbageColor = CONFIG.colors.garbage;
+    const garbageBorder = MINIBOARD_CELL_SIZE * 0.15;
+    const garbageInnerSize = MINIBOARD_CELL_SIZE - garbageBorder * 2;
+
+    // Create a color cache to avoid repeated color lookups
+    const colorCache = new Map();
+
     for (let r = 0; r < CONFIG.board.visibleRows; r++) {
+        const boardRow = boardState[startRow + r];
+        if (!boardRow) continue;
+
         for (let c = 0; c < CONFIG.board.cols; c++) {
-            const block = boardState[startRow + r]?.[c];
-            if (block !== 0) {
-                const typeIndex = tetrominoTypeToIndex(block);
-                const color = block === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
-                
-                if (block === 'G') {
-                    const border = MINIBOARD_CELL_SIZE * 0.15;
-                    ctx.fillStyle = '#222';
-                    ctx.fillRect(c * MINIBOARD_CELL_SIZE, r * MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE);
-                    ctx.fillStyle = CONFIG.colors.garbage;
-                    ctx.fillRect(
-                        c * MINIBOARD_CELL_SIZE + border,
-                        r * MINIBOARD_CELL_SIZE + border,
-                        MINIBOARD_CELL_SIZE - border * 2,
-                        MINIBOARD_CELL_SIZE - border * 2
-                    );
-                } else {
-                    ctx.fillStyle = color;
-                    ctx.fillRect(
-                        c * MINIBOARD_CELL_SIZE,
-                        r * MINIBOARD_CELL_SIZE,
-                        MINIBOARD_CELL_SIZE,
-                        MINIBOARD_CELL_SIZE
-                    );
+            const block = boardRow[c];
+            if (block === 0) continue;
+
+            // Precalculate positions
+            const x = c * MINIBOARD_CELL_SIZE;
+            const y = r * MINIBOARD_CELL_SIZE;
+
+            if (block === 'G') {
+                // Draw garbage blocks
+                ctx.fillStyle = '#222';
+                ctx.fillRect(x, y, MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE);
+                ctx.fillStyle = garbageColor;
+                ctx.fillRect(x + garbageBorder, y + garbageBorder, garbageInnerSize, garbageInnerSize);
+            } else {
+                // Get type index and color
+                let color = colorCache.get(block);
+                if (!color) {
+                    const typeIndex = tetrominoTypeToIndex(block);
+                    color = CONFIG.colors.tetromino[typeIndex + 1] || "#808080";
+                    colorCache.set(block, color);
                 }
+
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y, MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE);
             }
         }
     }
-    
-    // effect related drawing is now handled in effects.js, no longer here
-    // if (effect && effect.isActive()) {
-    //     effect.update(currentTime);
-    //     effect.draw(currentTime);
-    // } else if (effect && !effect.isActive()) {
-    //     slot.effect = null;
-    // }
+
     slot.dirty = false;
 }
 
@@ -1172,13 +1291,22 @@ let animationFrameId = null;
 
 export function drawAllMiniBoards() {
     const currentTime = performance.now();
-    miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
+    // Only draw dirty slots for better performance
+    for (const slot of miniboardSlots) {
+        if (slot.dirty) {
+            drawMiniBoard(slot, currentTime);
+        }
+    }
 
-    // Check if there are any active effects OR if the game is playing/spectating and there are opponents
-    const hasActiveEffects = miniboardEntryEffects.some(effect => effect.isActive()); // Check active miniboard effects
+    // Check if any miniboards need redrawing OR if the game is playing/spectating and there are opponents
+    const hasDirtySlots = miniboardSlots.some(slot => slot.dirty);
     const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
 
-    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents) || (gameState === 'SPECTATING' && hasActiveOpponents)) {
+    // Continue requesting animation frames if playing/spectating with active opponents,
+    // or if there are still dirty slots to draw.
+    if ((gameState === 'PLAYING' || gameState === 'SPECTATING') && hasActiveOpponents) {
+        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
+    } else if (hasDirtySlots) { // Keep redrawing dirty slots even if not playing/spectating with opponents
         animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     } else {
         animationFrameId = null;
@@ -1190,8 +1318,6 @@ function startAnimationIfNeeded() {
         animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     }
 }
-
-
 
 let finalRanking = {}; // To store all player ranks
 let finalStatsMap = {}; // To store all player stats
@@ -1337,7 +1463,6 @@ export function startMatching() {
         slot.userId = null;
         slot.dirty = true;
     }); // Clear miniboards
-    startAnimationIfNeeded(); // Redraw to show them empty
     socket.emit("matching");
 }
 

@@ -288,7 +288,91 @@ class TimeoutParticle {
 }
 
 class TimeoutEffect {
-    // ... (TimeoutEffectのコードは省略) ...
+    constructor(ctx, message) {
+        this.ctx = ctx;
+        this.message = message;
+        this.startTime = performance.now();
+        this.duration = 3000; // 3 seconds
+        this.active = true;
+        this.particles = [];
+
+        // Create particles for the effect
+        for (let i = 0; i < 30; i++) {
+            this.particles.push({
+                x: Math.random() * this.ctx.canvas.width,
+                y: Math.random() * this.ctx.canvas.height,
+                size: Math.random() * 2 + 1,
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                alpha: 1,
+                life: Math.random() * 100 + 50
+            });
+        }
+    }
+
+    update() {
+        const now = performance.now();
+        const elapsed = now - this.startTime;
+
+        // Update particles
+        for (const particle of this.particles) {
+            particle.x += particle.vx;
+            particle.y += particle.vy;
+            particle.alpha = Math.max(0, 1 - (elapsed / this.duration));
+        }
+
+        // Update active property based on whether the effect should continue
+        this.active = elapsed < this.duration;
+
+        // Return whether the effect should continue
+        return this.active;
+    }
+
+    draw() {
+        if (!this.ctx) return;
+
+        const now = performance.now();
+        const elapsed = now - this.startTime;
+        const progress = Math.min(1, elapsed / this.duration);
+
+        // Draw particles
+        for (const particle of this.particles) {
+            if (particle.alpha > 0) {
+                this.ctx.save();
+                this.ctx.globalAlpha = particle.alpha;
+                this.ctx.fillStyle = '#ff5555';
+                this.ctx.beginPath();
+                this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.restore();
+            }
+        }
+
+        // Draw timeout message
+        if (this.message) {
+            this.ctx.save();
+            this.ctx.font = 'bold 40px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+
+            // Calculate position (center of canvas)
+            const centerX = this.ctx.canvas.width / 2;
+            const centerY = this.ctx.canvas.height / 3;
+
+            // Draw text shadow
+            this.ctx.shadowColor = 'black';
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowOffsetX = 3;
+            this.ctx.shadowOffsetY = 3;
+
+            // Draw the message with fading effect
+            const alpha = Math.max(0, 1 - progress);
+            this.ctx.fillStyle = `rgba(255, 85, 85, ${alpha})`;
+            this.ctx.fillText(this.message, centerX, centerY);
+
+            this.ctx.restore();
+        }
+    }
 }
 
 export function startTimeoutEffect(message) {

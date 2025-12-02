@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -170,12 +170,14 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
             setButtonState(adminStartGameButton, false); // Admin menu start button disabled for non-host
         }
         
-        // Hide game-related panels if spectating
+        // Adjust display of game-related panels based on whether spectating
         if (isSpectating) {
-            document.getElementById('game-left-panel').style.display = 'none';
-            document.getElementById('game-right-panel').style.display = 'none';
-            document.getElementById('attack-bar').style.display = 'none';
+            // In spectator mode, miniboards should be visible, main board and attack bar are not player-specific
+            document.getElementById('game-left-panel').style.display = 'block'; // Show miniboards
+            document.getElementById('game-right-panel').style.display = 'block'; // Show miniboards
+            document.getElementById('attack-bar').style.display = 'none'; // Hide attack bar for spectators
         } else {
+            // In player mode, show all panels
             document.getElementById('game-left-panel').style.display = 'block';
             document.getElementById('game-right-panel').style.display = 'block';
             document.getElementById('attack-bar').style.display = 'block';
@@ -327,7 +329,8 @@ function update(now = performance.now()) {
     drawGame();
     drawUI();
     drawMiniboardEntryEffects(now); // NEW: Draw miniboard entry effects
-    startAnimationIfNeeded();
+    // drawAllMiniBoards() is handled by its own animation system when needed
+    startAnimationIfNeeded(); // Start miniboard animation when needed
 
     requestAnimationFrame(update);
 }
@@ -607,7 +610,7 @@ export function getStats() {
 function startSpectating(roomId) {
     setGameState('SPECTATING');
     resetGame();
-    clearAllEffects();
+    // Don't clear effects when spectating - keep showing game effects
     setSpectating(true); // Set spectating state
     setRoomDisplayState(true, false, roomId, [], false); // Update UI for spectating
     spectateRoom(roomId); // Tell server to spectate
@@ -658,16 +661,15 @@ function handleSpectateRoomInfo(data) {
     document.getElementById('main-game-board').style.display = 'block'; // Ensure board itself is visible
     document.getElementById('score-display').style.display = 'none'; // Hide score for player, show only opponent boards
 
-    // Clear and re-add miniboards based on spectated room members
-    const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
-    const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
-
-    currentOpponents.forEach(id => {
-        if (!newOpponentIds.has(id)) removeOpponent(id);
+    // Explicitly clear all miniboard slots before populating for the new spectated room
+    miniboardSlots.forEach(slot => {
+        slot.userId = null;
+        slot.dirty = true;
+        slot.boardState.forEach(row => row.fill(0)); // Also clear board state
+        slot.isGameOver = false; // Reset game over status
     });
-    newOpponentIds.forEach(id => {
-        if (!currentOpponents.has(id)) addOpponent(id);
-    });
+    // Now add opponents for the current room
+    data.members.filter(id => id !== socket.id).forEach(id => addOpponent(id));
 }
 
 // NEW: displaySpectatorRanking function

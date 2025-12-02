@@ -430,7 +430,7 @@ function handleSocketConnection(io, socket) {
             emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
         }
 
-        const emitData = { from: socket.id, lines };
+        const emitData = { from: socket.id, lines, to: recipient };
         if (bots.has(recipient)) {
             bots.get(recipient).emit("ReceiveGarbage", emitData);
         } else {
