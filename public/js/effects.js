@@ -1013,6 +1013,22 @@ export function updateEffects() {
     }
 }
 
+export function drawAllEffects() {
+    if (!effectsCtx) return;
+    effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height); // Clear the canvas
+
+    drawTextEffects();
+    drawParticles();
+    drawOrbs(); // This already draws countdown and timeout effect
+    drawLineClearEffects();
+    drawTspinEffect();
+    drawPerfectClearEffects();
+    drawReceivedAttackEffects();
+    drawPieceAppearanceEffects();
+    drawTargetAttackFlashes();
+    // drawMiniboardEntryEffects is already called from main.js update loop
+}
+
 export function drawTspinEffect() {
     if (!tspinEffect) return;
 

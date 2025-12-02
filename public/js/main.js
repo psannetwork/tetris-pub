@@ -7,7 +7,7 @@ import {
     board, score, linesCleared
 } from './game.js';
 import { drawGame, drawUI, setupCanvases } from './draw.js';
-import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects } from './effects.js';
+import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects, drawAllEffects, effectsCtx } from './effects.js';
 import { handleInput } from './input.js';
 import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent } from './online.js';
 import { showCountdown } from './ui.js';
@@ -297,7 +297,7 @@ function update(now = performance.now()) {
             }
         }
         
-        updateEffects();
+        // updateEffects(); // REMOVED - now called once at the end
         sendBoardStatus(board, currentPiece);
 
         // Calculate stats
@@ -310,7 +310,7 @@ function update(now = performance.now()) {
 
     } else if (gameState === 'SPECTATING') { // NEW: Handle spectating state
         // In spectating mode, only effects are updated and miniboards drawn
-        updateEffects();
+        // updateEffects(); // REMOVED - now called once at the end
         // Stats are reset as no active player game is running
         gameStartTime = 0;
         piecesPlaced = 0;
@@ -326,9 +326,11 @@ function update(now = performance.now()) {
     updateButtonStates();
 
     // Drawing is now separated and happens every frame regardless of state
+    updateEffects(); // Call updateEffects once before drawing all effects
     drawGame();
     drawUI();
-    drawMiniboardEntryEffects(now); // NEW: Draw miniboard entry effects
+    drawAllEffects(); // Call drawAllEffects to render all effects
+    // drawMiniboardEntryEffects(now); // REMOVED - now handled by drawAllEffects
     // drawAllMiniBoards() is handled by its own animation system when needed
     startAnimationIfNeeded(); // Start miniboard animation when needed
 
