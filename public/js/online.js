@@ -1092,8 +1092,8 @@ function updateSlotBoard(slot, boardData, diffData) {
 }
 
 function drawMiniBoard(slot, currentTime) {
-    const { ctx, canvas, boardState, isGameOver, userId, effect } = slot;
-    if (!slot.dirty && !(effect && effect.isActive())) return;
+    const { ctx, canvas, boardState, isGameOver, userId } = slot; // Removed 'effect' from destructuring
+    if (!slot.dirty) return; // Only check dirty flag
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas.style.display = 'block';
@@ -1104,7 +1104,7 @@ function drawMiniBoard(slot, currentTime) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
-        if (effect) slot.effect = null;
+        // if (effect) slot.effect = null; // effect is no longer managed here
         slot.dirty = false;
         return;
     }
@@ -1158,12 +1158,13 @@ function drawMiniBoard(slot, currentTime) {
         }
     }
     
-    if (effect && effect.isActive()) {
-        effect.update(currentTime);
-        effect.draw(currentTime);
-    } else if (effect && !effect.isActive()) {
-        slot.effect = null;
-    }
+    // effect related drawing is now handled in effects.js, no longer here
+    // if (effect && effect.isActive()) {
+    //     effect.update(currentTime);
+    //     effect.draw(currentTime);
+    // } else if (effect && !effect.isActive()) {
+    //     slot.effect = null;
+    // }
     slot.dirty = false;
 }
 
@@ -1174,10 +1175,10 @@ export function drawAllMiniBoards() {
     miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
 
     // Check if there are any active effects OR if the game is playing/spectating and there are opponents
-    const hasActiveEffects = miniboardEntryEffects.some(effect => effect.isActive()); // NEW: Check active miniboard effects
+    const hasActiveEffects = miniboardEntryEffects.some(effect => effect.isActive()); // Check active miniboard effects
     const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
 
-    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents) || (gameState === 'SPECTATING' && hasActiveOpponents)) { // NEW: Add SPECTATING state
+    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents) || (gameState === 'SPECTATING' && hasActiveOpponents)) {
         animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     } else {
         animationFrameId = null;
