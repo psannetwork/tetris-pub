@@ -1,476 +1,918 @@
 import { CONFIG } from './config.js';
-import { board, currentPiece, triggerGameOver, isGameClear, initializePieces, setGameClear } from './game.js';
-import { update } from './main.js';
-import { gameCtx, overlayCtx, gameCanvas, overlayCanvas } from './draw.js';
-
+import { tetrominoTypeToIndex } from './draw.js';
+import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './layout.js';
+import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
+import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
 import { addAttackBar } from './garbage.js';
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect } from './effects.js';
+import { drawUI } from './draw.js';
 
-export const socket = io(CONFIG.serverUrl); // サーバーのポートに合わせる
-let isRanking = null;
-let currentCountdown = null;
-const gameOverStatus = {};
-        socket.on("connect", () => {
-            console.log("✅ サーバーに接続:", socket.id);
-            joinRoom();
+export let socket;
+let shouldAutoMatchOnReconnect = true; // Flag to control auto-matching
+
+export function setAutoMatchOnReconnect(value) {
+    shouldAutoMatchOnReconnect = value;
+}
+
+export function initializeSocket() {
+    if (socket) {
+        socket.disconnect();
+    }
+
+    socket = io(CONFIG.serverUrl, {
+        autoConnect: false,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        transports: ['websocket', 'polling']
+    });
+
+    // --- Socket Event Handlers ---
+    socket.on("connect", () => {
+        console.log("✅ サーバーに接続:", socket.id);
+        miniboardSlots.forEach(slot => {
+            slot.userId = null;
+            slot.dirty = true;
+        });
+        startAnimationIfNeeded();
+        finalRanking = {}; // Reset on new connection
+
+        if (wasManualDisconnect() && shouldAutoMatchOnReconnect) {
+            setManualDisconnect(false);
+            startMatching(); // auto-retry
+        } else if (wasManualDisconnect()) {
+            // If manual disconnect but auto-match disabled, just go to lobby
+            setManualDisconnect(false);
+            setGameState('LOBBY');
+            hideConnectionError();
+        } else {
+            setGameState('LOBBY'); // Ensure client is in lobby state on connect
+            hideConnectionError();
+        }
+    });
+
+    socket.on('targetsUpdate', (targets) => {
+        playerTargets = new Map(targets);
+        // We need to redraw the miniboards to update their target styles
+        miniboardSlots.forEach(slot => slot.dirty = true);
+        startAnimationIfNeeded();
+    });
+
+    socket.on("roomInfo", (data) => {
+        currentRoomId = data.roomId; // Store the current room ID
+        const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+        const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+
+        // Add new opponents
+        newOpponentIds.forEach(id => {
+            if (!currentOpponents.has(id)) addOpponent(id);
         });
 
-        function joinRoom() {
-            socket.emit("matching");
+        // Remove disconnected opponents
+        currentOpponents.forEach(id => {
+            if (!newOpponentIds.has(id)) removeOpponent(id);
+        });
+    });
+
+    socket.on("StartGame", () => {
+        currentCountdown = null;
+        showCountdown(null);
+        hideGameEndScreen(); // Hide end screen
+        resetGame(); // Changed to resetGame()
+        setHoldPiece(null); // Moved from CountDown
+        drawUI();           // Moved from CountDown
+        setGameState('PLAYING');
+        miniboardSlots.forEach(slot => {
+            if (slot.userId) { // Only reset boards for active opponents
+                slot.isGameOver = false;
+                slot.boardState.forEach(row => row.fill(0)); // Clear the board state
+                slot.dirty = true;
+            }
+        });
+        startAnimationIfNeeded();
+        finalRanking = {}; // Reset for new game
+        lastSentBoard = null; // Ensure board history is cleared for the new game
+    });
+
+    socket.on("ranking", (data) => {
+        const { yourRankMap, statsMap, roomId } = data;
+        if (roomId !== currentRoomId) {
+            return;
         }
 
-        socket.on("roomInfo", (data) => {
-            console.log(`ルーム: ${data.roomId}, 参加者: ${data.members.length}`);
+        Object.assign(finalRanking, yourRankMap);
+        
+        miniboardSlots.forEach(slot => {
+            if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
+                finalRanking[slot.userId] = null;
+            }
         });
+        if (!finalRanking.hasOwnProperty(socket.id)) {
+            finalRanking[socket.id] = null;
+        }
 
-        socket.on("CountDown", (count) => {
-            drawCount(count);
+        miniboardSlots.forEach(slot => {
+            if (slot.userId && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
+                slot.isGameOver = true;
+                slot.dirty = true;
+            }
         });
+        startAnimationIfNeeded();
 
-        socket.on("StartGame", () => {
-            currentCountdown = null; // Clear countdown once game starts
-            initializePieces(); // Call initializePieces
-            update();
-        });
+        const myRank = finalRanking[socket.id];
+        
+        if (myRank === null || myRank === undefined) {
+            setGameState('PLAYING');
+            return;
+        }
 
+        const totalPlayers = Object.keys(finalRanking).length;
+        const knockedOutPlayers = Object.values(finalRanking).filter(r => r > 1).length;
+        const isMatchOver = (knockedOutPlayers >= totalPlayers - 1 && totalPlayers > 1);
+        const amKnockedOut = myRank > 1;
 
-
-        socket.on("ReceiveGarbage", ({ from, lines }) => {
-            addAttackBar(lines);
-            
-        });
-
-// ランキング情報受信時（ゲームオーバー状態の更新）
-
-let RankMap = null;
-socket.on("ranking", ({ ranking, yourRankMap }) => {
-  console.log("📊 受け取ったランキングデータ:", ranking);
-  console.log("📌 プレイヤー別順位:", yourRankMap);
-
-  // 自分の順位処理はそのまま…
-  const myRank = yourRankMap[socket.id];
-        isRanking = myRank;
-
-  if (myRank !== null) {
-    console.log(`🏆 あなたの順位は ${myRank} 位です！`);
-    isRanking = myRank;
-     RankMap = yourRankMap;
-    if (myRank !== 1) {
-      triggerGameOver(myRank);
-    }
-    if (myRank === 1) {
-      setGameClear(true);
-    }
-  } else {
-    console.log("⌛ あなたの順位はまだ確定していません...");
-  }
-  
-  // 各ユーザーのゲームオーバー状態を更新
-  for (const userId in yourRankMap) {
-    gameOverStatus[userId] = yourRankMap[userId] !== null;
-  }
-});
-
-
-export function drawGameOver() {
-  overlayCtx.fillStyle = "rgba(0,0,0,0.6)";
-  overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
-  overlayCtx.fillStyle = "#FF0000";
-  overlayCtx.font = "bold 50px sans-serif";
-  overlayCtx.textAlign = "center";
-  const rankDisplay = (isRanking !== null) ? isRanking : "ランキング取得中";
-  const centerX = overlayCanvas.width / 2;
-  const centerY = overlayCanvas.height / 2;
-  overlayCtx.fillText("GAME OVER", centerX, centerY - 30);
-  overlayCtx.fillText(`Rank: ${rankDisplay}`, centerX, centerY + 30);
-
-  // ゲームオーバー時に状態を送信
-  socket.emit("PlayerGameStatus", "gameover");
-
-  // リザルト（ランキング）パネルの描画
-  const panelX = overlayCanvas.width * 0.1;
-  const panelY = overlayCanvas.height * 0.1;
-  const panelWidth = overlayCanvas.width * 0.8;
-  const panelHeight = overlayCanvas.height * 0.7;
-
-
-  // タイトルの描画
-  overlayCtx.fillStyle = "#FFFFFF";
-  overlayCtx.font = "bold 30px sans-serif";
-  overlayCtx.textAlign = "left";
-  overlayCtx.fillText("Ranking", panelX + 20, panelY + 40);
-
-  // 取得中かどうか判定して描画
-  if (RankMap === null) {
-    overlayCtx.font = "20px sans-serif";
-    overlayCtx.fillText("ランキング取得中...", panelX + 20, panelY + 80);
-  } else {
-    // RankMap の各プレイヤーの順位情報を配列にまとめる
-    // 例: { "player1": 8, "player2": 9, "player3": 7, "player4": null, ... }
-    const rankingEntries = [];
-    for (const playerId in RankMap) {
-      rankingEntries.push({
-        playerId: playerId,
-        rank: RankMap[playerId]
-      });
-    }
-
-    // 自分のプレイヤーID（ここでは socket.id を使用）
-    const myPlayerId = socket.id;
-
-    // 数値があるエントリーは昇順（数値が小さいほど上位）に、null のエントリーは後ろに表示
-    rankingEntries.sort((a, b) => {
-      if (a.rank === null && b.rank === null) return 0;
-      if (a.rank === null) return 1;
-      if (b.rank === null) return -1;
-      return a.rank - b.rank;
+        if (isMatchOver) {
+            setGameState('GAME_OVER');
+            const isWin = myRank === 1;
+            const title = isWin ? 'You Win!' : 'Game Over';
+            if (isWin) setGameClear(true);
+            showGameEndScreen(title, isWin, finalRanking, socket.id, statsMap || {});
+        } else if (amKnockedOut) {
+            setGameState('GAME_OVER');
+            const gameEndOverlay = document.getElementById('game-end-overlay');
+            if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
+                showGameEndScreen('Game Over', false, finalRanking, socket.id, statsMap || {});
+            }
+        } else {
+            setGameState('PLAYING');
+        }
     });
 
-    // 各エントリーをリストとして描画
-    overlayCtx.font = "20px sans-serif";
-    const lineHeight = 30;
-    let currentY = panelY + 80;
-    rankingEntries.forEach((entry, index) => {
-      // まだ値が取得できていなければ「取得中」と表示
-      const displayRank = (entry.rank !== null) ? entry.rank : "取得中";
-      // 自分のエントリーはハイライト（例：黄色）
-      if (entry.playerId === myPlayerId) {
-        overlayCtx.fillStyle = "#FFFF00";
-      } else {
-        overlayCtx.fillStyle = "#FFFFFF";
-      }
-      overlayCtx.fillText(
-        `${index + 1}. Player: ${entry.playerId} - Rank: ${displayRank}`,
-        panelX + 20,
-        currentY
-      );
-      currentY += lineHeight;
+    socket.on("BoardStatus", (data) => {
+        if (gameState !== 'PLAYING') return; // Ignore if not in a game
+        const { UserID, board, diff } = data;
+        let slot = miniboardSlots.find(s => s.userId === UserID);
+        if (!slot) {
+            addOpponent(UserID);
+            slot = miniboardSlots.find(s => s.userId === UserID);
+        }
+        if (slot) updateSlotBoard(slot, board, diff);
     });
-  }
 
-  // 取得中の状態があれば、1秒後に再描画して最新情報を反映
-  let needRefresh = false;
-  if (isRanking === null) {
-    needRefresh = true;
-  }
-  if (RankMap === null) {
-    needRefresh = true;
-  } else {
-    for (const playerId in RankMap) {
-      if (RankMap[playerId] === null) {
-        needRefresh = true;
-        break;
-      }
+    socket.on("BoardStatusBulk", (boards) => {
+        if (gameState !== 'PLAYING') return; // Ignore if not in a game
+        for (const userId in boards) {
+            const boardData = boards[userId];
+            if (!boardData) continue;
+            let slot = miniboardSlots.find(s => s.userId === userId);
+            if (!slot) {
+                addOpponent(userId);
+                slot = miniboardSlots.find(s => s.userId === userId);
+            }
+            if (slot) updateSlotBoard(slot, boardData.board, boardData.diff);
+        }
+    });
+
+    socket.on("PlayerDisconnected", ({ userId }) => {
+        removeOpponent(userId);
+    });
+
+    socket.on("CountDown", (count) => {
+        currentCountdown = count;
+        showCountdown(count);
+    });
+
+    socket.on("ReceiveGarbage", ({ from, lines }) => {
+        addAttackBar(lines);
+
+        let attackerPos;
+        if (from) {
+            attackerPos = getBoardCenterPosition(from);
+        } else {
+            // ターゲットがいない場合は、画面上部中央へ
+            attackerPos = { x: BOARD_WIDTH / 2, y: 0 };
+        }
+
+        // Use the local player's board position instead of static coordinates
+        const myPos = getBoardCenterPosition(socket.id);
+        if (myPos) {
+            createLightOrb(attackerPos, myPos);
+        } else {
+            // Fallback to center of main board if getBoardCenterPosition fails
+            const wrapper = document.getElementById('overall-game-wrapper');
+            if (wrapper) {
+                const wrapperRect = wrapper.getBoundingClientRect();
+                const mainBoard = document.getElementById('main-game-board');
+                if (mainBoard) {
+                    const boardRect = mainBoard.getBoundingClientRect();
+                    const x = boardRect.left - wrapperRect.left + boardRect.width / 2;
+                    const y = boardRect.top - wrapperRect.top + boardRect.height / 2;
+                    createLightOrb(attackerPos, { x, y });
+                }
+            }
+        }
+    });
+
+    socket.on("GarbageTransfer", ({ from, to, lines }) => {
+        // Don't draw the effect if I am the one receiving it,
+        // as ReceiveGarbage already handles that.
+        if (to === socket.id) return;
+
+        const fromPos = getBoardCenterPosition(from);
+        const toPos = getBoardCenterPosition(to);
+
+        if (fromPos && toPos) {
+            createLightOrb(fromPos, toPos);
+        }
+    });
+
+    socket.on("disconnect", (reason) => {
+        console.log(`❌ サーバーから切断されました: ${reason}`);
+        if (!wasManualDisconnect()) {
+            showConnectionError();
+        }
+    });
+
+    socket.on("connect_error", (err) => {
+        console.error(`接続エラー: ${err.message}`);
+        showConnectionError();
+    });
+
+    socket.on("reconnect", (attemptNumber) => {
+        console.log("✅ サーバーに再接続しました", `Attempt #${attemptNumber}`);
+        hideConnectionError();
+        socket.emit('requestRoomInfo');
+        resetGame();
+        setGameState('LOBBY'); // Ensure client is in lobby state on reconnect
+
+        // If was manually disconnected but not through UI actions, attempt to rejoin
+        if (!wasManualDisconnect()) {
+            // Check if we were in a room before, and rejoin if needed
+            socket.emit('requestRoomInfo');
+        }
+    });
+
+    socket.on("reconnect_failed", () => {
+        console.error("再接続に失敗しました");
+        showConnectionError();
+    });
+}
+
+initializeSocket();
+
+export let playerTargets = new Map();
+
+export let currentCountdown = null;
+
+let manualDisconnect = false;
+
+export function setManualDisconnect(value) {
+    manualDisconnect = value;
+}
+
+export function wasManualDisconnect() {
+    return manualDisconnect;
+}
+
+export let isManualDisconnect = false; // New flag for manual disconnect
+
+// --- Callback for stats ---
+let getStatsCallback = () => ({ score: 0, lines: 0, level: 1, time: '0.00', pps: 0, apm: 0 });
+
+export function setOnlineGetStatsCallback(callback) {
+    getStatsCallback = callback;
+}
+
+// --- Opponent State Management ---
+export const miniboardSlots = [];
+const leftMiniboardsGroup = document.getElementById('left-miniboards-group');
+const rightMiniboardsGroup = document.getElementById('right-miniboards-group');
+
+export let MINIBOARD_CELL_SIZE;
+export let MINIBOARD_WIDTH;
+export let MINIBOARD_HEIGHT;
+export let MINIBOARD_GAP;
+
+const MINIBOARDS_PER_COLUMN = 7;
+const NUM_GAPS_PER_COLUMN = MINIBOARDS_PER_COLUMN - 1;
+
+class MiniboardEntryEffect {
+    constructor(ctx, width, height) {
+        this.ctx = ctx;
+        this.x = width / 2;
+        this.y = height / 2;
+        this.startTime = performance.now();
+        this.lifeTime = 1500; // 1.5秒
+        this.particles = [];
+        this.particleCount = 30; // パーティクル数をさらに減らす
+        this.active = true;
+
+        // パーティクル初期化
+        for (let i = 0; i < this.particleCount; i++) {
+            this.particles.push({
+                angle: Math.random() * Math.PI * 2,
+                distance: Math.random() * 40 + 20,
+                size: Math.random() * 2 + 1,
+                speed: Math.random() * 0.02 + 0.01,
+                phase: Math.random() * Math.PI * 2,
+                opacity: 1
+            });
+        }
     }
-  }
-  if (needRefresh) {
-    setTimeout(drawGameOver, 1000);
-  }
-}
 
+    update(currentTime) {
+        if (!this.active) return; // 既に非アクティブなら何もしない
+        
+        const elapsed = currentTime - this.startTime;
+        const progress = Math.min(1, elapsed / this.lifeTime);
 
+        // 終了チェック
+        if (progress >= 1) {
+            this.active = false;
+            return;
+        }
 
-function drawCount(count) {
-    currentCountdown = count;
-    console.log("Received countdown: ", count);
-    drawCountdown();
-}
+        // パーティクル更新
+        this.particles.forEach(particle => {
+            particle.phase += particle.speed;
+            particle.currentDistance = particle.distance * (0.3 + 0.7 * Math.sin(progress * Math.PI));
+        });
+    }
 
-// This function will be called by the main draw loop in draw.js
-export function drawCountdown() {
-    if (currentCountdown !== null) {
-        console.log("drawCountdown called. currentCountdown:", currentCountdown);
-        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear the canvas before drawing
-        overlayCtx.fillStyle = "rgba(17, 16, 16, 0.7)"; // Semi-transparent black background
-        overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    draw(currentTime) {
+        if (!this.active) return;
 
-        overlayCtx.fillStyle = "#efececff"; // White text
-        overlayCtx.font = "bold 100px sans-serif";
-        overlayCtx.textAlign = "center";
-        overlayCtx.textBaseline = "middle";
-        overlayCtx.fillText(currentCountdown, overlayCanvas.width / 2, overlayCanvas.height / 2);
+        const elapsed = currentTime - this.startTime;
+        const progress = Math.min(1, elapsed / this.lifeTime);
+        const time = elapsed * 0.001;
+
+        // 中心の光
+        const centerSize = 8 + Math.sin(time * 10) * 3;
+        const centerAlpha = 0.7 * (1 - progress * 0.5);
+        this.ctx.beginPath();
+        this.ctx.arc(this.x, this.y, centerSize, 0, Math.PI * 2);
+        this.ctx.fillStyle = `rgba(255, 255, 255, ${centerAlpha})`;
+        this.ctx.fill();
+
+        // DEBUG: Draw a crosshair at the effect's perceived center
+        this.ctx.strokeStyle = 'red';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(this.x - 5, this.y);
+        this.ctx.lineTo(this.x + 5, this.y);
+        this.ctx.moveTo(this.x, this.y - 5);
+        this.ctx.lineTo(this.x, this.y + 5);
+        this.ctx.stroke();
+
+        // パーティクル描画
+        this.particles.forEach((particle, index) => {
+            const angle = particle.angle + particle.phase;
+            const distance = particle.currentDistance || particle.distance;
+            const px = this.x + Math.cos(angle) * distance;
+            const py = this.y + Math.sin(angle) * distance;
+
+            // 透明度調整
+            const particleAlpha = particle.opacity * (0.7 + 0.3 * Math.sin(time * 5 + index));
+            const fadeAlpha = particleAlpha * (1 - progress * 0.8);
+
+            this.ctx.beginPath();
+            this.ctx.arc(px, py, particle.size, 0, Math.PI * 2);
+            this.ctx.fillStyle = `rgba(0, 200, 255, ${fadeAlpha})`;
+            this.ctx.fill();
+        });
+    }
+
+    isActive() {
+        return this.active;
     }
 }
 
+function setupMiniboardDimensions() {
+    MINIBOARD_CELL_SIZE = 3.5; // Keep this for canvas drawing dimensions
+    MINIBOARD_HEIGHT = CONFIG.board.visibleRows * MINIBOARD_CELL_SIZE; // e.g. 20 * 3.5 = 70
+    MINIBOARD_WIDTH = CONFIG.board.cols * MINIBOARD_CELL_SIZE; // e.g. 10 * 3.5 = 35
+}
 
+// Call dimensions setup once on load.
+setupMiniboardDimensions();
 
+function setupMiniboardSlots() {
+    leftMiniboardsGroup.innerHTML = '';
+    rightMiniboardsGroup.innerHTML = '';
+    miniboardSlots.length = 0;
+    const totalMiniboards = 98;
+    for (let i = 0; i < totalMiniboards; i++) {
+        const canvas = document.createElement('canvas');
+        canvas.width = MINIBOARD_WIDTH;
+        canvas.height = MINIBOARD_HEIGHT;
+        canvas.className = 'miniboard';
+        
+        if (i < 49) {
+            leftMiniboardsGroup.appendChild(canvas);
+        } else {
+            rightMiniboardsGroup.appendChild(canvas);
+        }
 
-// ライン送信ボタンが押されたときに呼ばれる関数
-export function sendGarbage(targetId, lines) {
-    // ターゲットIDが指定されていない場合はランダムな相手に送信
-    if (!targetId) {
-        socket.emit("SendGarbage", { targetId: null, lines });
+        const slot = {
+            userId: null,
+            boardState: Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0)),
+            isGameOver: false,
+            canvas: canvas,
+            ctx: canvas.getContext('2d'),
+            isNew: false,
+            effect: null,
+            dirty: true
+        };
+
+        canvas.addEventListener('click', () => {
+            if (slot.userId && gameState === 'PLAYING') {
+                setTarget(slot.userId);
+            }
+        });
+
+        miniboardSlots.push(slot);
+    }
+}
+
+// Setup slots on initial load
+window.addEventListener('load', setupMiniboardSlots);
+
+export function connectToServer() {
+    socket.connect();
+}
+
+function addOpponent(userId) {
+    if (userId === socket.id) return;
+    const existingSlot = miniboardSlots.find(slot => slot.userId === userId);
+    if (existingSlot) return;
+
+    // Find all empty slots
+    const emptySlots = miniboardSlots.filter(slot => slot.userId === null);
+
+    if (emptySlots.length > 0) {
+        // Pick a random empty slot
+        const randomIndex = Math.floor(Math.random() * emptySlots.length);
+        const emptySlot = emptySlots[randomIndex];
+
+        emptySlot.userId = userId;
+        emptySlot.isGameOver = false;
+        emptySlot.boardState.forEach(row => row.fill(0));
+        emptySlot.isNew = true; // Add this flag for the effect
+        emptySlot.dirty = true;
+
+        // Only start the effect if the game is not yet playing
+        if (gameState !== 'PLAYING') { // Check gameState here
+            emptySlot.effect = new MiniboardEntryEffect(emptySlot.ctx, emptySlot.canvas.width, emptySlot.canvas.height);
+        }
+        startAnimationIfNeeded();
+    }
+}
+
+function removeOpponent(userId) {
+    const slot = miniboardSlots.find(slot => slot.userId === userId);
+    if (slot) {
+        slot.userId = null;
+        slot.dirty = true;
+        startAnimationIfNeeded();
+    }
+}
+
+function updateSlotBoard(slot, boardData, diffData) {
+    if (boardData) {
+        slot.boardState = boardData;
+    } else if (diffData) {
+        diffData.forEach(({ r, c, val }) => {
+            if (slot.boardState[r]) slot.boardState[r][c] = val;
+        });
+    }
+    slot.dirty = true;
+    startAnimationIfNeeded();
+}
+
+function drawMiniBoard(slot, currentTime) {
+    const { ctx, canvas, boardState, isGameOver, userId, effect } = slot;
+    if (!slot.dirty && !(effect && effect.isActive())) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.style.display = 'block';
+
+    // If no user, draw an empty, bordered slot
+    if (userId === null) {
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+        if (effect) slot.effect = null;
+        slot.dirty = false;
+        return;
+    }
+
+    // This part of the drawing logic will now correctly handle the KO display persistence.
+    if (isGameOver) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'red';
+        ctx.font = `bold ${canvas.width / 3.5}px ${CONFIG.ui.fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("KO", canvas.width / 2, canvas.height / 2);
+        // Do not set dirty to false, so it persists
+        return; 
+    }
+
+    // Draw the actual miniboard content
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+    for (let r = 0; r < CONFIG.board.visibleRows; r++) {
+        for (let c = 0; c < CONFIG.board.cols; c++) {
+            const block = boardState[startRow + r]?.[c];
+            if (block !== 0) {
+                const typeIndex = tetrominoTypeToIndex(block);
+                const color = block === 'G' ? '#555' : (CONFIG.colors.tetromino[typeIndex + 1] || "#808080");
+                
+                if (block === 'G') {
+                    const border = MINIBOARD_CELL_SIZE * 0.15;
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(c * MINIBOARD_CELL_SIZE, r * MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE, MINIBOARD_CELL_SIZE);
+                    ctx.fillStyle = CONFIG.colors.garbage;
+                    ctx.fillRect(
+                        c * MINIBOARD_CELL_SIZE + border,
+                        r * MINIBOARD_CELL_SIZE + border,
+                        MINIBOARD_CELL_SIZE - border * 2,
+                        MINIBOARD_CELL_SIZE - border * 2
+                    );
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(
+                        c * MINIBOARD_CELL_SIZE,
+                        r * MINIBOARD_CELL_SIZE,
+                        MINIBOARD_CELL_SIZE,
+                        MINIBOARD_CELL_SIZE
+                    );
+                }
+            }
+        }
+    }
+    
+    if (effect && effect.isActive()) {
+        effect.update(currentTime);
+        effect.draw(currentTime);
+    } else if (effect && !effect.isActive()) {
+        slot.effect = null;
+    }
+    slot.dirty = false;
+}
+
+let animationFrameId = null;
+
+export function drawAllMiniBoards() {
+    const currentTime = performance.now();
+    miniboardSlots.forEach(slot => drawMiniBoard(slot, currentTime));
+
+    // Check if there are any active effects OR if the game is playing and there are opponents
+    const hasActiveEffects = miniboardSlots.some(slot => slot.effect && slot.effect.isActive());
+    const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
+
+    if (hasActiveEffects || (gameState === 'PLAYING' && hasActiveOpponents)) {
+        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     } else {
-        // ターゲットIDが指定されている場合はその相手に送信
-        socket.emit("SendGarbage", { targetId, lines });
+        animationFrameId = null;
+    }
+}
+
+function startAnimationIfNeeded() {
+    if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
     }
 }
 
 
-// グローバル変数
-const userMiniBoardMapping = {};
-let nextMiniBoardIndex = 0;
-const miniBoardsData = [];           // ミニボードのグリッド情報
-const lastBoardStates = {};          // ユーザーごとの最新の boardState を保存
-const miniCellSize = Math.floor(CONFIG.board.cellSize * 0.15);
-let lastSentBoard = Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0));
 
-function getBoardDiff(oldBoard, newBoard) {
-  const diff = [];
-  for (let r = 0; r < newBoard.length; r++) {
-    for (let c = 0; c < newBoard[r].length; c++) {
-      if (oldBoard[r][c] !== newBoard[r][c]) {
-        diff.push({ r: r, c: c, val: newBoard[r][c] });
-      }
+let finalRanking = {}; // To store all player ranks
+let currentRoomId = null; // To store the current room ID
+
+export function drawTargetLines(ctx) {
+    if (!ctx || !socket.connected) {
+        return;
     }
-  }
-  return diff;
-}
-
-
-// 毎フレーム呼ばれる描画ループ
-export function drawminiboardloop() {
-  // 既存のメイン描画などはそのまま…
-
-  // miniBoardsData の再生成
-  initMiniBoards();
-
-  // 各ユーザーに割り当てられた miniBoard に最新の boardState を描画
-  for (const userID in userMiniBoardMapping) {
-    const boardID = userMiniBoardMapping[userID];
-    const boardState = lastBoardStates[userID] || Array.from({ length: 22 }, () => Array(10).fill(0));
-    // userID を渡して描画する
-    drawSpecificMiniBoard(userID, boardID, boardState);
-  }
-}
-
-
-function initMiniBoards() {
-  // miniBoardsData をクリアして再計算
-  miniBoardsData.length = 0;
-  
-  const attackBarWidth = 30, gap = 20;
-  const boardWidth = CONFIG.board.cols * CONFIG.board.cellSize;
-  const boardHeight = CONFIG.board.visibleRows * CONFIG.board.cellSize;
-  const totalWidth = attackBarWidth + gap + boardWidth;
-  const startX = (overlayCanvas.width - totalWidth) / 2;
-  const attackBarX = startX;
-  const boardX = startX + attackBarWidth + gap;
-  const boardY = (overlayCanvas.height - boardHeight) / 2;
-
-  // miniボードの設定（縦23×横10 のボード）
-  const miniBoardWidth = 10 * miniCellSize;
-  const miniBoardHeight = 23 * miniCellSize;
-  const miniGap = 10;  // 間隔
-
-  // 左側（Holdの左）のスタート位置
-  const miniLeftStartX = attackBarX - 110 - gap - (7 * (miniBoardWidth + miniGap));
-  const miniLeftStartY = boardY;
-  // 右側（メインボードの右）のスタート位置
-  const miniRightStartX = boardX + 110 + boardWidth + gap;
-  const miniRightStartY = boardY;
-
-  // 7×7 の mini ボードグリッドを描画（左側＆右側）
-  drawMiniBoardGrid(miniLeftStartX, miniLeftStartY, miniBoardWidth, miniBoardHeight, miniGap, "left");
-  drawMiniBoardGrid(miniRightStartX, miniRightStartY, miniBoardWidth, miniBoardHeight, miniGap, "right");
-}
-
-
-function drawMiniBoardGrid(startX, startY, boardWidth, boardHeight, gap, position) {
-  for (let row = 0; row < 7; row++) {
-    for (let col = 0; col < 7; col++) {
-      let x = startX + col * (boardWidth + gap);
-      let y = startY + row * (boardHeight + gap);
-      const boardID = `${position}_board_${row}_${col}`; // 一意のID
-      drawMiniBoard(x, y, boardWidth, boardHeight, boardID);
-    }
-  }
-}
-
-function drawMiniBoard(x, y, boardWidth, boardHeight, boardID) {
-  // 枠線を描画
-  overlayCtx.strokeStyle = "#FFF";
-  overlayCtx.lineWidth = 0.1;
-  overlayCtx.strokeRect(x, y, boardWidth, boardHeight);
-  
-  // miniBoardsData に位置情報を保存
-  miniBoardsData.push({ x, y, width: boardWidth, height: boardHeight, id: boardID });
-}
-
-
-function drawSpecificMiniBoard(userID, boardID, boardState) {
-  const boardData = miniBoardsData.find(board => board.id === boardID);
-  if (!boardData) {
-    console.error(`Board with ID ${boardID} not found.`);
-    return;
-  }
-  const { x, y, width, height } = boardData;
-  
-  // Clear board area and draw the border.
-  overlayCtx.clearRect(x, y, width, height);
-  overlayCtx.strokeStyle = "#FF0000";
-  overlayCtx.lineWidth = 1;
-  overlayCtx.strokeRect(x, y, width, height);
-  
-  // If the user has reached game over, clear the board (skip drawing blocks) and simply display the "KO" overlay.
-  if (gameOverStatus[userID]) {
-    overlayCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
-    overlayCtx.fillRect(x, y, width, height);
-    overlayCtx.fillStyle = "#FF0000";
-    overlayCtx.font = "bold 20px Arial";
-    overlayCtx.textAlign = "center";
-    overlayCtx.textBaseline = "middle";
-    overlayCtx.fillText("KO", x + width / 2, y + height / 2);
-    return;
-  }
-  
-  // Define block colors.
-  const blockColors = {
-    "I": "#00FFFF",
-    "O": "#FFFF00",
-    "T": "#800080",
-    "J": "#0000FF",
-    "L": "#FFA500",
-    "Z": "#FF0000",
-    "S": "#00FF00"
-  };
-  
-// Draw each non-empty block without the white border.
-for (let row = 0; row < boardState.length; row++) {
-  for (let col = 0; col < boardState[row].length; col++) {
-    const block = boardState[row][col];
-    if (block !== 0) {
-      const blockX = x + col * miniCellSize;
-      const blockY = y + row * miniCellSize;
-      // Fallback color is now gray (#808080) instead of black.
-      const blockColor = blockColors[block] || "#808080";
-      overlayCtx.fillStyle = blockColor;
-      overlayCtx.fillRect(blockX, blockY, miniCellSize, miniCellSize);
-    }
-  }
-}
-
-}
-
-
-// socket.io 側の処理
-socket.on("BoardStatus", (data) => {
-  // 受信データは { UserID, board } または { UserID, diff } を想定
-  const { UserID, board: fullBoard, diff } = data;
-  
-  if (!lastBoardStates[UserID]) {
-    // If this is the first time we're seeing this user, or if we need a full sync
-    lastBoardStates[UserID] = Array.from({ length: CONFIG.board.rows }, () => Array(CONFIG.board.cols).fill(0));
-  }
-
-  if (fullBoard) {
-    // Full board update
-    lastBoardStates[UserID] = fullBoard;
-  } else if (diff) {
-    // Apply diff to the existing board state
-    diff.forEach(({ r, c, val }) => {
-      if (lastBoardStates[UserID][r] && lastBoardStates[UserID][r][c] !== undefined) {
-        lastBoardStates[UserID][r][c] = val;
-      }
-    });
-  }
-  
-  // 初回の場合は、miniBoard を割り当てる
-  if (!userMiniBoardMapping[UserID]) {
-    // Ensure miniBoardsData is populated before trying to use it
-    if (miniBoardsData.length === 0) {
-      initMiniBoards(); // Populate miniBoardsData if it's empty
+    if (!socket.id) {
+        return;
     }
 
-    if (nextMiniBoardIndex < miniBoardsData.length) {
-      userMiniBoardMapping[UserID] = miniBoardsData[nextMiniBoardIndex].id;
-      nextMiniBoardIndex++;
+    const myId = socket.id;
+    const myPos = getBoardCenterPosition(myId);
+    if (!myPos) {
+        return;
+    }
+
+    const now = performance.now();
+
+    for (const [attackerId, targetId] of playerTargets.entries()) {
+        // Draw lines from attackers to me, but only if the attacker is still playing
+        if (targetId === myId) {
+            // Check if the attacker is still in the game (not KO) - they should not be in finalRanking or have a rank > 1
+            const attackerIsGameOver = finalRanking.hasOwnProperty(attackerId) && finalRanking[attackerId] > 1;
+            if (!attackerIsGameOver) {
+                const attackerPos = getBoardCenterPosition(attackerId);
+                if (attackerPos) {
+                    ctx.beginPath();
+                    ctx.moveTo(attackerPos.x, attackerPos.y);
+                    ctx.lineTo(myPos.x, myPos.y);
+                    ctx.strokeStyle = 'rgba(255, 255, 102, 0.7)'; // Yellowish
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else {
+                    // console.log(`drawTargetLines: Attacker ${attackerId} pos is null, cannot draw line to me.`);
+                }
+            }
+        }
+
+        // Draw line from me to my target, but only if I'm still in the game and target is still playing
+        if (attackerId === myId && targetId) {
+            const myIsGameOver = finalRanking.hasOwnProperty(myId) && finalRanking[myId] > 1;
+            const targetIsGameOver = finalRanking.hasOwnProperty(targetId) && finalRanking[targetId] > 1;
+
+            if (!myIsGameOver && !targetIsGameOver) {
+                const targetPos = getBoardCenterPosition(targetId);
+                if (targetPos) {
+                    const isFlashing = targetAttackFlashes.has(myId) && now < targetAttackFlashes.get(myId);
+
+                    ctx.beginPath();
+                    ctx.moveTo(myPos.x, myPos.y);
+                    ctx.lineTo(targetPos.x, targetPos.y);
+                    ctx.strokeStyle = isFlashing ? '#FFFFFF' : '#FFFF66';
+                    ctx.lineWidth = isFlashing ? 3 : 1.5;
+                    ctx.shadowColor = isFlashing ? '#FFFFFF' : '#FFFF66';
+                    ctx.shadowBlur = 10;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0; // Reset shadow blur
+                } else {
+                    // console.log(`drawTargetLines: Target ${targetId} pos is null, cannot draw line from me.`);
+                }
+            }
+        }
+    }
+}
+
+// --- Attack Effect Helpers ---
+export function getBoardCenterPosition(userId, clearedLines = null) {
+    const wrapper = document.getElementById('overall-game-wrapper');
+    if (!wrapper) return null;
+    const wrapperRect = wrapper.getBoundingClientRect();
+
+    let targetRect;
+
+    if (userId === socket.id) {
+        const mainBoard = document.getElementById('main-game-board');
+        if (!mainBoard) return null;
+        targetRect = mainBoard.getBoundingClientRect();
     } else {
-      console.warn("利用可能なミニボードが足りません。最初のボードを再利用します。");
-      // This line caused the error if miniBoardsData was empty
-      if (miniBoardsData.length > 0) { // Add a check here as well
-        userMiniBoardMapping[UserID] = miniBoardsData[0].id;
-      } else {
-        console.error("Error: miniBoardsData is still empty after initialization attempt.");
-        // Potentially handle this more robustly, e.g., by not assigning a mini-board
-        // or by retrying initialization. For now, just log the error.
-      }
+        const slot = miniboardSlots.find(s => s.userId === userId);
+        if (slot && slot.canvas) {
+            targetRect = slot.canvas.getBoundingClientRect();
+        }
     }
-  }
-  // 次回の描画ループで反映される
-});
-
-
-
-
-export let connectionError = false;
-
-// (b) In the window blur event listener, set the new flag and call drawConnectError:
-window.addEventListener("blur", () => {
-    console.log("ページがフォーカスを失いました");
-    if (socket) {
-        socket.disconnect(); // ソケット切断
-        console.log("Socket.io 接続を切断しました");
-        connectionError = true;
-        drawConnectError();
+    
+    if (targetRect) {
+        const finalX = targetRect.left - wrapperRect.left + targetRect.width / 2;
+        const finalY = targetRect.top - wrapperRect.top + targetRect.height / 2;
+        return {
+            x: finalX,
+            y: finalY
+        };
     }
-});
 
-export function drawConnectError() {
-  // Do not call draw() here so that the error message remains visible.
-  // Draw an overlay on the existing canvas:
-  overlayCtx.fillStyle = "rgba(0, 0, 0, 0.5)"; // 50% transparent black
-  overlayCtx.fillRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-  
-  const attackBarWidth = 30, gap = 20;
-  const boardWidth = CONFIG.board.cols * CONFIG.board.cellSize;
-  const boardHeight = CONFIG.board.visibleRows * CONFIG.board.cellSize;
-  const totalWidth = attackBarWidth + gap + boardWidth;
-  const startX = (overlayCanvas.width - totalWidth) / 2;
-  const attackBarX = startX;
-  const boardY = (overlayCanvas.height - boardHeight) / 2;
-  
-  overlayCtx.strokeStyle = '#000';
-  overlayCtx.strokeRect(attackBarX, boardY, attackBarWidth, boardHeight);
-  
-  // Draw error message
-  overlayCtx.fillStyle = "#FFF"; // White text
-  overlayCtx.font = "bold 40px Arial";
-  overlayCtx.textAlign = "center";
-  overlayCtx.textBaseline = "middle";
-  overlayCtx.fillText("通信エラーが発生しました", overlayCanvas.width / 2, overlayCanvas.height / 2);
+    return null;
 }
 
-function getBoardWithCurrentPiece() {
-  const boardCopy = board.map(row => row.slice());
-  const shape = currentPiece.shape[currentPiece.rotation];
-  shape.forEach(([dx, dy]) => {
-    const x = currentPiece.x + dx;
-    const y = currentPiece.y + dy;
-    if (y >= 0 && y < boardCopy.length && x >= 0 && x < boardCopy[0].length) {
-      boardCopy[y][x] = currentPiece.type;
-    }
-  });
-  return boardCopy;
-}
+function getAttackBarPosition() {
+    const wrapper = document.getElementById('overall-game-wrapper');
+    if (!wrapper) return null;
+    const wrapperRect = wrapper.getBoundingClientRect();
 
-function getGameStateJSON() {
-  const state = {
-    board: getBoardWithCurrentPiece(),
-  };
-  return JSON.stringify(state);
-}
+    const attackBar = document.getElementById('attack-bar');
+    if (!attackBar) return null;
 
-export function sendBoardStatus() {
-  const currentBoard = getBoardWithCurrentPiece();
-  const diff = getBoardDiff(lastSentBoard, currentBoard);
-
-  if (diff.length > 0) { // Only send if there are changes
-    const stateWithUserId = {
-      UserID: socket.id,
-      diff: diff
+    const attackBarRect = attackBar.getBoundingClientRect();
+    
+    return {
+        x: attackBarRect.left - wrapperRect.left + attackBarRect.width / 2,
+        y: attackBarRect.top - wrapperRect.top + attackBarRect.height / 2 
     };
-    socket.emit("BoardStatus", stateWithUserId);
-    lastSentBoard = currentBoard.map(row => row.slice()); // Update lastSentBoard
-  }
 }
+
+// --- Socket Event Handlers ---
+socket.on("connect", () => {
+    console.log("✅ サーバーに接続:", socket.id);
+    miniboardSlots.forEach(slot => {
+        slot.userId = null;
+        slot.dirty = true;
+    });
+    startAnimationIfNeeded();
+    finalRanking = {}; // Reset on new connection
+    
+    if (wasManualDisconnect()) {
+        setManualDisconnect(false);
+        startMatching(); // auto-retry
+    } else {
+        setGameState('LOBBY'); // Ensure client is in lobby state on connect
+        hideConnectionError();
+    }
+});
+
+export function startMatching() {
+    miniboardSlots.forEach(slot => {
+        slot.userId = null;
+        slot.dirty = true;
+    }); // Clear miniboards
+    startAnimationIfNeeded(); // Redraw to show them empty
+    socket.emit("matching");
+}
+
+socket.on('targetsUpdate', (targets) => {
+    playerTargets = new Map(targets);
+    // We need to redraw the miniboards to update their target styles
+    miniboardSlots.forEach(slot => slot.dirty = true);
+    startAnimationIfNeeded();
+});
+
+socket.on("roomInfo", (data) => {
+    currentRoomId = data.roomId; // Store the current room ID
+    const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
+    const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+
+    // Add new opponents
+    newOpponentIds.forEach(id => {
+        if (!currentOpponents.has(id)) addOpponent(id);
+    });
+
+    // Remove disconnected opponents
+    currentOpponents.forEach(id => {
+        if (!newOpponentIds.has(id)) removeOpponent(id);
+    });
+});
+
+socket.on("StartGame", () => {
+    currentCountdown = null;
+    showCountdown(null);
+    hideGameEndScreen(); // Hide end screen
+    resetGame(); // Changed to resetGame()
+    setHoldPiece(null); // Moved from CountDown
+    drawUI();           // Moved from CountDown
+    setGameState('PLAYING');
+    miniboardSlots.forEach(slot => {
+        if (slot.userId) { // Only reset boards for active opponents
+            slot.isGameOver = false;
+            slot.boardState.forEach(row => row.fill(0)); // Clear the board state
+            slot.dirty = true;
+        }
+    });
+    startAnimationIfNeeded();
+    finalRanking = {}; // Reset for new game
+    lastSentBoard = null; // Ensure board history is cleared for the new game
+});
+
+
+
+socket.on("BoardStatus", (data) => {
+    if (gameState !== 'PLAYING') return; // Ignore if not in a game
+    const { UserID, board, diff } = data;
+    let slot = miniboardSlots.find(s => s.userId === UserID);
+    if (!slot) {
+        addOpponent(UserID);
+        slot = miniboardSlots.find(s => s.userId === UserID);
+    }
+    if (slot) updateSlotBoard(slot, board, diff);
+});
+
+socket.on("BoardStatusBulk", (boards) => {
+    if (gameState !== 'PLAYING') return; // Ignore if not in a game
+    for (const userId in boards) {
+        const boardData = boards[userId];
+        if (!boardData) continue;
+        let slot = miniboardSlots.find(s => s.userId === userId);
+        if (!slot) {
+            addOpponent(userId);
+            slot = miniboardSlots.find(s => s.userId === userId);
+        }
+        if (slot) updateSlotBoard(slot, boardData.board, boardData.diff);
+    }
+});
+
+socket.on("PlayerDisconnected", ({ userId }) => {
+    removeOpponent(userId);
+});
+
+// --- Rest of the file is the same as before (sending data, error handling) ---
+
+socket.on("CountDown", (count) => {
+    currentCountdown = count;
+    showCountdown(count);
+});
+
+let lastSentBoard = null;
+function getBoardWithCurrentPiece(board, currentPiece) {
+    const boardCopy = board.map(row => row.slice());
+    if (currentPiece) {
+        const shape = currentPiece.shape[currentPiece.rotation];
+        shape.forEach(([dx, dy]) => {
+            const x = currentPiece.x + dx;
+            const y = currentPiece.y + dy;
+            if (y >= 0 && y < boardCopy.length && x >= 0 && x < boardCopy[0].length) {
+                boardCopy[y][x] = currentPiece.type;
+            }
+        });
+    }
+    return boardCopy;
+}
+function getBoardDiff(oldBoard, newBoard) {
+    if (!oldBoard) return null;
+    const diff = [];
+    for (let r = 0; r < newBoard.length; r++) {
+        for (let c = 0; c < newBoard[r].length; c++) {
+            if (oldBoard[r][c] !== newBoard[r][c]) {
+                diff.push({ r, c, val: newBoard[r][c] });
+            }
+        }
+    }
+    return diff.length > 0 ? diff : null;
+}
+export function sendBoardStatus(board, currentPiece) {
+    if (!socket.connected) return;
+    const currentBoardState = getBoardWithCurrentPiece(board, currentPiece);
+    const diff = getBoardDiff(lastSentBoard, currentBoardState);
+    if (diff) {
+        socket.emit("BoardStatus", { diff });
+        lastSentBoard = currentBoardState;
+    } else if (!lastSentBoard) {
+        socket.emit("BoardStatus", { board: currentBoardState });
+        lastSentBoard = currentBoardState;
+    }
+}
+
+function sendGarbage(targetId, lines) {
+    if (!socket.connected || lines <= 0) return;
+    socket.emit("SendGarbage", { targetId, lines });
+}
+
+export function setTarget(targetId) {
+    if (!socket.connected) return;
+    socket.emit('setTarget', targetId);
+}
+
+export function sendAttack(targetId, lines, clearedLines = null) {
+    sendGarbage(targetId, lines);
+
+    // Trigger the flash effect for the target line
+    if (targetId) {
+
+    }
+
+    const myPos = getBoardCenterPosition(socket.id, clearedLines);
+    let targetPos;
+
+    if (targetId) {
+        targetPos = getBoardCenterPosition(targetId);
+    } else {
+        // ターゲットがいない場合は、画面上部中央へ
+        const effectCanvasElement = document.getElementById('effect-canvas');
+        if (effectCanvasElement) {
+            const effectCanvasRect = effectCanvasElement.getBoundingClientRect();
+            targetPos = { x: effectCanvasRect.width / 2, y: 0 };
+        }
+    }
+
+    createLightOrb(myPos, targetPos);
+}
+
+let connectionError = false;
+const errorOverlay = document.createElement('div');
+errorOverlay.style.position = 'fixed';
+errorOverlay.style.top = '0';
+errorOverlay.style.left = '0';
+errorOverlay.style.width = '100%';
+errorOverlay.style.height = '100%';
+errorOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+errorOverlay.style.color = 'white';
+errorOverlay.style.display = 'none';
+errorOverlay.style.justifyContent = 'center';
+errorOverlay.style.alignItems = 'center';
+errorOverlay.style.zIndex = '999';
+errorOverlay.style.fontSize = '1.5rem';
+errorOverlay.innerHTML = 'サーバーとの接続が切れました。再接続を試みています... <br>ページをリロードする必要があるかもしれません。';
+document.body.appendChild(errorOverlay);
+function showConnectionError() {
+    connectionError = true;
+    errorOverlay.style.display = 'flex';
+}
+function hideConnectionError() {
+    connectionError = false;
+    errorOverlay.style.display = 'none';
+}
+// Reconnection logic is handled in the initializeSocket function
+
+export { connectionError, startAnimationIfNeeded, addOpponent, removeOpponent, updateSlotBoard };

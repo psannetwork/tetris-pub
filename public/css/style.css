@@ -1,30 +1,501 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+:root {
+  --background-color: #1a1a1a;
+  --board-background-color: #000;
+  --text-color: #fff;
+  --font-family: 'Press Start 2P', cursive;
+  --panel-background-color: rgba(34, 34, 34, 0.5);
+  --overlay-background-color: rgba(0, 0, 0, 0.85);
+  --win-color: #00ff00;
+  --lose-color: #ff0000;
+  --button-primary-bg: #007bff;
+  --button-primary-hover-bg: #0056b3;
+  --button-primary-text: #ffffff;
+  --button-focus-glow: rgba(0, 123, 255, 0.5);
+  --attack-color: #ff0000;
+}
+
 html, body {
     margin: 0;
     padding: 0;
     width: 100%;
     height: 100%;
-    background-color: #f0f0f0;
+    background-color: var(--background-color);
     overflow: hidden;
-  }
-  
-  canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
+    font-family: var(--font-family);
+    color: var(--text-color);
+}
 
-#countdown-overlay {
-  position: absolute;
+#overall-game-wrapper {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    width: 1196px; /* 275 + 20 + 606 + 20 + 275 */
+    height: 593.5px; /* Max height of miniboards */
+    box-sizing: border-box;
+    justify-content: center; /* Center the game-container and miniboards */
+    align-items: flex-start; /* Align items to the top */
+    gap: 20px; /* Gap between miniboards and game-container */
+}
+
+#game-container {
+    display: flex;
+    width: 606px; /* 96 + 20 + 30 + 20 + 300 + 20 + 120 */
+    height: 600px; /* Main board height */
+    box-sizing: border-box;
+    justify-content: center; /* Center main-game-board */
+    align-items: flex-start; /* Align items to the top */
+    gap: 20px; /* Gap between panels and main board */
+}
+
+#game-left-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* Push hold box to top */
+    align-items: center; /* Center items horizontally */
+    width: 96px; /* Width of hold box */
+    height: 600px; /* Main board height */
+    box-sizing: border-box;
+}
+
+#game-right-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* Align items to the top */
+    align-items: center; /* Center items horizontally */
+    width: 120px; /* Width of next box, increased from 96 */
+    height: 600px; /* Main board height */
+    box-sizing: border-box;
+}
+
+#left-miniboards-group, #right-miniboards-group {
+    width: 275px; /* 7 * 35px + 6 * 5px */
+    height: 593.5px; /* 7 * 80.5px + 6 * 5px */
+    display: grid;
+    grid-template-columns: repeat(7, 35px); /* 7 mini-boards of 35px each */
+    grid-template-rows: repeat(7, 80.5px); /* 7 mini-boards of 80.5px each */
+    gap: 5px; /* Gap between mini-boards */
+    box-sizing: border-box;
+    overflow: hidden; /* Hide overflow if mini-boards exceed container */
+}
+
+#attack-bar {
+    width: 30px;
+    height: 600px; /* Main board height */
+    background-color: var(--attack-color); /* Example color */
+    /* align-self is not needed here as it's a direct child of game-container */
+}
+
+#main-game-board {
+    width: 300px;
+    height: 600px;
+    background-color: var(--board-background-color);
+    box-sizing: border-box;
+    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8); /* Inner shadow for depth */
+}
+
+#hold-box {
+    width: 96px;
+    height: 96px;
+    background-color: var(--panel-background-color);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
+    /* align-self is not needed here as game-left-panel handles positioning */
+}
+
+#next-box {
+    width: 120px;
+    /* height: 480px; */ /* Removed fixed height */
+    background-color: var(--panel-background-color);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
+    /* align-self is not needed here as game-right-panel handles positioning */
+}
+
+#score-display {
+    color: white;
+    font-family: var(--font-family);
+    width: 120px; /* Same width as next-box */
+    text-align: center;
+    margin-top: 20px; /* Move it down from the top slightly */
+    /* align-self is not needed here as game-right-panel handles positioning */
+    visibility: hidden; /* Visually hidden but still accessible */
+    position: absolute;
+    left: -9999px;
+}
+
+/* Mini-board specific styling */
+.miniboard {
+    width: 35px;
+    height: 80.5px;
+    background-color: var(--panel-background-color);
+    box-sizing: border-box;
+    /* Further styling for individual mini-boards can go here */
+}
+
+canvas {
+    display: block;
+}
+
+/* Overlays */
+#lobby-overlay, #game-end-overlay, #countdown-overlay {
+  position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: var(--overlay-background-color);
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  color: white;
-  font-size: 2em;
-  z-index: 10;
+  z-index: 100;
+  opacity: 1;
+  transition: opacity 0.5s ease-in-out;
   text-align: center;
+  padding: 0; /* Removed padding from here, moved to .overlay-content */
+  box-sizing: border-box;
+}
+
+.overlay-content {
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1rem; /* Added padding here */
+}
+
+#lobby-overlay.hidden, #game-end-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+
+.lobby-title, #game-end-title {
+  font-size: 1.8rem; /* Adjusted for pixel font */
+  font-weight: bold;
+  margin-bottom: 2vh;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+
+.menu-buttons button, .lobby-button {
+  background-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  border: 2px solid var(--button-primary-text);
+  padding: 15px 30px;
+  margin: 10px;
+  font-size: 1rem;
+  font-family: var(--font-family);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background-color 0.3s, box-shadow 0.3s, transform 0.1s;
+  outline: none;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.menu-buttons button:hover, .lobby-button:hover {
+  background-color: var(--button-primary-hover-bg);
+  box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+  transform: translateY(-2px);
+}
+
+.menu-buttons button:focus, .lobby-button:focus {
+    box-shadow: 0 0 0 4px var(--button-focus-glow);
+}
+
+.lobby-button[disabled], .menu-buttons button[disabled] {
+  background-color: #555;
+  color: #888;
+  border-color: #888;
+  opacity: 0.7;
+  cursor: not-allowed;
+  pointer-events: none; /* Prevents click events */
+  box-shadow: none;
+  transform: none;
+}
+
+
+#countdown-overlay {
+  display: none !important; /* Hide HTML overlay as it's now rendered on canvas */
+}
+
+#game-end-overlay {
+  display: none; /* Initially hidden */
+}
+
+#game-end-overlay.visible {
+  display: flex;
+}
+
+#final-ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 80%;
+  max-width: 700px;
+  margin: 20px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 10px; /* for scrollbar */
+}
+
+.rank-card {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  align-items: center;
+  background-color: var(--panel-background-color);
+  padding: 10px 20px;
+  border-radius: 0;
+  border-left: 5px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.rank-card.my-rank {
+  background-color: rgba(0, 123, 255, 0.3);
+  border-left-color: var(--button-primary-bg);
+}
+
+.rank-card.my-rank .rank-player-name {
+    font-weight: bold;
+}
+
+.rank-position {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: var(--text-color);
+}
+
+.rank-player-name {
+  font-size: 1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-stats {
+  text-align: right;
+  font-size: 0.8em;
+  color: #bdc3c7;
+}
+
+.rank-stats span {
+  margin-left: 15px;
+}
+
+#effect-canvas, #ui-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* New: Hamburger menu button */
+#hamburger-menu-button {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 150; /* Above overlays but below modals */
+    background-color: var(--button-primary-bg);
+    color: var(--button-primary-text);
+    border: none;
+    padding: 8px 12px;
+    font-size: 1rem;
+    cursor: pointer;
+    border-radius: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+#hamburger-menu-button:hover {
+    background-color: var(--button-primary-hover-bg);
+}
+
+/* New: Message Display */
+#message-display {
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: fit-content;
+    max-width: 80%;
+    padding: 10px 20px;
+    border-radius: 0;
+    font-size: 1rem;
+    color: white;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1000; /* Always on top */
+    transition: all 0.5s ease-in-out;
+    opacity: 0;
+    pointer-events: none; /* Make it non-interactive */
+}
+
+#message-display.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#message-display.success {
+    background-color: #00ff00;
+}
+
+#message-display.error {
+    background-color: #ff0000;
+}
+
+#message-display.info {
+    background-color: #007bff;
+}
+
+
+/* New: Modal styles */
+.modal {
+  display: none; /* Hidden by default */
+  position: fixed; /* Stay in place */
+  z-index: 200; /* Sit on top */
+  left: 0;
+  top: 0;
+  width: 100%; /* Full width */
+  height: 100%; /* Full height */
+  overflow: auto; /* Enable scroll if needed */
+  background-color: rgba(0,0,0,0.8); /* Black w/ opacity */
+  padding-top: 60px;
+}
+
+.modal-content {
+  background-color: #111;
+  margin: 5% auto; /* 5% from the top and centered */
+  padding: 30px;
+  border: 1px solid #888;
+  width: 80%; /* Could be more responsive */
+  max-width: 500px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.modal-content h2 {
+  color: var(--text-color);
+  margin-bottom: 15px;
+}
+
+.modal-content input[type="text"],
+.modal-content input[type="password"] {
+  width: calc(100% - 40px); /* Full width minus padding */
+  padding: 12px 20px;
+  margin: 8px 0;
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 0;
+  box-sizing: border-box;
+  background-color: #333;
+  color: var(--text-color);
+  font-size: 1rem;
+  font-family: 'Press Start 2P', cursive;
+}
+
+.modal-content button {
+  background-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  border: none;
+  padding: 10px 20px;
+  margin: 5px;
+  font-size: 1rem;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background-color 0.3s;
+}
+
+.modal-content button:hover {
+  background-color: var(--button-primary-hover-bg);
+}
+
+.modal-content .close-modal {
+  background-color: #e74c3c;
+}
+
+.modal-content .close-modal:hover {
+  background-color: #c0392b;
+}
+
+#main-menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+#room-info-display {
+    background-color: var(--panel-background-color);
+    padding: 15px 25px;
+    border-radius: 0;
+    margin-top: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+#room-info-display p {
+    margin: 5px 0;
+    font-size: 1rem;
+}
+
+#room-info-display button {
+    margin-top: 15px;
+}
+
+/* Admin Menu Specific Styles */
+#admin-menu-modal .modal-content h3 {
+    margin-top: 20px;
+    color: var(--text-color);
+}
+
+#member-list {
+    list-style: none;
+    padding: 0;
+    width: 100%;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #444;
+    border-radius: 5px;
+    background-color: #222;
+}
+
+#member-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 15px;
+    border-bottom: 1px solid #333;
+}
+
+#member-list li:last-child {
+    border-bottom: none;
+}
+
+#member-list li span {
+    flex-grow: 1;
+    text-align: left;
+}
+
+#member-list li button.kick-button {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+#member-list li button.kick-button:hover {
+    background-color: #c0392b;
 }

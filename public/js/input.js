@@ -1,39 +1,34 @@
-
 import { CONFIG } from './config.js';
-import { movePiece, rotatePiece, hardDrop, hold, currentPiece } from './game.js';
+import { movePiece } from './game.js';
 import { keys } from './keys.js';
+import { incrementKeyPresses } from './main.js';
 
-export const DAS = 150;
-export const ARR = 50;
-export const SD_ARR = 50;
-
-export let isKeyOperation = false;
+const DAS = 160; // Delayed Auto Shift in ms
+const ARR = 30;  // Auto Repeat Rate in ms
 
 export function handleInput() {
-    isKeyOperation = true;
     const now = performance.now();
 
-    if (keys[CONFIG.keyBindings.moveLeft]) {
-        const keyObj = keys[CONFIG.keyBindings.moveLeft];
-        if (now - keyObj.startTime >= DAS && now - keyObj.lastRepeat >= ARR) {
-            movePiece({ x: -1, y: 0 });
-            keyObj.lastRepeat = now;
-        }
-    }
-
-    if (keys[CONFIG.keyBindings.moveRight]) {
-        const keyObj = keys[CONFIG.keyBindings.moveRight];
-        if (now - keyObj.startTime >= DAS && now - keyObj.lastRepeat >= ARR) {
-            movePiece({ x: 1, y: 0 });
-            keyObj.lastRepeat = now;
-        }
-    }
-
-    if (keys[CONFIG.keyBindings.softDrop]) {
-        const keyObj = keys[CONFIG.keyBindings.softDrop];
-        if (now - keyObj.lastRepeat >= SD_ARR) {
-            movePiece({ x: 0, y: 1 });
-            keyObj.lastRepeat = now;
+    // Handle keyboard input with DAS and ARR
+    for (const key in keys) {
+        if (Object.values(CONFIG.keyBindings).includes(key)) {
+            const keyObj = keys[key];
+            if (now - keyObj.startTime > DAS && now - keyObj.lastRepeat > ARR) {
+                keyObj.lastRepeat = now;
+                incrementKeyPresses(); // Also count repeats for APM
+                
+                switch (key) {
+                    case CONFIG.keyBindings.moveLeft:
+                        movePiece({ x: -1, y: 0 });
+                        break;
+                    case CONFIG.keyBindings.moveRight:
+                        movePiece({ x: 1, y: 0 });
+                        break;
+                    case CONFIG.keyBindings.softDrop:
+                        movePiece({ x: 0, y: 1 });
+                        break;
+                }
+            }
         }
     }
 }

@@ -5,7 +5,7 @@ const BOT_COUNT = 30;
 const BOT_MOVE_DELAY = 400;
 const MOVE_ANIMATION_DELAY = 100;
 const SOFT_DROP_DELAY = 100;
-const SERVER_URL = 'http://localhost:6000';
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:6000';
 
 let lastPieceType = null;
 
@@ -20,6 +20,29 @@ const tetrominoes = {
   T: { base: [[1,0],[0,1],[1,1],[2,1]], spawn: { x:3,y:0 } },
   Z: { base: [[0,0],[1,0],[1,1],[2,1]], spawn: { x:3,y:0 } }
 };
+
+// Precalculate piece blocks for all orientations to optimize performance
+const pieceBlocksCache = {};
+
+// Initialize the piece blocks cache
+function initializePieceBlocksCache() {
+  for (const [pieceType, pieceData] of Object.entries(tetrominoes)) {
+    pieceBlocksCache[pieceType] = {};
+    for (let orientation = 0; orientation < 4; orientation++) {
+      pieceBlocksCache[pieceType][orientation] = pieceData.base.map(([x, y]) => {
+        switch (orientation) {
+          case 1: return [y, -x];
+          case 2: return [-x, -y];
+          case 3: return [-y, x];
+          default: return [x, y];
+        }
+      });
+    }
+  }
+}
+
+// Initialize the cache when the module loads
+initializePieceBlocksCache();
 
 const srsKick = {
   normal: {
@@ -62,6 +85,11 @@ function spawnPiece() {
 }
 
 function getPieceBlocks(p) {
+  // Use cached piece blocks if available, otherwise calculate
+  if (pieceBlocksCache[p.type] && pieceBlocksCache[p.type][p.orientation]) {
+    return pieceBlocksCache[p.type][p.orientation];
+  }
+  // Fallback to calculation if not in cache
   return p.base.map(([x,y]) => {
     switch(p.orientation) {
       case 1: return [y,-x];
@@ -265,17 +293,58 @@ function findMoveSequence(init,target,board){
 }
 
 function getAllPlacements(board,p){
-  const res=[];
-  for(let o=0;o<4;o++){
-    const tp={...p,orientation:o,rotated:o!==p.orientation};
-    for(let x=-3;x<10;x++){
-      const c={...tp,x,y:tp.y};
-      if(!isValidPosition(c,board,0,0)) continue;
-      const f=hardDrop({...c},board);
-      const seq=findMoveSequence(p,f,board);
+  const res = [];
+
+  // Find all achievable orientations starting from the current piece
+  const achievableOrientations = [];
+
+  // Start with current orientation
+  achievableOrientations.push(clonePiece(p));
+
+  // Try to achieve other orientations by rotating
+  let current = clonePiece(p);
+  // Try clockwise rotations
+  for(let i = 0; i < 3; i++) {
+    const rotated = moveRotateCW(current, board);
+    if(rotated) {
+      rotated.rotated = true;
+      // Check if we already have this orientation
+      const exists = achievableOrientations.some(orient => orient.orientation === rotated.orientation);
+      if(!exists) {
+        achievableOrientations.push(rotated);
+      }
+      current = clonePiece(rotated);
+    } else {
+      break; // If one rotation fails, continue with next attempt from original piece
+    }
+  }
+
+  // Also try counterclockwise rotations from the original piece
+  current = clonePiece(p);
+  for(let i = 0; i < 3; i++) {
+    current = moveRotateCCW(current, board);
+    if(current) {
+      // Check if we already have this orientation
+      const exists = achievableOrientations.some(orient => orient.orientation === current.orientation);
+      if(!exists) {
+        current.rotated = true;
+        achievableOrientations.push(clonePiece(current));
+      }
+    } else {
+      break;
+    }
+  }
+
+  // For each achievable orientation, try all possible x positions
+  for(const tp of achievableOrientations) {
+    for(let x = -3; x < 10; x++) {
+      const c = { ...tp, x, y: tp.y };
+      if(!isValidPosition(c, board, 0, 0)) continue;
+      const f = hardDrop({ ...c }, board);
+      const seq = findMoveSequence(p, f, board);
       if(!seq) continue;
-      f.moveSequence=seq;
-      f.isTSpin=(f.type==='T'&&detectTSpin(f,board));
+      f.moveSequence = seq;
+      f.isTSpin = (f.type === 'T' && detectTSpin(f, board));
       res.push(f);
     }
   }
@@ -415,8 +484,9 @@ class TetrisBot {
     for(const p of placements) {
       const b=this.board.map(r=>r.slice());
       mergePiece(p,b);
-      const cleared=clearLines(b);
+      // Detect T-Spin before clearing lines to preserve the T-spin pattern
       p.isTSpin=(p.type==='T'&&detectTSpin(p,b));
+      const cleared=clearLines(b);
       const score=evaluateBoard(b,this.aiParams);
       if(score>bestScore) { bestScore=score; best=p; }
     }

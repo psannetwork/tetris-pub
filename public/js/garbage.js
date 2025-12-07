@@ -5,6 +5,7 @@ export const MAX_ATTACK = 20;
 export const PHASE1 = 2000;
 export const PHASE2 = 5000;
 export const PHASE3 = 8000;
+export const PHASE4 = 12000;
 
 export function getAttackBarSum() {
   return attackBarSegments.reduce((sum, segment) => sum + segment.value, 0);
@@ -13,7 +14,7 @@ export function getAttackBarSum() {
 export function addAttackBar(value) {
     attackBarSegments.push({
         value: value,
-        timestamp: Date.now()
+        timestamp: performance.now()
     });
 }
 
@@ -32,17 +33,22 @@ export function removeAttackBar(value) {
 }
 
 export function processFlashingGarbage() {
-    const now = Date.now();
+    const now = performance.now();
     let garbageToAdd = 0;
-    const remainingSegments = [];
+    const segmentsToRemove = [];
 
-    for (const segment of attackBarSegments) {
-        if (now - segment.timestamp >= PHASE3) {
+    for (let i = 0; i < attackBarSegments.length; i++) {
+        const segment = attackBarSegments[i];
+        if (now - segment.timestamp >= PHASE4) {
             garbageToAdd += segment.value;
-        } else {
-            remainingSegments.push(segment);
+            segmentsToRemove.push(i);
         }
     }
-    attackBarSegments = remainingSegments;
+    
+    // Remove segments that have reached PHASE4 (blinking phase)
+    for (let i = segmentsToRemove.length - 1; i >= 0; i--) {
+        attackBarSegments.splice(segmentsToRemove[i], 1);
+    }
+    
     return garbageToAdd;
 }

@@ -2,26 +2,97 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Tetris Single Player</title>
+  <title>Tetris Battle</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    #gameCanvas { z-index: 1; }
-    #overlayCanvas { z-index: 2; }
-  </style>
 </head>
 <body>
-  
-  <canvas id="gameCanvas"></canvas>
-  <canvas id="overlayCanvas"></canvas>
-  <!-- ゲームの詳細な設定はconfig.jsに記述 -->
-  <script type="module" src="js/config.js"></script>
-  <script type="module" src="js/keys.js"></script>
-  <script type="module" src="js/garbage.js"></script>
-  <script type="module" src="js/online.js"></script>
+
+  <div id="overall-game-wrapper">
+    <div id="left-miniboards-group"></div>
+    <div id="game-container"> <!-- This is the new central block -->
+      <div id="game-left-panel">
+        <div id="hold-box"></div>
+      </div>
+      <div id="attack-bar"></div> <!-- Attack bar is now a direct child of game-container -->
+      <div id="main-game-board"></div>
+      <div id="game-right-panel">
+        <div id="next-box"></div>
+        <div id="score-display"></div>
+      </div>
+    </div>
+    <div id="right-miniboards-group"></div>
+    <button id="hamburger-menu-button" class="icon-button" style="display: none;">☰</button> <!-- Hamburger Icon -->
+    <canvas id="effect-canvas"></canvas>
+    <canvas id="ui-canvas"></canvas>
+  </div>
+
+  <div id="lobby-overlay">
+    <div class="overlay-content">
+      <h1 class="lobby-title">Tetris Battle</h1>
+      <div id="main-menu-buttons">
+        <button id="join-public-match-button" class="lobby-button">公開マッチ</button>
+        <button id="create-room-button" class="lobby-button">部屋作成</button>
+        <button id="join-room-button" class="lobby-button">部屋IDで参加</button>
+      </div>
+
+      <div id="room-info-display" style="display: none;">
+        <p>部屋ID: <span id="current-room-id"></span></p>
+        <p><span id="room-host-status"></span></p>
+        <button id="host-start-game-button" class="lobby-button" style="display: none;">ゲーム開始</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="create-room-modal" class="modal">
+    <div class="modal-content">
+      <h2>部屋作成</h2>
+      <input type="text" id="create-room-password" placeholder="パスワード (任意)">
+      <button id="confirm-create-room">作成</button>
+      <button class="close-modal">キャンセル</button>
+    </div>
+  </div>
+
+  <div id="join-room-modal" class="modal">
+    <div class="modal-content">
+      <h2>部屋IDで参加</h2>
+      <input type="text" id="join-room-id" placeholder="部屋ID">
+      <input type="password" id="join-room-password" placeholder="パスワード (設定されている場合)">
+      <button id="confirm-join-room">参加</button>
+      <button class="close-modal">キャンセル</button>
+    </div>
+  </div>
+
+  <!-- New: Admin Menu Modal -->
+  <div id="admin-menu-modal" class="modal">
+    <div class="modal-content">
+      <h2>ルーム管理</h2>
+      <p>部屋ID: <span id="admin-room-id"></span></p>
+      <button id="admin-start-game-button" class="lobby-button">ゲーム開始</button>
+      <h3>現在のメンバー</h3>
+      <ul id="member-list"></ul>
+      <button class="close-modal">閉じる</button>
+    </div>
+  </div>
+
+  <div id="game-end-overlay">
+    <div class="overlay-content">
+      <div id="game-end-title" class="menu-title"></div>
+      <div id="final-ranking-list"></div>
+      <div class="menu-buttons">
+        <button id="retry-button">Play Again</button>
+        <button id="lobby-button">Back to Lobby</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="countdown-overlay" style="display: none !important;"></div>
+
+  <!-- New: Message Display Area -->
+  <div id="message-display" style="display: none;"></div>
+
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

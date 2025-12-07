@@ -1,38 +1,225 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>テトリス 観戦モード</title>
-    <!-- ©Psannetwork -->
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background: linear-gradient(135deg, #222, #444);
-        font-family: Arial, sans-serif;
-      }
-      #gameCanvas {
-        display: block;
-        background: #111;
-        position: absolute;
-        top: 0;
-        left: 0;
-      }
-    </style>
-    <script type="module" src="js/config.js"></script>
-    <script
-      src="https://cdn.socket.io/4.8.1/socket.io.min.js"
-      integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+"
-      crossorigin="anonymous"
-    ></script>
-    <script type="module" src="js/spectatorUI.js"></script>
-  </head>
-  <body>
-    <canvas id="gameCanvas"></canvas>
-    
-    
-    
-    
-    
+<head>
+  <meta charset="UTF-8">
+  <title>Tetris Battle - Spectator View</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #2c3e50;
+      font-family: 'Exo 2', sans-serif;
+      width: 100%;
+      height: 100%;
+    }
+
+    #overall-game-wrapper {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    #left-miniboards-group, #right-miniboards-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 10px;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    #left-miniboards-group {
+      align-items: flex-end;
+    }
+
+    #right-miniboards-group {
+      align-items: flex-start;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #effect-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    #ui-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    #game-container {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 10px;
+      padding: 20px;
+      z-index: 10;
+    }
+
+    #game-left-panel, #game-right-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #attack-bar {
+      position: relative;
+      margin: 0 0 0 10px; /* Space from main board to attack bar */
+    }
+
+    .miniboard {
+      border: 1px solid rgba(255,255,255,0.1);
+      background-color: rgba(0,0,0,0.3);
+    }
+
+    .icon-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.5);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 100;
+    }
+
+    /* Control panel for spectators */
+    #spectator-controls {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255, 255, 255, 0.97);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 1000;
+      min-width: 320px;
+    }
+
+    #spectator-controls h2 {
+      margin-top: 0;
+      text-align: center;
+      color: #333;
+    }
+
+    #room-list {
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+    }
+
+    .room-item {
+      padding: 8px;
+      margin: 5px 0;
+      background: #007acc;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .room-item:hover {
+      background: #005a99;
+    }
+
+    #refresh-btn, #back-btn {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    #refresh-btn:hover, #back-btn:hover {
+      background: #005a99;
+    }
+
+    #spectate-info {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 10px 15px;
+      border-radius: 4px;
+      font-size: 16px;
+      z-index: 100;
+    }
+
+    #hamburger-icon {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      background: rgba(255,255,255,0.9);
+      color: #333;
+      border: none;
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 100;
+    }
+  </style>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="overall-game-wrapper">
+    <canvas id="effect-canvas"></canvas>
+    <canvas id="ui-canvas"></canvas>
+    <div id="left-miniboards-group"></div>
+    <div id="game-container"> <!-- This is the new central block -->
+      <div id="game-left-panel">
+        <div id="hold-box"></div>
+      </div>
+      <div id="attack-bar"></div> <!-- Attack bar is now a direct child of game-container -->
+      <div id="main-game-board"></div>
+      <div id="game-right-panel">
+        <div id="next-box"></div>
+        <div id="score-display"></div>
+      </div>
+    </div>
+    <div id="right-miniboards-group"></div>
+    <button id="hamburger-icon" class="icon-button" style="display: none;">☰</button> <!-- Hamburger Icon -->
+  </div>
+
+  <!-- Spectator Control Panel -->
+  <div id="spectator-controls" style="display: block;">
+    <h2>観戦ルーム一覧</h2>
+    <div id="room-list">
+      <!-- Room items will be populated here -->
+    </div>
+    <button id="refresh-btn">更新</button>
+    <button id="back-btn">戻る</button>
+  </div>
+
+  <!-- Spectate Info Bar -->
+  <div id="spectate-info" style="display: none;">
+    観戦中...
+  </div>
+
+  <script type="module" src="js/config.js"></script>
+  <script type="module" src="js/spectator.js"></script>
+</body>
+</html>
