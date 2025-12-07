@@ -349,6 +349,9 @@ function handleGameOver(io, socket, reason, stats) {
         return;
     }
 
+    // NEW: Remove the player's board from room.boards immediately when they are game over
+    delete room.boards[socket.id];
+
     // Store player stats
     if (stats) {
         room.stats.set(socket.id, stats);
