@@ -182,24 +182,7 @@ export function drawGame() {
     }
 
 
-    // Draw light orbs, particles, text effects, T-Spin effect, and target attack flashes on the effects canvas
-    if (effectsCtx) {
-        effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
-        Effects.drawOrbs();
-        Effects.drawParticles();
-        Effects.drawLineClearEffects();
-        Effects.drawPieceAppearanceEffects();
-        Effects.drawPerfectClearEffects();
-        Effects.drawReceivedAttackEffects();
-        Effects.drawTextEffects();
-        Effects.drawTspinEffect();
-        Effects.drawTargetAttackFlashes();
-        Effects.drawTimeoutEffect(); // NEW: Draw timeout effect
-        if (!isSpectating) {
-            drawTargetLines(effectsCtx); // Pass effectsCtx
-        }
-    }
-
+    // Effects are now drawn separately in main.js by drawAllEffects()
     gameCtx.restore();
 }
 
