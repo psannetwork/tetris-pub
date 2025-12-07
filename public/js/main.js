@@ -144,15 +144,6 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         currentRoomIdDisplay.textContent = roomId;
         adminRoomIdDisplay.textContent = roomId; // Update admin modal room ID
 
-        // Hamburger button visibility based on room type or if spectating
-        if (menuButton) { // Check if element exists
-            if (isPrivate || gameState === 'SPECTATING') { // NEW: show hamburger if spectating
-                menuButton.style.display = 'block';
-            } else {
-                menuButton.style.display = 'none'; // No hamburger for public matches
-            }
-        }
-
         if (isHost && !isSpectating) { // NEW: only show host buttons if not spectating
             roomHostStatusDisplay.textContent = '(ホスト)';
             hostStartGameButton.style.display = 'block';
@@ -161,15 +152,16 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         } else {
             roomHostStatusDisplay.textContent = '';
             hostStartGameButton.style.display = 'none';
-            // Non-hosts can still see the hamburger for private rooms to check members, etc.
-            if (isPrivate && !isSpectating) { // Only show hamburger to non-hosts in private rooms
-                menuButton.style.display = 'block'; 
-            } else if (gameState === 'SPECTATING') { // NEW: if spectating, hamburger is for spectator menu
+            setButtonState(adminStartGameButton, false); // Admin menu start button disabled for non-host
+        }
+
+        // Hamburger button visibility based on room type or if spectating (unified logic)
+        if (menuButton) { // Check if element exists
+            if (isSpectating || (isPrivate && !isHost)) { // Show for spectators or private room non-hosts
                 menuButton.style.display = 'block';
             } else {
-                menuButton.style.display = 'none'; // Ensure hidden for non-hosts in public rooms
+                menuButton.style.display = 'none'; // Hide for public matches non-hosts
             }
-            setButtonState(adminStartGameButton, false); // Admin menu start button disabled for non-host
         }
         
         // Adjust display of game-related panels based on whether spectating
@@ -229,7 +221,9 @@ function openModal(modal) {
     modal.style.display = 'block';
     mainMenuButtons.style.display = 'none';
     roomInfoDisplay.style.display = 'none'; // Also hide room info if showing
-    if (menuButton) menuButton.style.display = 'none'; // Hide hamburger when other modals open
+    if (menuButton) { // NEW: Check if element exists
+        menuButton.style.display = 'none'; // Hide hamburger when other modals open
+    }
     if (isSpectating) { // NEW: hide game-related elements if spectating
         document.getElementById('game-left-panel').style.display = 'none';
         document.getElementById('game-right-panel').style.display = 'none';
@@ -581,7 +575,6 @@ function init() {
             const currentId = getCurrentRoomId();
             if (currentId) {
                 startSpectating(currentId);
-                gameEndOverlay.classList.remove('visible');
                 setButtonState(retryButton, false);
                 setButtonState(lobbyButton, false);
                 setButtonState(spectateButton, false);
@@ -659,6 +652,29 @@ export function getStats() {
 
 // NEW: startSpectating function
 function startSpectating(roomId) {
+    // Hide any visible overlays/modals
+    if (gameEndOverlay) {
+        gameEndOverlay.classList.remove('visible');
+    }
+    if (spectatorMenuModal) {
+        spectatorMenuModal.style.display = 'none';
+    }
+    if (spectateRoomsModal) {
+        spectateRoomsModal.style.display = 'none';
+    }
+    if (adminMenuModal) {
+        adminMenuModal.style.display = 'none';
+    }
+    if (createRoomModal) {
+        createRoomModal.style.display = 'none';
+    }
+    if (joinRoomModal) {
+        joinRoomModal.style.display = 'none';
+    }
+    if (lobbyOverlay) {
+        lobbyOverlay.style.display = 'none';
+    }
+
     setGameState('SPECTATING');
     resetGame();
     // Don't clear effects when spectating - keep showing game effects
