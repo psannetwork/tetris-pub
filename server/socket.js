@@ -380,13 +380,19 @@ function handleSocketConnection(io, socket) {
         // Store the last update time for potential further checks
         activity.lastUpdate = now;
 
-        room.boards[socket.id] = board;
+        // Cache the entire board state only when it's provided
+        // This prevents overwriting the full board with just a diff
+        if (board.board) {
+            room.boards[socket.id] = board;
+        }
+
+        const payload = { UserID: socket.id, ...board };
 
         for (const playerId of room.players) {
             if (playerId === socket.id || bots.has(playerId)) continue;
-            io.to(playerId).emit("BoardStatus", board);
+            io.to(playerId).emit("BoardStatus", payload);
         }
-        emitToSpectators(io, roomId, "BoardStatus", board);
+        emitToSpectators(io, roomId, "BoardStatus", payload);
     });
 
     socket.on("gameOver", ({ stats }) => {

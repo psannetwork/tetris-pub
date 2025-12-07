@@ -5,6 +5,7 @@ import { getStats } from './main.js';
 import * as Effects from './effects.js';
 import { drawTargetLines } from './online.js';
 import { attackBarSegments, MAX_ATTACK } from './garbage.js';
+import { isSpectating } from './online.js';
 import { CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT, SCORE_AREA_HEIGHT, setLayoutConstants } from './layout.js';
 
 
@@ -194,7 +195,9 @@ export function drawGame() {
         Effects.drawTspinEffect();
         Effects.drawTargetAttackFlashes();
         Effects.drawTimeoutEffect(); // NEW: Draw timeout effect
-        drawTargetLines(effectsCtx); // Pass effectsCtx
+        if (!isSpectating) {
+            drawTargetLines(effectsCtx); // Pass effectsCtx
+        }
     }
 
     gameCtx.restore();

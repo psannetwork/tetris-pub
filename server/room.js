@@ -360,10 +360,8 @@ function handleGameOver(io, socket, reason, stats) {
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
     // Only add to ranks if not a connection timeout
-    if (reason !== "connection timeout") {
-        if (!ranks.includes(socket.id)) {
-            ranks.push(socket.id);
-        }
+    if (!ranks.includes(socket.id)) {
+        ranks.push(socket.id);
     }
 
     // Ensure the player is removed from active players map for targeting purposes

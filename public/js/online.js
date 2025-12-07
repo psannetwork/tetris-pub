@@ -335,7 +335,7 @@ export function initializeSocket() {
 
     
 
-                            if (myRank === null || myRank === undefined) {
+                            if ((myRank === null || myRank === undefined) && !isSpectating) {
 
     
 
