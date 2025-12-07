@@ -525,7 +525,7 @@ function handleSocketConnection(io, socket) {
                 }
 
                 // If the host (creator) of a private room leaves before the game starts, delete the room
-                if (room.hostId === socket.id && room.isPrivate && !room.isGameStarted) {
+                if (room.hostId === socket.id && room.isPrivate) {
                     // Clear any existing countdown
                     if (room.countdownInterval) {
                         clearInterval(room.countdownInterval);

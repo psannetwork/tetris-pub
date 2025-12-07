@@ -1061,7 +1061,7 @@ export function drawLineClearEffects() {
 
         if (effect.type === 'lineClear') {
             effectsCtx.save();
-            effectsCtx.fillStyle = `rgba(255, 255, 255, ${alpha * CONFIG.effects.lineClearEffectOpacity})`;
+            effectsCtx.fillStyle = `rgba(255, 255, 0, ${alpha * CONFIG.effects.lineClearEffectOpacity})`;
             const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
             const offset = getMainBoardOffset();
             effect.rows.forEach(row => {

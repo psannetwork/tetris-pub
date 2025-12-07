@@ -1,10 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700&family=Press+Start+2P&display=swap');
 
 :root {
   --background-color: #1a1a1a;
   --board-background-color: #000;
   --text-color: #fff;
-  --font-family: 'Press Start 2P', cursive;
+  --font-family-body: 'Exo 2', sans-serif;
+  --font-family-display: 'Press Start 2P', cursive;
   --panel-background-color: rgba(34, 34, 34, 0.5);
   --overlay-background-color: rgba(0, 0, 0, 0.85);
   --win-color: #00ff00;
@@ -23,7 +24,7 @@ html, body {
     height: 100%;
     background-color: var(--background-color);
     overflow: hidden;
-    font-family: var(--font-family);
+    font-family: var(--font-family-body);
     color: var(--text-color);
 }
 
@@ -115,7 +116,7 @@ html, body {
 
 #score-display {
     color: white;
-    font-family: var(--font-family);
+    font-family: var(--font-family-display);
     width: 120px; /* Same width as next-box */
     text-align: center;
     margin-top: 20px; /* Move it down from the top slightly */
@@ -177,6 +178,7 @@ canvas {
 
 
 .lobby-title, #game-end-title {
+  font-family: var(--font-family-display);
   font-size: 1.8rem; /* Adjusted for pixel font */
   font-weight: bold;
   margin-bottom: 2vh;
@@ -190,18 +192,23 @@ canvas {
   padding: 15px 30px;
   margin: 10px;
   font-size: 1rem;
-  font-family: var(--font-family);
+  font-family: var(--font-family-display);
   cursor: pointer;
-  border-radius: 0;
+  border-radius: 8px;
   transition: background-color 0.3s, box-shadow 0.3s, transform 0.1s;
   outline: none;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
 }
 
 .menu-buttons button:hover, .lobby-button:hover {
   background-color: var(--button-primary-hover-bg);
-  box-shadow: 0 6px 8px rgba(0,0,0,0.15);
+  box-shadow: 0 6px 8px rgba(0,0,0,0.25);
   transform: translateY(-2px);
+}
+
+.menu-buttons button:active, .lobby-button:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .menu-buttons button:focus, .lobby-button:focus {
@@ -297,26 +304,6 @@ canvas {
     z-index: 10;
 }
 
-/* New: Hamburger menu button */
-#hamburger-menu-button {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    z-index: 150; /* Above overlays but below modals */
-    background-color: var(--button-primary-bg);
-    color: var(--button-primary-text);
-    border: none;
-    padding: 8px 12px;
-    font-size: 1rem;
-    cursor: pointer;
-    border-radius: 0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-#hamburger-menu-button:hover {
-    background-color: var(--button-primary-hover-bg);
-}
-
 /* New: Message Display */
 #message-display {
     position: fixed;
@@ -370,18 +357,18 @@ canvas {
 }
 
 .modal-content {
-  background-color: #111;
+  background-color: #1c1c1c;
   margin: 5% auto; /* 5% from the top and centered */
   padding: 30px;
-  border: 1px solid #888;
   width: 80%; /* Could be more responsive */
   max-width: 500px;
-  border-radius: 0;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 20px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .modal-content h2 {
@@ -401,7 +388,7 @@ canvas {
   background-color: #333;
   color: var(--text-color);
   font-size: 1rem;
-  font-family: 'Press Start 2P', cursive;
+  font-family: var(--font-family-body);
 }
 
 .modal-content button {

@@ -1206,6 +1206,7 @@ function updateSlotBoard(slot, boardData, diffData) {
         });
     }
     slot.dirty = true;
+    startAnimationIfNeeded();
 }
 
 function drawMiniBoard(slot, currentTime) {
@@ -1319,8 +1320,8 @@ function startAnimationIfNeeded() {
     }
 }
 
-let finalRanking = {}; // To store all player ranks
-let finalStatsMap = {}; // To store all player stats
+export let finalRanking = {}; // To store all player ranks
+export let finalStatsMap = {}; // To store all player stats
 let currentRoomId = null; // To store the current room ID
 
 export function setCurrentRoomId(id) {
@@ -1382,10 +1383,7 @@ export function drawTargetLines(ctx) {
                     ctx.lineTo(targetPos.x, targetPos.y);
                     ctx.strokeStyle = isFlashing ? '#FFFFFF' : '#FFFF66';
                     ctx.lineWidth = isFlashing ? 3 : 1.5;
-                    ctx.shadowColor = isFlashing ? '#FFFFFF' : '#FFFF66';
-                    ctx.shadowBlur = 10;
                     ctx.stroke();
-                    ctx.shadowBlur = 0; // Reset shadow blur
                 } else {
                     // console.log(`drawTargetLines: Target ${targetId} pos is null, cannot draw line from me.`);
                 }

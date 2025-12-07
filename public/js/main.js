@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './draw.js';
 import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects, drawAllEffects, effectsCtx } from './effects.js';
 import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent } from './online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap } from './online.js';
 import { showCountdown } from './ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -36,7 +36,7 @@ let currentRoomIdDisplay;
 let roomHostStatusDisplay;
 let hostStartGameButton;
 
-let hamburgerMenuButton;
+let menuButton;
 let adminRoomIdDisplay;
 let adminStartGameButton;
 let memberListUl;
@@ -83,8 +83,8 @@ function closeMenuWhenGameStarts() {
     if (adminStartGameButton) {
         setButtonState(adminStartGameButton, false);
     }
-    if (hamburgerMenuButton) {
-        hamburgerMenuButton.style.display = 'none';
+    if (menuButton) {
+        menuButton.style.display = 'none';
     }
 }
 
@@ -145,10 +145,12 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         adminRoomIdDisplay.textContent = roomId; // Update admin modal room ID
 
         // Hamburger button visibility based on room type or if spectating
-        if (isPrivate || gameState === 'SPECTATING') { // NEW: show hamburger if spectating
-            hamburgerMenuButton.style.display = 'block';
-        } else {
-            hamburgerMenuButton.style.display = 'none'; // No hamburger for public matches
+        if (menuButton) { // Check if element exists
+            if (isPrivate || gameState === 'SPECTATING') { // NEW: show hamburger if spectating
+                menuButton.style.display = 'block';
+            } else {
+                menuButton.style.display = 'none'; // No hamburger for public matches
+            }
         }
 
         if (isHost && !isSpectating) { // NEW: only show host buttons if not spectating
@@ -161,11 +163,11 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
             hostStartGameButton.style.display = 'none';
             // Non-hosts can still see the hamburger for private rooms to check members, etc.
             if (isPrivate && !isSpectating) { // Only show hamburger to non-hosts in private rooms
-                hamburgerMenuButton.style.display = 'block'; 
+                menuButton.style.display = 'block'; 
             } else if (gameState === 'SPECTATING') { // NEW: if spectating, hamburger is for spectator menu
-                hamburgerMenuButton.style.display = 'block';
+                menuButton.style.display = 'block';
             } else {
-                hamburgerMenuButton.style.display = 'none'; // Ensure hidden for non-hosts in public rooms
+                menuButton.style.display = 'none'; // Ensure hidden for non-hosts in public rooms
             }
             setButtonState(adminStartGameButton, false); // Admin menu start button disabled for non-host
         }
@@ -211,7 +213,7 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         mainMenuButtons.style.display = 'block';
         roomInfoDisplay.style.display = 'none';
         hostStartGameButton.style.display = 'none';
-        if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Hide hamburger when not in a room
+        if (menuButton) menuButton.style.display = 'none'; // Hide hamburger when not in a room
         setCurrentRoomId(null);
         setSpectating(false); // NEW: Ensure spectating state is false
         // Restore game-related panels if they were hidden
@@ -227,7 +229,7 @@ function openModal(modal) {
     modal.style.display = 'block';
     mainMenuButtons.style.display = 'none';
     roomInfoDisplay.style.display = 'none'; // Also hide room info if showing
-    if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Hide hamburger when other modals open
+    if (menuButton) menuButton.style.display = 'none'; // Hide hamburger when other modals open
     if (isSpectating) { // NEW: hide game-related elements if spectating
         document.getElementById('game-left-panel').style.display = 'none';
         document.getElementById('game-right-panel').style.display = 'none';
@@ -247,7 +249,7 @@ function closeModal(modal) {
         // This will trigger setRoomDisplayState and update hamburger visibility
         socket.emit('requestRoomInfo'); 
     } else { // Not in a room
-        if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none';
+        if (menuButton) menuButton.style.display = 'none';
     }
     // Clear inputs when closing
     if (modal === createRoomModal) {
@@ -330,6 +332,12 @@ function update(now = performance.now()) {
     drawGame();
     drawUI();
     drawAllEffects(); // Call drawAllEffects to render all effects
+    
+    // Draw target lines separately as it depends on spectator state
+    if (effectsCtx && !isSpectating) {
+        drawTargetLines(effectsCtx);
+    }
+
     // drawMiniboardEntryEffects(now); // REMOVED - now handled by drawAllEffects
     // drawAllMiniBoards() is handled by its own animation system when needed
     startAnimationIfNeeded(); // Start miniboard animation when needed
@@ -399,9 +407,8 @@ function init() {
     roomHostStatusDisplay = document.getElementById('room-host-status');
     hostStartGameButton = document.getElementById('host-start-game-button');
 
-    hamburgerMenuButton = document.getElementById('hamburger-menu-button');
+    menuButton = document.getElementById('menu-button');
     adminRoomIdDisplay = document.getElementById('admin-room-id');
-    adminStartGameButton = document.getElementById('admin-start-game-button'); // Error was here: document('admin-start-game-button')
     memberListUl = document.getElementById('member-list');
     finalRankingList = document.getElementById('final-ranking-list'); // Assigned here
     gameEndTitle = document.getElementById('game-end-title');     // Assigned here
@@ -438,7 +445,7 @@ function init() {
     lastTime = performance.now();
     update();
     updateButtonStates(); // Initial button state update
-    if (hamburgerMenuButton) hamburgerMenuButton.style.display = 'none'; // Ensure hamburger is hidden initially
+    if (menuButton) menuButton.style.display = 'none'; // Ensure hamburger is hidden initially
     if (messageDisplay) messageDisplay.style.display = 'none'; // Ensure message display is hidden initially
 
     // Register the callback to close menu when game starts
@@ -453,139 +460,181 @@ function init() {
     setSpectateRoomInfoCallback(handleSpectateRoomInfo); // NEW: Register spectate room info callback
 
     // --- Event Listeners ---
-    joinPublicMatchButton.onclick = () => {
-        // For public matches, hamburger button should not be shown.
-        setRoomDisplayState(true, false, null, [], false); // isHost=false, roomId=null, members=[], isPrivate=false
-        startMatching();
-        setButtonState(joinPublicMatchButton, false);
-    };
+    if (joinPublicMatchButton) {
+        joinPublicMatchButton.onclick = () => {
+            // For public matches, hamburger button should not be shown.
+            setRoomDisplayState(true, false, null, [], false); // isHost=false, roomId=null, members=[], isPrivate=false
+            startMatching();
+            setButtonState(joinPublicMatchButton, false);
+        };
+    }
 
-    createRoomButton.onclick = () => {
-        openModal(createRoomModal);
-    };
+    if (createRoomButton) {
+        createRoomButton.onclick = () => {
+            openModal(createRoomModal);
+        };
+    }
 
-    joinRoomButton.onclick = () => {
-        openModal(joinRoomModal);
-    };
+    if (joinRoomButton) {
+        joinRoomButton.onclick = () => {
+            openModal(joinRoomModal);
+        };
+    }
 
     // NEW: Public Spectate Button
-    joinPublicSpectateButton.onclick = () => {
-        requestPublicRooms(); // Request list of public rooms
-        openModal(spectateRoomsModal);
-    };
+    if (joinPublicSpectateButton) {
+        joinPublicSpectateButton.onclick = () => {
+            requestPublicRooms(); // Request list of public rooms
+            openModal(spectateRoomsModal);
+        };
+    }
 
-    hamburgerMenuButton.onclick = () => { // New: Open admin menu OR spectator menu
-        if (gameState === 'SPECTATING') {
-            openModal(spectatorMenuModal);
-            // Populate spectator ranking list if data is available
-            if (finalRanking) {
-                displaySpectatorRanking(finalRanking, socket.id, finalStatsMap);
-            }
-        } else if (getCurrentRoomId()) {
-            openModal(adminMenuModal);
-        } else {
-            showMessage({ type: 'info', message: 'ルームに参加していません。' });
-        }
-    };
-
-    closeModalButtons.forEach(button => {
-        button.onclick = (event) => {
-            const modal = event.target.closest('.modal');
-            closeModal(modal);
-            if (modal === spectateRoomsModal) { // Clear list when closing
-                publicRoomsList.innerHTML = '';
+    if (menuButton) {
+        menuButton.onclick = () => { // New: Open admin menu OR spectator menu
+            if (gameState === 'SPECTATING') {
+                openModal(spectatorMenuModal);
+                // Populate spectator ranking list if data is available
+                if (finalRanking) {
+                    displaySpectatorRanking(finalRanking, socket.id, finalStatsMap);
+                }
+            } else if (getCurrentRoomId()) {
+                openModal(adminMenuModal);
+            } else {
+                showMessage({ type: 'info', message: 'ルームに参加していません。' });
             }
         };
+    } else {
+        console.error("Error: #menu-button element not found in the DOM. Cannot attach event listener.");
+    }
+
+
+    closeModalButtons.forEach(button => {
+        if (button) {
+            button.onclick = (event) => {
+                const modal = event.target.closest('.modal');
+                closeModal(modal);
+                if (modal === spectateRoomsModal) { // Clear list when closing
+                    if (publicRoomsList) {
+                        publicRoomsList.innerHTML = '';
+                    }
+                }
+            };
+        }
     });
 
-    confirmCreateRoomButton.onclick = () => {
-        const plainPassword = createRoomPasswordInput.value;
-        socket.emit('createPrivateRoom', { plainPassword });
-        closeModal(createRoomModal);
-        // UI state will be handled by roomInfo event from server
-    };
-
-    confirmJoinRoomButton.onclick = () => {
-        const roomId = joinRoomIdInput.value;
-        const plainPassword = joinRoomPasswordInput.value;
-        if (roomId) {
-            socket.emit('joinPrivateRoom', { roomId, plainPassword });
-            closeModal(joinRoomModal);
+    if (confirmCreateRoomButton) {
+        confirmCreateRoomButton.onclick = () => {
+            const plainPassword = createRoomPasswordInput.value;
+            socket.emit('createPrivateRoom', { plainPassword });
+            closeModal(createRoomModal);
             // UI state will be handled by roomInfo event from server
-        } else {
-            showMessage({ type: 'error', message: 'ルームIDを入力してください。' });
-        }
-    };
+        };
+    }
 
-    hostStartGameButton.onclick = () => {
-        socket.emit('startGame');
-        setButtonState(hostStartGameButton, false); // Disable until game starts or error
-    };
+    if (confirmJoinRoomButton) {
+        confirmJoinRoomButton.onclick = () => {
+            const roomId = joinRoomIdInput.value;
+            const plainPassword = joinRoomPasswordInput.value;
+            if (roomId) {
+                socket.emit('joinPrivateRoom', { roomId, plainPassword });
+                closeModal(joinRoomModal);
+                // UI state will be handled by roomInfo event from server
+            } else {
+                showMessage({ type: 'error', message: 'ルームIDを入力してください。' });
+            }
+        };
+    }
 
-    adminStartGameButton.onclick = () => { // New: Start game from admin menu
-        socket.emit('startGame');
-        setButtonState(adminStartGameButton, false);
-    };
+    if (hostStartGameButton) {
+        hostStartGameButton.onclick = () => {
+            socket.emit('startGame');
+            setButtonState(hostStartGameButton, false); // Disable until game starts or error
+        };
+    }
 
-    retryButton.onclick = () => {
-        setManualDisconnect(true);
-        setAutoMatchOnReconnect(true); // Do auto-match when retrying
-        if (socket) {
-            socket.disconnect();
-        }
-        gameEndOverlay.classList.remove('visible');
-        initializeSocket(); // Reinitialize socket to ensure clean state
-        connectToServer(); // Reconnect will be handled by connect event in online.js
-        setButtonState(retryButton, false);
-        setButtonState(lobbyButton, false);
-        setButtonState(spectateButton, false); // NEW
-    };
+    if (adminStartGameButton) {
+        adminStartGameButton.onclick = () => { // New: Start game from admin menu
+            socket.emit('startGame');
+            setButtonState(adminStartGameButton, false);
+        };
+    }
 
-    // NEW: Spectate Button on Game Over screen
-    spectateButton.onclick = () => {
-        const currentId = getCurrentRoomId();
-        if (currentId) {
-            startSpectating(currentId);
+    if (retryButton) {
+        retryButton.onclick = () => {
+            setManualDisconnect(true);
+            setAutoMatchOnReconnect(true); // Do auto-match when retrying
+            if (socket) {
+                socket.disconnect();
+            }
             gameEndOverlay.classList.remove('visible');
+            initializeSocket(); // Reinitialize socket to ensure clean state
+            connectToServer(); // Reconnect will be handled by connect event in online.js
             setButtonState(retryButton, false);
             setButtonState(lobbyButton, false);
-            setButtonState(spectateButton, false);
-        }
-    };
+            setButtonState(spectateButton, false); // NEW
+        };
+    }
 
-    lobbyButton.onclick = () => {
-        setManualDisconnect(true);
-        setAutoMatchOnReconnect(false); // Don't auto-match when going back to lobby
-        if (socket) {
-            socket.disconnect();
-        }
-        gameEndOverlay.classList.remove('visible');
-        setGameState('LOBBY');
-        resetGame();
-        setRoomDisplayState(false); // Go back to main lobby view
-        setButtonState(lobbyButton, false);
-        setButtonState(retryButton, false);
-        setButtonState(joinPublicMatchButton, true);
-        setButtonState(spectateButton, false); // NEW
-        // Reconnect the socket after disconnecting to allow new matching
-        initializeSocket(); // Reinitialize socket to ensure clean state
-        connectToServer();
-    };
+    // NEW: Spectate Button on Game Over screen
+    if (spectateButton) {
+        spectateButton.onclick = () => {
+            const currentId = getCurrentRoomId();
+            if (currentId) {
+                startSpectating(currentId);
+                gameEndOverlay.classList.remove('visible');
+                setButtonState(retryButton, false);
+                setButtonState(lobbyButton, false);
+                setButtonState(spectateButton, false);
+            }
+        };
+    }
+
+    if (lobbyButton) {
+        lobbyButton.onclick = () => {
+            setManualDisconnect(true);
+            setAutoMatchOnReconnect(false); // Don't auto-match when going back to lobby
+            if (socket) {
+                socket.disconnect();
+            }
+            gameEndOverlay.classList.remove('visible');
+            setGameState('LOBBY');
+            resetGame();
+            setRoomDisplayState(false); // Go back to main lobby view
+            setButtonState(lobbyButton, false);
+            setButtonState(retryButton, false);
+            setButtonState(joinPublicMatchButton, true);
+            setButtonState(spectateButton, false); // NEW
+            // Reconnect the socket after disconnecting to allow new matching
+            initializeSocket(); // Reinitialize socket to ensure clean state
+            connectToServer();
+        };
+    }
 
     // NEW: Spectator Back to Lobby Button
-    spectatorBackToLobbyButton.onclick = () => {
-        setManualDisconnect(true);
-        setAutoMatchOnReconnect(false);
-        if (socket) {
-            socket.disconnect();
-        }
-        closeModal(spectatorMenuModal);
-        setGameState('LOBBY');
-        resetGame();
-        setSpectating(false); // Clear spectating state
-        setRoomDisplayState(false);
-        initializeSocket();
-        connectToServer();
+    if (spectatorBackToLobbyButton) {
+        spectatorBackToLobbyButton.onclick = () => {
+            setManualDisconnect(true);
+            setAutoMatchOnReconnect(false);
+            if (socket) {
+                socket.disconnect();
+            }
+            closeModal(spectatorMenuModal);
+            gameEndOverlay.classList.remove('visible'); // Hide game end overlay just in case
+            setGameState('LOBBY');
+            resetGame();
+            setSpectating(false); // Clear spectating state
+            setRoomDisplayState(false);
+
+            // Explicitly set button states for the lobby
+            setButtonState(lobbyButton, false);
+            setButtonState(retryButton, false);
+            setButtonState(joinPublicMatchButton, true);
+            setButtonState(spectateButton, false);
+            setButtonState(joinPublicSpectateButton, true);
+
+            initializeSocket();
+            connectToServer();
+        };
     };
 
 
@@ -620,6 +669,11 @@ function startSpectating(roomId) {
     // Hide main game elements not needed for spectating
     document.getElementById('main-game-board').style.display = 'block'; // Ensure board itself is visible
     document.getElementById('score-display').style.display = 'none'; // Hide score for player, show only opponent boards
+
+    // Clear old ranking data
+    finalRanking = {};
+    finalStatsMap = {};
+
     if (finalRankingList) { // Clear old ranking if any
         finalRankingList.innerHTML = '';
     }
@@ -638,10 +692,12 @@ function populatePublicRoomsList(rooms) {
                 <button class="join-spectate-room-button" data-room-id="${room.roomId}">観戦</button>
             `;
             const spectateBtn = li.querySelector('.join-spectate-room-button');
-            spectateBtn.onclick = () => {
-                startSpectating(room.roomId);
-                closeModal(spectateRoomsModal);
-            };
+            if (spectateBtn) {
+                spectateBtn.onclick = () => {
+                    startSpectating(room.roomId);
+                    closeModal(spectateRoomsModal);
+                };
+            }
             publicRoomsList.appendChild(li);
         });
     } else {
@@ -711,4 +767,4 @@ function displaySpectatorRanking(ranking, myId, statsMap) {
     });
 }
 
-init();
+window.addEventListener('DOMContentLoaded', init);
