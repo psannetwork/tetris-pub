@@ -25,36 +25,57 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
     // 2. Clear previous ranking
     rankingListContainer.innerHTML = '';
 
-    // 3. Create and append new ranking
+    // 3. Create a comprehensive list of all players involved.
     if (rankingMap) {
-      const sortedRanks = Object.entries(rankingMap)
-        .filter(([, rank]) => rank !== null)
-        .sort(([, rankA], [, rankB]) => rankA - rankB);
+      const allPlayerIds = new Set([...Object.keys(rankingMap), ...Object.keys(statsMap)]);
+      const playerList = Array.from(allPlayerIds).map(userId => ({
+        userId,
+        rank: rankingMap[userId] ?? null,
+        stats: statsMap[userId] || { score: 0, lines: 0 },
+      }));
 
-      for (const [userId, rank] of sortedRanks) {
+      // 4. Sort the list: playing players first, then by rank.
+      playerList.sort((a, b) => {
+        if (a.rank === null && b.rank !== null) return -1; // a is playing, b is not
+        if (a.rank !== null && b.rank === null) return 1;  // b is playing, a is not
+        if (a.rank === null && b.rank === null) return 0;  // both are playing
+        return a.rank - b.rank; // both are ranked
+      });
+
+      // 5. Create and append new ranking cards
+      for (const player of playerList) {
+        const { userId, rank, stats } = player;
         const isMe = userId === myId;
         const displayName = isMe ? 'You' : `Player (${userId.substring(0, 4)}...)`;
-        const userStats = statsMap[userId] || { score: 0, lines: 0 };
+        
+        const rankText = rank === null ? 'Playing...' : `#${rank}`;
 
         const card = document.createElement('div');
         card.className = 'rank-card';
         if (isMe) {
           card.classList.add('my-rank');
         }
+        if (rank === null) {
+          card.classList.add('playing');
+        }
+        if (rank === 1) {
+          card.classList.add('first-place');
+        }
+
 
         card.innerHTML = `
-          <div class="rank-position">#${rank}</div>
+          <div class="rank-position">${rankText}</div>
           <div class="rank-player-name">${displayName}</div>
           <div class="rank-stats">
-            <span>Score: ${userStats.score}</span>
-            <span>Lines: ${userStats.lines}</span>
+            <span>Score: ${stats.score}</span>
+            <span>Lines: ${stats.lines}</span>
           </div>
         `;
         rankingListContainer.appendChild(card);
       }
     }
 
-    // 4. Show the overlay
+    // 6. Show the overlay
     gameEndOverlay.classList.add('visible');
     // NEW: Enable spectate button if it exists
     const spectateBtn = document.getElementById('spectate-button');

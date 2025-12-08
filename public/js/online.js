@@ -57,7 +57,6 @@ export function initializeSocket() {
 
         miniboardSlots.forEach(slot => {
             slot.userId = null;
-            slot.dirty = true;
         });
         finalRanking = {}; // Reset on new connection
         finalStatsMap = {}; // Reset on new connection
@@ -91,8 +90,6 @@ export function initializeSocket() {
             playerTargets = new Map(targets);
 
             // We need to redraw the miniboards to update their target styles
-
-            miniboardSlots.forEach(slot => slot.dirty = true);
 
         });
 
@@ -232,7 +229,7 @@ export function initializeSocket() {
 
                     slot.boardState.forEach(row => row.fill(0)); // Clear the board state
 
-                    slot.dirty = true;
+                    drawMiniBoard(slot);
 
                 }
 
@@ -249,217 +246,152 @@ export function initializeSocket() {
 
                         socket.on("ranking", (data) => {
 
-    
 
-                            const { yourRankMap, statsMap, roomId } = data;
 
-    
+                            const { yourRankMap, statsMap, roomId, isGameOver } = data;
+
+
 
                             if (roomId !== getCurrentRoomId()) {
 
-    
+
 
                                 return;
 
-    
+
 
                             }
 
-    
 
-                            
 
-    
 
+
+
+
+                            // Update the current player's ranking with the new data
                             Object.assign(finalRanking, yourRankMap);
 
-    
 
+
+                            // Update stats map
                             Object.assign(finalStatsMap, statsMap); // NEW
 
-    
 
-                            
 
-    
 
+
+
+
+                            // Mark miniboards as game over when their rank is determined (rank > 1)
                             miniboardSlots.forEach(slot => {
 
-    
 
-                                if (slot.userId && !finalRanking.hasOwnProperty(slot.userId)) {
 
-    
+                                if (slot.userId && finalRanking.hasOwnProperty(slot.userId) && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
 
-                                    finalRanking[slot.userId] = null;
 
-    
-
-                                }
-
-    
-
-                            });
-
-    
-
-                            
-
-    
-
-                            if (!finalRanking.hasOwnProperty(socket.id)) {
-
-    
-
-                                finalRanking[socket.id] = null;
-
-    
-
-                            }
-
-    
-
-                            
-
-    
-
-                            miniboardSlots.forEach(slot => {
-
-    
-
-                                if (slot.userId && finalRanking[slot.userId] > 1 && !slot.isGameOver) {
-
-    
 
                                     slot.isGameOver = true;
 
-    
 
-                                    slot.dirty = true;
 
-    
+                                    drawMiniBoard(slot);
+
+
 
                                 }
 
-    
+
 
                             });
 
-    
 
-                            
 
-    
 
-    
+
+
+
+
 
                             const myRank = finalRanking[socket.id];
 
-    
 
-                            
 
-    
+                            // If game is over, show the final results
+                            if (isGameOver) {
 
-                            if ((myRank === null || myRank === undefined) && !isSpectating) {
 
-    
-
-                                setGameState('PLAYING');
-
-    
-
-                                return;
-
-    
-
-                            }
-
-    
-
-                            
-
-    
-
-                            const totalPlayers = Object.keys(finalRanking).length;
-
-    
-
-                            const knockedOutPlayers = Object.values(finalRanking).filter(r => r > 1).length;
-
-    
-
-                            const isMatchOver = (knockedOutPlayers >= totalPlayers - 1 && totalPlayers > 1);
-
-    
-
-                            const amKnockedOut = myRank > 1;
-
-    
-
-                            
-
-    
-
-                            if (isMatchOver) {
-
-    
 
                                 setGameState('GAME_OVER');
 
-    
+
 
                                 const isWin = myRank === 1;
 
-    
+
 
                                 const title = isWin ? 'You Win!' : 'Game Over';
 
-    
+
 
                                 if (isWin) setGameClear(true);
 
-    
+
 
                                 showGameEndScreen(title, isWin, finalRanking, socket.id, finalStatsMap || {});
 
-    
 
-                            } else if (amKnockedOut) {
-
-    
-
-                                setGameState('GAME_OVER');
-
-    
-
-                                const gameEndOverlay = document.getElementById('game-end-overlay');
-
-    
-
-                                if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
-
-    
-
-                                    showGameEndScreen('Game Over', false, finalRanking, socket.id, finalStatsMap || {});
-
-    
-
-                                }
-
-    
 
                             } else {
 
-    
 
-                                setGameState('PLAYING');
 
-    
+                                // If player is eliminated (rank > 1), show game over screen but stay in playing state
+                                // until all players are ranked
+                                const amKnockedOut = myRank && myRank > 1;
+
+
+
+                                if (amKnockedOut) {
+
+
+
+                                    setGameState('GAME_OVER');
+
+
+
+                                    const gameEndOverlay = document.getElementById('game-end-overlay');
+
+
+
+                                    if (gameEndOverlay && !gameEndOverlay.classList.contains('visible')) {
+
+
+
+                                        showGameEndScreen('Game Over', false, finalRanking, socket.id, finalStatsMap || {});
+
+
+
+                                    }
+
+
+
+                                } else {
+
+
+
+                                    // Player is still in the game
+                                    setGameState('PLAYING');
+
+
+
+                                }
+
+
 
                             }
 
-    
+
 
                         });
 
@@ -507,15 +439,16 @@ export function initializeSocket() {
 
                 socket.on("BoardStatus", (data) => {
 
-    
+
 
                     if (gameState !== 'PLAYING' && gameState !== 'SPECTATING') return; // NEW: Allow spectating
 
-    
 
-        
 
             const { UserID, board, diff } = data;
+
+            // Don't process our own board updates if we're spectating
+            if (isSpectating && UserID === socket.id) return;
 
             let slot = miniboardSlots.find(s => s.userId === UserID);
 
@@ -543,19 +476,20 @@ export function initializeSocket() {
 
                 socket.on("BoardStatusBulk", (boards) => {
 
-    
+
 
                     if (gameState !== 'PLAYING' && gameState !== 'SPECTATING') return; // NEW: Allow spectating
 
-    
 
-        
 
             for (const userId in boards) {
 
                 const boardData = boards[userId];
 
                 if (!boardData) continue;
+
+                // Don't process our own board updates if we're spectating
+                if (isSpectating && userId === socket.id) continue;
 
                 let slot = miniboardSlots.find(s => s.userId === userId);
 
@@ -1162,8 +1096,7 @@ function setupMiniboardSlots() {
             canvas: canvas,
             ctx: canvas.getContext('2d'),
             isNew: false,
-            effect: null,
-            dirty: true
+            effect: null
         };
 
         canvas.addEventListener('click', () => {
@@ -1201,16 +1134,18 @@ function addOpponent(userId) {
 
         emptySlot.userId = userId;
         emptySlot.isGameOver = false;
-        emptySlot.boardState.forEach(row => row.fill(0));
-        emptySlot.isNew = true; // Add this flag for the effect
-        emptySlot.dirty = true;
-
-        // Start the effect via effects.js
-        if (gameState !== 'PLAYING') { // Check gameState here
-            const pos = getBoardCenterPosition(userId); // Get center position of the miniboard
-            if (pos) {
-                startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
+        // More efficient way to clear the board state
+        for (let r = 0; r < emptySlot.boardState.length; r++) {
+            for (let c = 0; c < emptySlot.boardState[r].length; c++) {
+                emptySlot.boardState[r][c] = 0;
             }
+        }
+        emptySlot.isNew = true; // Add this flag for the effect
+
+        // Start the effect via effects.js - ALWAYS
+        const pos = getBoardCenterPosition(userId); // Get center position of the miniboard
+        if (pos) {
+            startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
         }
     }
 }
@@ -1219,25 +1154,60 @@ function removeOpponent(userId) {
     const slot = miniboardSlots.find(slot => slot.userId === userId);
     if (slot) {
         slot.userId = null;
-        slot.dirty = true;
+        drawMiniBoard(slot);
     }
 }
 
 function updateSlotBoard(slot, boardData, diffData) {
     if (boardData) {
-        slot.boardState = boardData;
+        // Only update if the board data is different
+        let hasChanges = false;
+
+        // Check if board dimensions match before comparison
+        if (slot.boardState.length !== boardData.length) {
+            hasChanges = true;
+        } else {
+            // Compare boards efficiently
+            for (let r = 0; r < boardData.length; r++) {
+                if (!slot.boardState[r]) {
+                    hasChanges = true;
+                    break;
+                }
+                for (let c = 0; c < boardData[r].length; c++) {
+                    if (slot.boardState[r][c] !== boardData[r][c]) {
+                        hasChanges = true;
+                        break;
+                    }
+                }
+                if (hasChanges) break;
+            }
+        }
+
+        if (hasChanges) {
+            slot.boardState = boardData;
+            drawMiniBoard(slot);
+        }
     } else if (diffData) {
+        // Apply differential update
+        let hasChanges = false;
         diffData.forEach(({ r, c, val }) => {
-            if (slot.boardState[r]) slot.boardState[r][c] = val;
+            if (slot.boardState[r] && slot.boardState[r][c] !== val) {
+                slot.boardState[r][c] = val;
+                hasChanges = true;
+            }
         });
+        if (hasChanges) {
+            drawMiniBoard(slot);
+        }
+    } else {
+        // If no boardData or diffData, still draw to ensure proper game over state display if needed
+        drawMiniBoard(slot);
     }
-    slot.dirty = true;
-    startAnimationIfNeeded();
 }
 
-function drawMiniBoard(slot, currentTime) {
+function drawMiniBoard(slot) {
     const { ctx, canvas, boardState, isGameOver, userId } = slot; // Removed 'effect' from destructuring
-    if (!slot.dirty) return; // Only check dirty flag
+    if (!slot) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas.style.display = 'block';
@@ -1248,7 +1218,6 @@ function drawMiniBoard(slot, currentTime) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
-        slot.dirty = false;
         return;
     }
 
@@ -1278,11 +1247,15 @@ function drawMiniBoard(slot, currentTime) {
     // Create a color cache to avoid repeated color lookups
     const colorCache = new Map();
 
-    for (let r = 0; r < CONFIG.board.visibleRows; r++) {
+    // Cache frequently used values
+    const visibleRows = CONFIG.board.visibleRows;
+    const cols = CONFIG.board.cols;
+
+    for (let r = 0; r < visibleRows; r++) {
         const boardRow = boardState[startRow + r];
         if (!boardRow) continue;
 
-        for (let c = 0; c < CONFIG.board.cols; c++) {
+        for (let c = 0; c < cols; c++) {
             const block = boardRow[c];
             if (block === 0) continue;
 
@@ -1310,40 +1283,18 @@ function drawMiniBoard(slot, currentTime) {
             }
         }
     }
-
-    slot.dirty = false;
 }
 
 let animationFrameId = null;
 
 export function drawAllMiniBoards() {
-    const currentTime = performance.now();
-    // Only draw dirty slots for better performance
     for (const slot of miniboardSlots) {
-        if (slot.dirty) {
-            drawMiniBoard(slot, currentTime);
-        }
-    }
-
-    // Check if any miniboards need redrawing OR if the game is playing/spectating and there are opponents
-    const hasDirtySlots = miniboardSlots.some(slot => slot.dirty);
-    const hasActiveOpponents = miniboardSlots.some(slot => slot.userId !== null && slot.userId !== socket.id);
-
-    // Continue requesting animation frames if playing/spectating with active opponents,
-    // or if there are still dirty slots to draw.
-    if ((gameState === 'PLAYING' || gameState === 'SPECTATING') && hasActiveOpponents) {
-        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
-    } else if (hasDirtySlots) { // Keep redrawing dirty slots even if not playing/spectating with opponents
-        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
-    } else {
-        animationFrameId = null;
+        drawMiniBoard(slot);
     }
 }
 
 function startAnimationIfNeeded() {
-    if (!animationFrameId) {
-        animationFrameId = requestAnimationFrame(drawAllMiniBoards);
-    }
+    // This function is now obsolete.
 }
 
 export let finalRanking = {}; // To store all player ranks

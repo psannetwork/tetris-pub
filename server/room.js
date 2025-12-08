@@ -354,45 +354,65 @@ function handleGameOver(io, socket, reason, stats) {
 
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
-    // Only add to ranks if not a connection timeout
+
+    // Only add to ranks if not a connection timeout and player is not already ranked
     if (!ranks.includes(socket.id)) {
+        // Calculate and assign final rank when player is eliminated
+        // The rank is the number of players who have already been eliminated + 1
+        const finalRank = ranks.length + 1;
         ranks.push(socket.id);
+
+        // Create a ranking map with the specific player's final rank
+        const yourRankMap = {};
+        yourRankMap[socket.id] = finalRank;
+
+        // Notify all players about this specific player's rank being finalized
+        const statsMap = Object.fromEntries(room.stats);
+        const rankingData = {
+            ranking: ranks, // Include the current list of ranked players
+            yourRankMap,
+            statsMap,
+            roomId: room.roomId,
+            isGameOver: false // Game is not over yet, just this player is out
+        };
+
+        emitToRoom(io, room, "ranking", rankingData); // To players
+        emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
     }
 
     // Ensure the player is removed from active players map for targeting purposes
     playerRoom.delete(socket.id);
 
+    // Calculate remaining active players
     const activePlayersCount = room.initialPlayers.size - ranks.length;
-
-    // Construct the current ranking order
-    const stillPlaying = [...room.initialPlayers].filter(id => !ranks.includes(id));
-    const yourRankMap = {};
-
-    // Players still in the game share the top rank
-    stillPlaying.forEach(playerId => {
-        yourRankMap[playerId] = 1;
-    });
-
-    // Assign ranks to knocked-out players
-    const knockedOutPlayers = ranks.length;
-    ranks.slice().reverse().forEach((playerId, index) => {
-        yourRankMap[playerId] = stillPlaying.length + index + 1;
-    });
-
-    // Create a sorted list of players by rank for display
-    const finalRanks = [...room.initialPlayers]
-        .sort((a, b) => yourRankMap[a] - yourRankMap[b]);
-
-    const statsMap = Object.fromEntries(room.stats);
-    const rankingData = { ranking: finalRanks, yourRankMap, statsMap, roomId: room.roomId, isGameOver: room.isGameOver };
-    emitToRoom(io, room, "ranking", rankingData); // To players
-    emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
 
     // If the game is now over, handle final win/loss emits
     if (activePlayersCount <= 1) {
         room.isGameOver = true;
 
-        const winnerId = finalRanks[0];
+        // The remaining player (if any) gets rank 1
+        const stillPlaying = [...room.initialPlayers].filter(id => !ranks.includes(id));
+        let winnerId = null;
+        if (stillPlaying.length > 0) {
+            winnerId = stillPlaying[0];
+            // Assign rank 1 to the winner if not already assigned
+            if (!ranks.includes(winnerId)) {
+                const winnerRankMap = {};
+                winnerRankMap[winnerId] = 1;
+
+                const statsMap = Object.fromEntries(room.stats);
+                const rankingData = {
+                    ranking: [...ranks, winnerId],
+                    yourRankMap: winnerRankMap,
+                    statsMap,
+                    roomId: room.roomId,
+                    isGameOver: true
+                };
+
+                emitToRoom(io, room, "ranking", rankingData); // To players
+                emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
+            }
+        }
 
         if (winnerId) { // Check if winnerId exists
             if (bots.has(winnerId)) {
