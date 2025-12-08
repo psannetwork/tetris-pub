@@ -63,6 +63,7 @@ html, body {
 }
 
 #game-right-panel {
+    position: relative; /* Added for positioning context */
     display: flex;
     flex-direction: column;
     justify-content: flex-start; /* Align items to the top */
@@ -71,6 +72,15 @@ html, body {
     height: 600px; /* Main board height */
     box-sizing: border-box;
 }
+
+#menu-button {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%; /* Adjust width as needed */
+}
+
 
 #left-miniboards-group, #right-miniboards-group {
     width: 275px; /* 7 * 35px + 6 * 5px */

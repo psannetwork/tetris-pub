@@ -36,6 +36,7 @@ export function getMainBoardOffset() {
 }
 
 // --- Main Setup Function ---
+let preRenderedMiniPieces = new Map();
 export function setupCanvases() {
     // Fixed dimensions based on user requirements
     const layout = {
@@ -50,6 +51,8 @@ export function setupCanvases() {
         SCORE_AREA_HEIGHT: CONFIG.layout.scoreAreaHeight // Arbitrary fixed height for score display
     };
     setLayoutConstants(layout);
+
+    prerenderAllMiniPieces();
 
     // --- Create Canvases and Set Element Sizes ---
     gameCtx = createCanvas('main-game-board', BOARD_WIDTH, BOARD_HEIGHT).ctx;
@@ -307,7 +310,7 @@ function drawHoldPiece() {
     holdCtx.clearRect(0, 0, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT);
     drawUITitledBox(holdCtx, 0, 0, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, 'HOLD');
     if (holdPiece) {
-        drawMiniPiece(holdCtx, holdPiece, 0, 0, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT);
+        drawMiniPiece(holdCtx, holdPiece, 0, 0, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, true);
     }
 }
 
@@ -324,7 +327,7 @@ function drawNextPieces() {
 
     for (let i = 0; i < CONFIG.game.nextPiecesCount; i++) {
         if (nextPieces[i]) {
-            drawMiniPiece(nextCtx, nextPieces[i], 0, titleReserveHeight + i * boxCellHeight, NEXT_BOX_WIDTH, boxCellHeight);
+            drawMiniPiece(nextCtx, nextPieces[i], 0, titleReserveHeight + i * boxCellHeight, NEXT_BOX_WIDTH, boxCellHeight, false);
         }
     }
 }
@@ -362,27 +365,31 @@ function drawUITitledBox(ctx, x, y, w, h, title) {
     ctx.textAlign = 'left';
 }
 
-function drawMiniPiece(ctx, piece, boxX, boxY, boxW, boxH) {
-    const shape = piece.shape[0];
-    // Calculate miniCellSize, rounding to the nearest integer for crisp drawing
-    const miniCellSize = Math.round(boxW / CONFIG.ui.miniPieceCellCount);
+function drawMiniPiece(ctx, piece, boxX, boxY, boxW, boxH, isHoldBox = false) {
+    // Determine which pre-rendered canvas to use
+    const key = isHoldBox ? `${piece.type}-hold` : `${piece.type}-next`;
+    const preRenderedCanvas = preRenderedMiniPieces.get(key);
 
-    const pieceMinX = Math.min(...shape.map(p => p[0]));
-    const pieceMinY = Math.min(...shape.map(p => p[1]));
-    const pieceMaxX = Math.max(...shape.map(p => p[0]));
-    const pieceMaxY = Math.max(...shape.map(p => p[1]));
+    if (preRenderedCanvas) {
+        ctx.drawImage(preRenderedCanvas, boxX, boxY, boxW, boxH);
+    } else {
+        console.warn(`Pre-rendered canvas for ${key} not found.`);
+        // Fallback to original drawing logic if for some reason pre-rendered canvas is not available
+        const shape = piece.shape[0];
+        const miniCellSize = Math.round(boxW / CONFIG.ui.miniPieceCellCount);
+        const pieceMinX = Math.min(...shape.map(p => p[0]));
+        const pieceMinY = Math.min(...shape.map(p => p[1]));
+        const pieceMaxX = Math.max(...shape.map(p => p[0]));
+        const pieceMaxY = Math.max(...shape.map(p => p[1]));
+        const pieceRenderWidth = (pieceMaxX - pieceMinX + 1) * miniCellSize;
+        const pieceRenderHeight = (pieceMaxY - pieceMinY + 1) * miniCellSize;
+        const offsetX = Math.round(boxX + (boxW - pieceRenderWidth) / 2 - pieceMinX * miniCellSize);
+        const offsetY = Math.round(boxY + (boxH - pieceRenderHeight) / 2 - pieceMinY * miniCellSize);
 
-    const pieceRenderWidth = (pieceMaxX - pieceMinX + 1) * miniCellSize;
-    const pieceRenderHeight = (pieceMaxY - pieceMinY + 1) * miniCellSize;
-
-    // Calculate offsets for centering, ensuring integer values
-    const offsetX = Math.round(boxX + (boxW - pieceRenderWidth) / 2 - pieceMinX * miniCellSize);
-    const offsetY = Math.round(boxY + (boxH - pieceRenderHeight) / 2 - pieceMinY * miniCellSize);
-
-    shape.forEach(([x, y]) => {
-        // Ensure drawing coordinates are integers
-        drawBlock(ctx, offsetX + x * miniCellSize, offsetY + y * miniCellSize, piece.type, miniCellSize);
-    });
+        shape.forEach(([x, y]) => {
+            drawBlock(ctx, offsetX + x * miniCellSize, offsetY + y * miniCellSize, piece.type, miniCellSize);
+        });
+    }
 }
 
 function drawPiece(ctx, piece, boardX, boardY) {
@@ -406,6 +413,52 @@ function lightenDarkenColor(col, amt) {
     let g = ((num >> 8) & 0x00FF) + amt; if (g > 255) g = 255; else if (g < 0) g = 0;
     let b = (num & 0x0000FF) + amt; if (b > 255) b = 255; else if (b < 0) b = 0;
     return (usePound ? "#" : "") + (r << 16 | g << 8 | b).toString(16).padStart(6, '0');
+}
+
+function prerenderAllMiniPieces() {
+    const tetrominoTypes = Object.keys(CONFIG.TETROMINOES);
+    tetrominoTypes.forEach(type => {
+        // Adjust for titleReserveHeight when prerendering next pieces
+        const titleReserveHeight = CELL_SIZE * (CONFIG.ui.titledBoxTitleOffset + CONFIG.ui.titledBoxFontScale * 0.5);
+        const nextPieceBoxHeight = (NEXT_BOX_HEIGHT - titleReserveHeight) / CONFIG.game.nextPiecesCount;
+
+        const holdCanvas = createOffscreenMiniPieceCanvas(type, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT);
+        const nextCanvas = createOffscreenMiniPieceCanvas(type, NEXT_BOX_WIDTH, nextPieceBoxHeight); 
+        preRenderedMiniPieces.set(`${type}-hold`, holdCanvas);
+        preRenderedMiniPieces.set(`${type}-next`, nextCanvas);
+    });
+}
+
+function createOffscreenMiniPieceCanvas(pieceType, boxW, boxH) {
+    const canvas = document.createElement('canvas');
+    canvas.width = boxW;
+    canvas.height = boxH;
+    const ctx = canvas.getContext('2d');
+
+    const piece = {
+        shape: CONFIG.TETROMINOES[pieceType].shape[0], // Use the first rotation for mini-pieces
+        type: pieceType
+    };
+
+    const shape = piece.shape;
+    const miniCellSize = Math.round(boxW / CONFIG.ui.miniPieceCellCount);
+
+    const pieceMinX = Math.min(...shape.map(p => p[0]));
+    const pieceMinY = Math.min(...shape.map(p => p[1]));
+    const pieceMaxX = Math.max(...shape.map(p => p[0]));
+    const pieceMaxY = Math.max(...shape.map(p => p[1]));
+
+    const pieceRenderWidth = (pieceMaxX - pieceMinX + 1) * miniCellSize;
+    const pieceRenderHeight = (pieceMaxY - pieceMinY + 1) * miniCellSize;
+
+    // Calculate offsets for centering within its own canvas
+    const offsetX = Math.round((boxW - pieceRenderWidth) / 2 - pieceMinX * miniCellSize);
+    const offsetY = Math.round((boxH - pieceRenderHeight) / 2 - pieceMinY * miniCellSize);
+
+    shape.forEach(([x, y]) => {
+        drawBlock(ctx, offsetX + x * miniCellSize, offsetY + y * miniCellSize, piece.type, miniCellSize);
+    });
+    return canvas;
 }
 
 export function tetrominoTypeToIndex(type) {

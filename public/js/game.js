@@ -336,7 +336,6 @@ export function resetGame() {
     nextPieces = [];
     attackBarSegments.length = 0; // Clear attack bar
     // Game state is NOT reset here, it's handled by the caller
-    initializePieces(); // Re-initialize pieces for a new game
 }
 
 export function isBoardEmpty(b) {

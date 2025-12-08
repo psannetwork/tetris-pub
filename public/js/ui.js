@@ -33,7 +33,7 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
 
       for (const [userId, rank] of sortedRanks) {
         const isMe = userId === myId;
-        const displayName = isMe ? 'You' : `Player...${userId.substring(userId.length - 4)}`;
+        const displayName = isMe ? 'You' : `Player (${userId.substring(0, 4)}...)`;
         const userStats = statsMap[userId] || { score: 0, lines: 0 };
 
         const card = document.createElement('div');

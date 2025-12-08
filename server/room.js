@@ -84,11 +84,6 @@ function handlePlayerTimeout(io, playerId, roomId) {
 
     // If the player is still in the room, process the timeout
     if (room.players.has(playerId)) {
-        // Make sure the playerRoom mapping exists before handling timeout
-        if (!playerRoom.has(playerId)) {
-            playerRoom.set(playerId, roomId);
-        }
-
         // Create a temporary socket object to pass to handleGameOver
         const tempSocket = {
             id: playerId,
@@ -420,83 +415,26 @@ function handleGameOver(io, socket, reason, stats) {
             emitToSpectators(io, room.roomId, "GameOver");
         }
 
-        // For private rooms, do not reset isGameOver so players can start a new game in the same room
-        if (room.isPrivate) {
-            // Reset game state but keep the room open
-            room.isGameOver = false; // Don't keep it as game over so new games can start
-            room.isGameStarted = false;
-            room.isCountingDown = false;
-            if (room.countdownInterval) {
-                clearInterval(room.countdownInterval);
-                room.countdownInterval = null;
-            }
-            // Reset the initialPlayers for the next game
-            room.initialPlayers = new Set(room.players); // Use current player for next game
-            room.boards = {};
-            room.stats.clear();
-            // Clear player ranks but don't delete the map
-            if (playerRanks.has(roomId)) {
-                playerRanks.get(roomId).length = 0;
-            }
-
-            // Set a new timeout for the private room to remain available
-            if (room.timeoutId) {
-                clearTimeout(room.timeoutId);
-            }
-            const timeoutDuration = 2 * 60 * 60 * 1000; // 2 hours for private room
-            room.timeoutId = setTimeout(() => {
-                const roomToClean = rooms.get(roomId);
-                if (roomToClean && roomToClean.players.size === 0) {
-                    // Clean up activity check interval
-                    if (roomToClean.activityCheckInterval) {
-                        clearInterval(roomToClean.activityCheckInterval);
-                    }
-
-                    // Clean up countdown interval if it exists
-                    if (roomToClean.countdownInterval) {
-                        clearInterval(roomToClean.countdownInterval);
-                    }
-
-                    // Notify all players in the room about timeout
-                    for (const playerId of roomToClean.players) {
-                        if (bots.has(playerId)) {
-                            bots.get(playerId).emit('roomTimeout');
-                        } else if (ioRef) {
-                            const socket = ioRef.sockets.sockets.get(playerId);
-                            if (socket) {
-                                socket.emit('roomTimeout');
-                                socket.leave(roomId);
-                            }
+                    // For private rooms, do not reset isGameOver so players can start a new game in the same room
+                    if (room.isPrivate) {
+                        // Reset game state but keep the room open
+                        room.isGameOver = false; // Don't keep it as game over so new games can start
+                        room.isGameStarted = false;
+                        room.isCountingDown = false;
+                        if (room.countdownInterval) {
+                            clearInterval(room.countdownInterval);
+                            room.countdownInterval = null;
                         }
-                    }
-
-                    // Clean up spectators
-                    if (spectators.has(roomId) && ioRef) {
-                        for (const specId of spectators.get(roomId)) {
-                            const specSocket = ioRef.sockets.sockets.get(specId);
-                            if (specSocket) {
-                                specSocket.emit('roomTimeout');
-                                specSocket.leave(roomId);
-                            }
+                        // Reset the initialPlayers for the next game
+                        room.initialPlayers = new Set(room.players); // Use current player for next game
+                        room.boards = {};
+                        room.stats.clear();
+                        // Clear player ranks but don't delete the map
+                        if (playerRanks.has(roomId)) {
+                            playerRanks.get(roomId).length = 0;
                         }
-                        spectators.delete(roomId);
-                    }
-
-                    // Remove room from all tracking maps
-                    rooms.delete(roomId);
-                    for (const [playerId, roomPlayerId] of playerRoom.entries()) {
-                        if (roomPlayerId === roomId) {
-                            playerRoom.delete(playerId);
-                        }
-                    }
-                    if (playerRanks.has(roomId)) {
-                        playerRanks.delete(roomId);
-                    }
-                }
-            }, timeoutDuration);
-            return; // Don't clear timeout if private room is kept open
-        }
-    }
+                        return; // Don't clear timeout if private room is kept open
+                    }    }
 
     // Clear the activity check interval when the game is over
     if (room.activityCheckInterval) {

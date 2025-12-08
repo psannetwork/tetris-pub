@@ -235,34 +235,39 @@ function openModal(modal) {
 function closeModal(modal) {
     if (!modal) return; // Guard against null modal
     modal.style.display = 'none';
-    mainMenuButtons.style.display = 'block'; // Show main menu buttons when modal is closed
-    
-    // Re-evaluate hamburger button visibility based on room state
-    if (getCurrentRoomId()) { // If still in a room, hamburger might need to be shown
-        // Re-request room info to get the latest state including isPrivate
-        // This will trigger setRoomDisplayState and update hamburger visibility
-        socket.emit('requestRoomInfo'); 
-    } else { // Not in a room
-        if (menuButton) menuButton.style.display = 'none';
+
+    // Re-evaluate UI state after closing a modal
+    if (getCurrentRoomId()) {
+        // If we are in a room, request fresh room info to redraw the UI correctly.
+        // This will show the menu button again if needed.
+        socket.emit('requestRoomInfo');
+    } else {
+        // If not in a room, we are in the lobby. Show main menu.
+        mainMenuButtons.style.display = 'block';
+        roomInfoDisplay.style.display = 'none';
     }
-    // Clear inputs when closing
-    if (modal === createRoomModal) {
+
+    // Restore game board visibility if it was hidden (e.g., for spectator modal)
+    document.getElementById('main-game-board').style.display = 'block';
+    if (!isSpectating) {
+        document.getElementById('game-left-panel').style.display = 'block';
+        document.getElementById('game-right-panel').style.display = 'block';
+        document.getElementById('attack-bar').style.display = 'block';
+    }
+
+
+    // Clear inputs when closing specific modals
+    if (modal.id === 'create-room-modal' && createRoomPasswordInput) {
         createRoomPasswordInput.value = '';
-    } else if (modal === joinRoomModal) {
+    } else if (modal.id === 'join-room-modal' && joinRoomIdInput && joinRoomPasswordInput) {
         joinRoomIdInput.value = '';
         joinRoomPasswordInput.value = '';
     }
-    // NEW: Clear spectator rooms list
-    if (modal === spectateRoomsModal) {
+
+    // Clear spectator rooms list when closing that modal
+    if (modal.id === 'spectate-rooms-modal' && publicRoomsList && noPublicRoomsMessage) {
         publicRoomsList.innerHTML = '';
         noPublicRoomsMessage.style.display = 'none';
-    }
-    // NEW: Restore game-related elements if spectating and closing spectator menu
-    if (isSpectating && (modal === spectatorMenuModal || modal === spectateRoomsModal)) {
-        document.getElementById('game-left-panel').style.display = 'none'; // Should already be none
-        document.getElementById('game-right-panel').style.display = 'none'; // Should already be none
-        document.getElementById('attack-bar').style.display = 'none'; // Should already be none
-        document.getElementById('main-game-board').style.display = 'block'; // Restore main board
     }
 }
 
@@ -507,11 +512,6 @@ function init() {
             button.onclick = (event) => {
                 const modal = event.target.closest('.modal');
                 closeModal(modal);
-                if (modal === spectateRoomsModal) { // Clear list when closing
-                    if (publicRoomsList) {
-                        publicRoomsList.innerHTML = '';
-                    }
-                }
             };
         }
     });

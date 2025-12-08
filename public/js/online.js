@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { tetrominoTypeToIndex } from './draw.js';
 import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './layout.js';
 import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
-import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces } from './game.js';
+import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces, initializePieces } from './game.js';
 import { addAttackBar } from './garbage.js';
 import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect, miniboardEntryEffects } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
 import { drawUI } from './draw.js';
@@ -174,29 +174,55 @@ export function initializeSocket() {
 
     
 
-        socket.on("StartGame", () => {
+                socket.on("StartGame", () => {
 
-            currentCountdown = null;
+    
 
-            showCountdown(null);
+                    currentCountdown = null;
 
-            hideGameEndScreen(); // Hide end screen
+    
 
-            resetGame(); // Changed to resetGame()
+                    showCountdown(null);
 
-            setHoldPiece(null); // Moved from CountDown
+    
 
-            drawUI();           // Moved from CountDown
+                    hideGameEndScreen(); // Hide end screen
 
-            setGameState('PLAYING');
+    
 
-            // Close menu when game starts
+                    resetGame(); // Changed to resetGame()
 
-            if (closeMenuCallback) {
+    
 
-                closeMenuCallback();
+                    initializePieces(); // Initialize pieces for the player
 
-            }
+    
+
+                    setHoldPiece(null); // Moved from CountDown
+
+    
+
+                    drawUI();           // Moved from CountDown
+
+    
+
+                    setGameState('PLAYING');
+
+    
+
+                    // Close menu when game starts
+
+    
+
+                    if (closeMenuCallback) {
+
+    
+
+                        closeMenuCallback();
+
+    
+
+                    }
 
             miniboardSlots.forEach(slot => {
 
