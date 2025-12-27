@@ -1,10 +1,10 @@
 import { CONFIG } from './config.js';
-import * as Effects from './effects.js';
-import { sendAttack, socket, playerTargets } from './online.js'; // Import socket and playerTargets
+import * as Effects from '../engine/effects.js';
+import { sendAttack, socket, playerTargets } from '../network/online.js'; // Import socket and playerTargets
 import { attackBarSegments, getAttackBarSum, removeAttackBar, processFlashingGarbage } from './garbage.js';
-import { showGameEndScreen, showPerfectClearMessage } from './ui.js';
-import { triggerScreenShake, tetrominoTypeToIndex, drawBoard, getMainBoardOffset } from './draw.js';
-import { CELL_SIZE } from './layout.js';
+import { showGameEndScreen, showPerfectClearMessage } from '../ui/ui.js';
+import { triggerScreenShake, tetrominoTypeToIndex, drawBoard, getMainBoardOffset } from '../engine/draw.js';
+import { CELL_SIZE } from '../ui/layout.js';
 
 export const LOCK_DELAY = 500;
 export const MAX_FLOOR_KICKS = 15;

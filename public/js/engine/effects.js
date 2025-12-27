@@ -1,7 +1,7 @@
-import { CONFIG } from './config.js';
-import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from './layout.js';
+import { CONFIG } from '../core/config.js';
+import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from '../ui/layout.js';
 import { getMainBoardOffset, tetrominoTypeToIndex } from './draw.js';
-import { currentCountdown, getBoardCenterPosition } from './online.js';
+import { currentCountdown, getBoardCenterPosition } from '../network/online.js';
 
 export let effects = [];
 export let textEffects = [];
@@ -1017,6 +1017,7 @@ export function drawAllEffects() {
     if (!effectsCtx) return;
     effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height); // Clear the canvas
 
+    const now = performance.now();
     drawTextEffects();
     drawParticles();
     drawOrbs(); // This already draws countdown and timeout effect
@@ -1026,7 +1027,7 @@ export function drawAllEffects() {
     drawReceivedAttackEffects();
     drawPieceAppearanceEffects();
     drawTargetAttackFlashes();
-    // drawMiniboardEntryEffects is already called from main.js update loop
+    drawMiniboardEntryEffects(now);
 }
 
 export function drawTspinEffect() {

@@ -1,16 +1,16 @@
-import { setGameGetStatsCallback } from './game.js';
-import { setOnlineGetStatsCallback, setCloseMenuCallback, setRoomClosedCallback, initializeSocket, setUIMessageCallback } from './online.js';
-import { CONFIG } from './config.js';
+import { setGameGetStatsCallback } from './core/game.js';
+import { setOnlineGetStatsCallback, setCloseMenuCallback, setRoomClosedCallback, initializeSocket, setUIMessageCallback } from './network/online.js';
+import { CONFIG } from './core/config.js';
 import { 
     gameState, setGameState, resetGame,
     currentPiece, level, isValidPosition, lockPiece, movePiece, LOCK_DELAY,
     board, score, linesCleared
-} from './game.js';
-import { drawGame, drawUI, setupCanvases } from './draw.js';
-import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects, drawAllEffects, effectsCtx } from './effects.js';
-import { handleInput } from './input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap } from './online.js';
-import { showCountdown } from './ui.js';
+} from './core/game.js';
+import { drawGame, drawUI, setupCanvases } from './engine/draw.js';
+import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects, drawAllEffects, effectsCtx } from './engine/effects.js';
+import { handleInput } from './engine/input.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap } from './network/online.js';
+import { showCountdown } from './ui/ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
 let lobbyOverlay;
@@ -337,7 +337,14 @@ function update(now = performance.now()) {
         drawTargetLines(effectsCtx);
     }
 
-    // drawMiniboardEntryEffects(now); // REMOVED - now handled by drawAllEffects
+    // drawAllEffects handles text, particles, orbs, and miniboard entry effects
+    drawAllEffects(); 
+    
+    // Draw target lines separately as it depends on spectator state
+    if (effectsCtx && !isSpectating) {
+        drawTargetLines(effectsCtx);
+    }
+
     // drawAllMiniBoards() is handled by its own animation system when needed
     startAnimationIfNeeded(); // Start miniboard animation when needed
 

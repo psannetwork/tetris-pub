@@ -1,6 +1,6 @@
-import { CONFIG } from './config.js';
-import { currentPiece, movePiece, rotatePiece, hardDrop, hold, addGarbageLines, gameState } from './game.js';
-import { incrementKeyPresses } from './main.js'; // Import for APM
+import { CONFIG } from '../core/config.js';
+import { currentPiece, movePiece, rotatePiece, hardDrop, hold, addGarbageLines, gameState } from '../core/game.js';
+import { incrementKeyPresses } from '../main.js'; // Import for APM
 
 export let keys = {};
 

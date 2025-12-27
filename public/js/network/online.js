@@ -1,12 +1,12 @@
-import { CONFIG } from './config.js';
-import { tetrominoTypeToIndex } from './draw.js';
-import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from './layout.js';
-import { showCountdown, showGameEndScreen, hideGameEndScreen } from './ui.js';
-import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces, initializePieces } from './game.js';
-import { addAttackBar } from './garbage.js';
-import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect, miniboardEntryEffects } from './effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
-import { drawUI } from './draw.js';
-import { setRoomDisplayState } from './main.js'; // Import setRoomDisplayState
+import { CONFIG } from '../core/config.js';
+import { tetrominoTypeToIndex } from '../engine/draw.js';
+import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from '../ui/layout.js';
+import { showCountdown, showGameEndScreen, hideGameEndScreen } from '../ui/ui.js';
+import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces, initializePieces } from '../core/game.js';
+import { addAttackBar } from '../core/garbage.js';
+import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect, miniboardEntryEffects } from '../engine/effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
+import { drawUI } from '../engine/draw.js';
+import { setRoomDisplayState } from '../main.js'; // Import setRoomDisplayState
 
 export let socket;
 let shouldAutoMatchOnReconnect = true; // Flag to control auto-matching

@@ -3,7 +3,7 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const { initializeSocket, handleSocketConnection } = require("./server/socket.js");
+const { initializeSocket, handleSocketConnection } = require("./server/socket/index.js");
 const { rooms, trackSocketConnection } = require("./server/room.js");
 const EventEmitter = require('events');
 

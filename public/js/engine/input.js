@@ -1,7 +1,7 @@
-import { CONFIG } from './config.js';
-import { movePiece } from './game.js';
+import { CONFIG } from '../core/config.js';
+import { movePiece } from '../core/game.js';
 import { keys } from './keys.js';
-import { incrementKeyPresses } from './main.js';
+import { incrementKeyPresses } from '../main.js';
 
 const DAS = 160; // Delayed Auto Shift in ms
 const ARR = 30;  // Auto Repeat Rate in ms

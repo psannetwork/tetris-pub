@@ -1,15 +1,15 @@
 'use strict';
-import { CONFIG } from './config.js';
-import { board, currentPiece, holdPiece, nextPieces, isValidPosition } from './game.js';
-import { getStats } from './main.js';
+import { CONFIG } from '../core/config.js';
+import { board, currentPiece, holdPiece, nextPieces, isValidPosition } from '../core/game.js';
+import { getStats } from '../main.js';
 import * as Effects from './effects.js';
-import { drawTargetLines } from './online.js';
-import { attackBarSegments, MAX_ATTACK } from './garbage.js';
-import { isSpectating } from './online.js';
-import { CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT, SCORE_AREA_HEIGHT, setLayoutConstants } from './layout.js';
+import { drawTargetLines } from '../network/online.js';
+import { attackBarSegments, MAX_ATTACK } from '../core/garbage.js';
+import { isSpectating } from '../network/online.js';
+import { CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, HOLD_BOX_HEIGHT, NEXT_BOX_WIDTH, NEXT_BOX_HEIGHT, SCORE_AREA_HEIGHT, setLayoutConstants } from '../ui/layout.js';
 
 
-import { currentCountdown } from './online.js';
+import { currentCountdown } from '../network/online.js';
 
 // --- Canvas & Context Creation ---
 function createCanvas(containerId, width, height) {

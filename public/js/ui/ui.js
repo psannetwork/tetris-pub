@@ -1,6 +1,6 @@
-import { CONFIG } from './config.js';
-import { addTextEffect } from './effects.js';
-import { getMainBoardOffset } from './draw.js'; // Import getMainBoardOffset
+import { CONFIG } from '../core/config.js';
+import { addTextEffect } from '../engine/effects.js';
+import { getMainBoardOffset } from '../engine/draw.js'; // Import getMainBoardOffset
 
 // --- DOM Elements ---
 const gameEndOverlay = document.getElementById('game-end-overlay');
