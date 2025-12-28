@@ -1,20 +1,24 @@
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700&family=Press+Start+2P&display=swap');
 
 :root {
-  --background-color: #1a1a1a;
+  --background-color: #0a0a0c;
   --board-background-color: #000;
   --text-color: #fff;
   --font-family-body: 'Exo 2', sans-serif;
   --font-family-display: 'Press Start 2P', cursive;
-  --panel-background-color: rgba(34, 34, 34, 0.5);
-  --overlay-background-color: rgba(0, 0, 0, 0.85);
-  --win-color: #00ff00;
-  --lose-color: #ff0000;
-  --button-primary-bg: #007bff;
-  --button-primary-hover-bg: #0056b3;
+  --panel-background-color: rgba(20, 20, 25, 0.7);
+  --overlay-background-color: rgba(5, 5, 10, 0.9);
+  --win-color: #00ffcc;
+  --lose-color: #ff0055;
+  --button-primary-bg: #00f3ff;
+  --button-primary-hover-bg: #00a2ff;
   --button-primary-text: #ffffff;
-  --button-focus-glow: rgba(0, 123, 255, 0.5);
-  --attack-color: #ff0000;
+  --button-focus-glow: rgba(0, 243, 255, 0.5);
+  --attack-color: #ff0055;
+  --neon-cyan: #00f3ff;
+  --neon-magenta: #ff00ff;
+  --neon-purple: #7d00ff;
+  --neon-yellow: #fff200;
 }
 
 html, body {
@@ -192,20 +196,41 @@ canvas {
   width: 100%;
   height: 100%;
   background-color: var(--overlay-background-color);
-  backdrop-filter: blur(8px); /* Modern blur effect */
+  backdrop-filter: blur(4px); /* ぼかしを軽減 */
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  z-index: 300; /* Increased z-index */
+  z-index: 300;
   opacity: 1;
   transition: opacity 0.5s ease-in-out;
   text-align: center;
-  padding: 0; /* Removed padding from here, moved to .overlay-content */
   box-sizing: border-box;
+  overflow: hidden;
 }
 
+#lobby-overlay::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  /* 走査線のみ残し、グリッドは簡略化 */
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+              linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+  z-index: 2;
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
+/* 重い点滅アニメーション (flicker-bg) を削除 */
+
 .overlay-content {
+  position: relative;
+  z-index: 3;
   max-height: 100%;
   overflow-y: auto;
   display: flex;
@@ -214,7 +239,7 @@ canvas {
   align-items: center;
   width: 100%;
   box-sizing: border-box;
-  padding: 1rem; /* Added padding here */
+  padding: 2rem;
 }
 
 #lobby-overlay.hidden, #game-end-overlay.hidden {
@@ -222,36 +247,81 @@ canvas {
     pointer-events: none;
 }
 
-
-.lobby-title, #game-end-title {
+.lobby-title {
   font-family: var(--font-family-display);
-  font-size: 1.8rem; /* Adjusted for pixel font */
+  font-size: 3.5rem;
   font-weight: bold;
-  margin-bottom: 2vh;
-  text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  margin-bottom: 4vh;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 5px;
+  text-shadow: 
+    0 0 10px var(--neon-cyan),
+    0 0 20px var(--neon-cyan);
+  animation: neon-pulse 2s infinite alternate, glitch 8s infinite;
+  position: relative;
+  transform: translateZ(0); /* GPUアクセラレーションを有効化 */
+}
+
+@keyframes glitch {
+  0%, 90%, 100% {
+    transform: translate(0);
+    text-shadow: 0 0 10px var(--neon-cyan);
+  }
+  92% {
+    transform: translate(-2px, 1px);
+    text-shadow: 1px 0 var(--neon-magenta), -1px 0 var(--neon-cyan);
+  }
+  94% {
+    transform: translate(2px, -1px);
+    text-shadow: -1px 0 var(--neon-magenta), 1px 0 var(--neon-cyan);
+  }
 }
 
 .menu-buttons button, .lobby-button {
-  background: linear-gradient(135deg, var(--button-primary-bg), var(--button-primary-hover-bg));
-  color: var(--button-primary-text);
-  border: none;
-  padding: 16px 32px;
-  margin: 12px;
-  font-size: 1.1rem;
+  background: transparent;
+  color: var(--neon-cyan);
+  border: 2px solid var(--neon-cyan);
+  padding: 18px 40px;
+  margin: 15px;
+  font-size: 1rem;
   font-family: var(--font-family-display);
   cursor: pointer;
-  border-radius: 50px; /* Fully rounded */
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border-radius: 4px;
+  transition: all 0.3s ease;
   outline: none;
-  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
 }
 
 .menu-buttons button:hover, .lobby-button:hover {
-  background: linear-gradient(135deg, var(--button-primary-hover-bg), var(--button-primary-bg));
-  box-shadow: 0 6px 20px rgba(0, 123, 255, 0.6);
-  transform: translateY(-3px);
+  background: var(--neon-cyan);
+  color: #000;
+  box-shadow: 0 0 30px var(--neon-cyan);
+  transform: scale(1.05);
+}
+
+.menu-buttons button::before, .lobby-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  transition: 0.5s;
+}
+
+.menu-buttons button:hover::before, .lobby-button:hover::before {
+  left: 100%;
 }
 
 .menu-buttons button:active, .lobby-button:active {
@@ -392,75 +462,106 @@ canvas {
 
 /* New: Modal styles */
 .modal {
-  display: none; /* Hidden by default */
-  position: fixed; /* Stay in place */
-  z-index: 400; /* Sit on top of everything (lobby overlay is 300) */
+  display: none;
+  position: fixed;
+  z-index: 400;
   left: 0;
   top: 0;
-  width: 100%; /* Full width */
-  height: 100%; /* Full height */
-  overflow: auto; /* Enable scroll if needed */
-  background-color: rgba(0,0,0,0.8); /* Black w/ opacity */
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.9);
+  backdrop-filter: blur(5px);
   padding-top: 60px;
 }
 
 .modal-content {
-  background-color: #1c1c1c;
-  margin: 5% auto; /* 5% from the top and centered */
-  padding: 30px;
-  width: 80%; /* Could be more responsive */
+  background-color: #0a0a0c;
+  margin: 5% auto;
+  padding: 40px;
+  width: 90%;
   max-width: 500px;
-  border-radius: 12px;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 25px;
+  box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+  border: 1px solid var(--neon-cyan);
+  position: relative;
+}
+
+.modal-content::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 1px solid var(--neon-cyan);
+  pointer-events: none;
+  opacity: 0.5;
 }
 
 .modal-content h2 {
-  color: var(--text-color);
-  margin-bottom: 15px;
+  color: var(--neon-cyan);
+  font-family: var(--font-family-display);
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+  text-shadow: 0 0 10px var(--neon-cyan);
 }
 
 .modal-content input[type="text"],
 .modal-content input[type="password"] {
-  width: calc(100% - 40px); /* Full width minus padding */
-  padding: 12px 20px;
+  width: 100%;
+  padding: 15px;
   margin: 8px 0;
   display: inline-block;
-  border: 1px solid #ccc;
+  border: 1px solid var(--neon-cyan);
   border-radius: 0;
   box-sizing: border-box;
-  background-color: #333;
-  color: var(--text-color);
+  background-color: rgba(0, 0, 0, 0.5);
+  color: #fff;
   font-size: 1rem;
   font-family: var(--font-family-body);
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.modal-content input:focus {
+  box-shadow: 0 0 15px var(--neon-cyan);
+  background-color: rgba(0, 243, 255, 0.1);
 }
 
 .modal-content button {
-  background-color: var(--button-primary-bg);
-  color: var(--button-primary-text);
-  border: none;
-  padding: 10px 20px;
-  margin: 5px;
-  font-size: 1rem;
+  background: transparent;
+  color: var(--neon-cyan);
+  border: 2px solid var(--neon-cyan);
+  padding: 12px 24px;
+  margin: 10px;
+  font-size: 0.9rem;
+  font-family: var(--font-family-display);
   cursor: pointer;
   border-radius: 0;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
 }
 
 .modal-content button:hover {
-  background-color: var(--button-primary-hover-bg);
+  background-color: var(--neon-cyan);
+  color: #000;
+  box-shadow: 0 0 20px var(--neon-cyan);
 }
 
 .modal-content .close-modal {
-  background-color: #e74c3c;
+  border-color: var(--neon-magenta);
+  color: var(--neon-magenta);
 }
 
 .modal-content .close-modal:hover {
-  background-color: #c0392b;
+  background-color: var(--neon-magenta);
+  color: #000;
+  box-shadow: 0 0 20px var(--neon-magenta);
 }
 
 #main-menu-buttons {
@@ -471,16 +572,20 @@ canvas {
 }
 
 #room-info-display {
-    background-color: var(--panel-background-color);
-    padding: 15px 25px;
+    background-color: rgba(0, 0, 0, 0.6);
+    padding: 20px 40px;
     border-radius: 0;
     margin-top: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
+    border: 1px solid var(--neon-purple);
+    box-shadow: 0 0 15px rgba(125, 0, 255, 0.3);
 }
 
 #room-info-display p {
-    margin: 5px 0;
-    font-size: 1rem;
+    margin: 10px 0;
+    font-size: 1.1rem;
+    color: var(--neon-purple);
+    font-family: var(--font-family-display);
+    text-shadow: 0 0 5px var(--neon-purple);
 }
 
 #room-info-display button {
@@ -499,17 +604,17 @@ canvas {
     width: 100%;
     max-height: 200px;
     overflow-y: auto;
-    border: 1px solid #444;
-    border-radius: 5px;
-    background-color: #222;
+    border: 1px solid var(--neon-cyan);
+    background-color: rgba(0, 0, 0, 0.8);
 }
 
 #member-list li {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 15px;
-    border-bottom: 1px solid #333;
+    padding: 12px 15px;
+    border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+    color: #fff;
 }
 
 #member-list li:last-child {
