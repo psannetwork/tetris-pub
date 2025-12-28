@@ -33,6 +33,10 @@ function registerGameHandlers(io, socket) {
         const room = rooms.get(roomId);
         if (!room || room.isGameOver) return;
 
+        // Ignore updates from players who are already out
+        const ranks = playerRanks.get(roomId) || [];
+        if (ranks.includes(socket.id)) return;
+
         playerBoardLastUpdated.set(socket.id, Date.now());
         updatePlayerActivity(socket.id);
 
@@ -90,6 +94,10 @@ function registerGameHandlers(io, socket) {
         const room = rooms.get(roomId);
         if (!room || room.isGameOver || room.players.size <= 1) return;
 
+        // Ignore input from players who are already out
+        const ranks = playerRanks.get(roomId) || [];
+        if (ranks.includes(socket.id)) return;
+
         playerBoardLastUpdated.set(socket.id, Date.now());
         updatePlayerActivity(socket.id);
 
@@ -98,7 +106,6 @@ function registerGameHandlers(io, socket) {
             return;
         }
 
-        const ranks = playerRanks.get(roomId) || [];
         let recipient = targetId || room.playerTargets.get(socket.id);
         const members = [...room.players];
 

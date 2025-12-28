@@ -387,9 +387,6 @@ function handleGameOver(io, socket, reason, stats) {
         emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
     }
 
-    // Ensure the player is removed from active players map for targeting purposes
-    playerRoom.delete(socket.id);
-
     // Calculate remaining active players
     const activePlayersCount = room.initialPlayers.size - ranks.length;
 
