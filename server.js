@@ -8,8 +8,8 @@ const { rooms, trackSocketConnection } = require("./server/room.js");
 const EventEmitter = require('events');
 
 // --- Bot Configuration ---
-const ENABLE_BOTS = true;
-const BOT_COUNT = 50;
+const ENABLE_BOTS = false;
+const BOT_COUNT = 30;
 // -------------------------
 
 const PORT = process.env.PORT || 6000;

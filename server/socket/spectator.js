@@ -56,6 +56,10 @@ function registerSpectatorHandlers(io, socket) {
             isPrivate: room.isPrivate,
             hostId: room.hostId
         });
+
+        // Notify all players in the room that a new spectator has joined
+        // This triggers players to send a full board update
+        emitToRoom(io, room, "NewSpectator");
     });
 }
 

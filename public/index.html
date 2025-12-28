@@ -21,7 +21,12 @@
       <div id="game-right-panel">
         <div id="next-box"></div>
         <div id="score-display"></div>
-        <button id="menu-button" class="lobby-button" style="display: none;">メニュー</button>
+        <!-- Hamburger Menu Button -->
+        <button id="menu-button" class="hamburger-menu">
+            <span></span>
+            <span></span>
+            <span></span>
+        </button>
       </div>
     </div>
     <div id="right-miniboards-group"></div>
@@ -72,8 +77,9 @@
       <h2>ルーム管理</h2>
       <p>部屋ID: <span id="admin-room-id"></span></p>
       <button id="admin-start-game-button" class="lobby-button">ゲーム開始</button>
-      <h3>現在のメンバー</h3>
+      <h3 id="member-list-title">現在のメンバー</h3>
       <ul id="member-list"></ul>
+      <button id="admin-back-to-lobby-button" class="lobby-button" style="background: #e74c3c;">ロビーに戻る</button>
       <button class="close-modal">閉じる</button>
     </div>
   </div>

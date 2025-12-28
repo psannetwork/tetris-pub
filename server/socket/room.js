@@ -75,6 +75,11 @@ function registerRoomHandlers(io, socket) {
     });
 
     socket.on("createPrivateRoom", async ({ plainPassword }) => {
+        // Validate password format
+        if (plainPassword && (typeof plainPassword !== 'string' || plainPassword.length > 50)) {
+            return socket.emit("uiMessage", { type: 'error', message: "パスワードが無効です（50文字以内）。" });
+        }
+
         const oldRoomId = playerRoom.get(socket.id);
         if (oldRoomId && rooms.has(oldRoomId)) {
             const oldRoom = rooms.get(oldRoomId);
@@ -118,6 +123,14 @@ function registerRoomHandlers(io, socket) {
     });
 
     socket.on("joinPrivateRoom", async ({ roomId, plainPassword }) => {
+        // Strict Input Validation
+        if (!roomId || typeof roomId !== 'string' || roomId.length > 10) { // Adjust max length as per roomId generation
+            return socket.emit("uiMessage", { type: 'error', message: "無効なルームID形式です。" });
+        }
+        if (plainPassword && (typeof plainPassword !== 'string' || plainPassword.length > 50)) {
+             return socket.emit("uiMessage", { type: 'error', message: "パスワードが無効です。" });
+        }
+
         const oldRoomId = playerRoom.get(socket.id);
         if (oldRoomId && rooms.has(oldRoomId)) {
             const oldRoom = rooms.get(oldRoomId);
@@ -173,6 +186,7 @@ function registerRoomHandlers(io, socket) {
     });
 
     socket.on("startGame", () => {
+        console.log(`🎮 startGame event received from ${socket.id}`);
         const roomId = playerRoom.get(socket.id);
         if (!roomId || !rooms.has(roomId)) {
             return socket.emit("uiMessage", { type: 'error', message: "ルームに参加していません。" });
@@ -182,18 +196,20 @@ function registerRoomHandlers(io, socket) {
         if (room.hostId !== socket.id) {
             return socket.emit("uiMessage", { type: 'error', message: "ルームのホストのみがゲームを開始できます。" });
         }
-        if (room.isGameStarted || room.isCountingDown) {
-            return socket.emit("uiMessage", { type: 'error', message: "ゲームは既に開始されているか、カウントダウン中です。" });
-        }
-        if (room.players.size < MIN_PLAYERS_TO_START) {
-            return socket.emit("uiMessage", { type: 'error', message: `ゲーム開始には最低 ${MIN_PLAYERS_TO_START} 人のプレイヤーが必要です。` });
+        if (room.isGameStarted) {
+            return socket.emit("uiMessage", { type: 'error', message: "ゲームは既に開始されています。" });
         }
 
+        // Allow private rooms to start with 1 player for testing, public matches still need MIN_PLAYERS_TO_START
+        const minPlayers = room.isPrivate ? 1 : MIN_PLAYERS_TO_START;
+        if (room.players.size < minPlayers) {
+            return socket.emit("uiMessage", { type: 'error', message: `ゲーム開始には最低 ${minPlayers} 人のプレイヤーが必要です。` });
+        }
+
+        console.log(`🚀 Host ${socket.id} is starting game in room ${room.roomId}`);
         clearInterval(room.countdownInterval);
         room.isCountingDown = false;
-        room.countdownPhase = 2;
-        room.countdownCount = 5;
-        startCountdown(io, room);
+        startCountdown(io, room, 2, 5);
         socket.emit('uiMessage', { type: 'info', message: "ゲームを開始します！" });
     });
 

@@ -46,9 +46,20 @@ function registerConnectionHandlers(io, socket) {
                 playerRoom.delete(socket.id);
                 delete room.boards[socket.id];
                 room.players.delete(socket.id);
-                room.initialPlayers.delete(socket.id);
+                // Only remove from initialPlayers if the game hasn't started yet
+                // Once started, we need to keep the initial count for ranking calculations
+                if (!room.isGameStarted) {
+                    room.initialPlayers.delete(socket.id);
+                }
                 socket.leave(roomId);
 
+                // Notify remaining players about the updated member list and targets
+                emitToRoom(io, room, "roomInfo", {
+                    roomId: room.roomId,
+                    members: [...room.players],
+                    isPrivate: room.isPrivate,
+                    hostId: room.hostId
+                });
                 emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
 
                 if (room.hostId === socket.id && room.isPrivate) {

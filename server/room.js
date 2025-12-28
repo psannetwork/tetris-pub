@@ -36,8 +36,8 @@ function generateUniqueRoomId() {
 let ioRef = null;
 
 // Timeout duration in milliseconds
-const PLAYER_TIMEOUT_MS = 40000; // 40 seconds
-const BOARD_UPDATE_TIMEOUT_MS = 10000; // 10 seconds
+const PLAYER_TIMEOUT_MS = 60000; // 60 seconds
+const BOARD_UPDATE_TIMEOUT_MS = 60000; // 60 seconds
 
 function setIoReference(io) {
     ioRef = io;
@@ -61,16 +61,21 @@ function checkPlayerTimeouts(roomId) {
         if (room.isGameStarted && !room.isGameOver) {
             // --- In-Game Timeout Logic (Board Updates) ---
             const lastBoardUpdate = playerBoardLastUpdated.get(playerId);
+            const lastActive = playerLastActive.get(playerId);
 
+            // Only timeout if NO board update for a long time AND NO heartbeat/activity
+            // This prevents active players (who might be thinking or just moving slowly) from being kicked
             if (lastBoardUpdate && (now - lastBoardUpdate > BOARD_UPDATE_TIMEOUT_MS)) {
-                console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no board update for 15s)`);
-                handlePlayerTimeout(ioRef, playerId, roomId);
+                if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
+                    console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no board update AND no activity)`);
+                    handlePlayerTimeout(ioRef, playerId, roomId);
+                }
             }
         } else {
             // --- Lobby Timeout Logic (General Activity) ---
             const lastActive = playerLastActive.get(playerId);
             if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
-                console.log(`⏰ Player ${playerId} timed out in lobby of room ${roomId} (no activity for 40s)`);
+                console.log(`⏰ Player ${playerId} timed out in lobby of room ${roomId} (no activity for 60s)`);
                 kickPlayer(ioRef, roomId, playerId, "活動がないため部屋から退出させられました。");
             }
         }
@@ -261,13 +266,15 @@ function emitToRoom(io, room, event, data) { // `io` parameter added
     }
 }
 
-function startCountdown(io, room) {
+function startCountdown(io, room, initialPhase = 1, initialCount = COUNTDOWN_START) {
     if (!room || room.isCountingDown || room.isGameStarted) return;
     room.isCountingDown = true;
-    room.countdownPhase = 1; // Ensure it starts at phase 1
-    room.countdownCount = COUNTDOWN_START; // 10 seconds for matching
+    
+    // Set initial values for this countdown cycle
+    room.countdownPhase = initialPhase;
+    room.countdownCount = initialCount;
 
-    console.log(`⏳ Room ${room.roomId} countdown started (Phase 1: Matching).`);
+    console.log(`⏳ Room ${room.roomId} countdown started (Phase ${room.countdownPhase}).`);
     room.countdownInterval = setInterval(() => {
         if (!rooms.has(room.roomId)) {
             clearInterval(room.countdownInterval);
@@ -309,9 +316,8 @@ function startCountdown(io, room) {
             // Phase 2: Game Start Countdown
             emitToRoom(io, room, "CountDown", room.countdownCount);
             console.log(`⏳ Room ${room.roomId} countdown (Phase 2): ${room.countdownCount}`);
-            room.countdownCount--;
 
-            if (room.countdownCount < 0) {
+            if (room.countdownCount <= 0) {
                 clearInterval(room.countdownInterval);
                 room.isCountingDown = false;
                 room.isGameStarted = true;
@@ -331,6 +337,7 @@ function startCountdown(io, room) {
                     console.log(`⏱️ Timeout cleared for room ${room.roomId} since the game has started.`);
                 }
             }
+            room.countdownCount--;
         }
     }, 1000);
 }
@@ -358,8 +365,8 @@ function handleGameOver(io, socket, reason, stats) {
     // Only add to ranks if not a connection timeout and player is not already ranked
     if (!ranks.includes(socket.id)) {
         // Calculate and assign final rank when player is eliminated
-        // The rank is the number of players who have already been eliminated + 1
-        const finalRank = ranks.length + 1;
+        // The rank is based on the total number of players minus those who have already been eliminated
+        const finalRank = room.initialPlayers.size - ranks.length;
         ranks.push(socket.id);
 
         // Create a ranking map with the specific player's final rank
@@ -424,6 +431,11 @@ function handleGameOver(io, socket, reason, stats) {
 
         for (const playerId of room.initialPlayers) {
             if (playerId !== winnerId) {
+                // Skip sending GameOver to the player who timed out, as they are already sent back to lobby
+                if (reason === "connection timeout" && playerId === socket.id) {
+                    continue;
+                }
+
                 if (bots.has(playerId)) {
                     bots.get(playerId).emit("GameOver");
                 } else if (io) {
@@ -478,7 +490,10 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
 
     // Remove player from room sets
     room.players.delete(playerIdToKick);
-    room.initialPlayers.delete(playerIdToKick); // Also remove from initial players
+    // Only remove from initialPlayers if the game hasn't started yet
+    if (!room.isGameStarted) {
+        room.initialPlayers.delete(playerIdToKick);
+    }
     playerRoom.delete(playerIdToKick);
     delete room.boards[playerIdToKick];
     // Clear player's activity tracking

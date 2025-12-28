@@ -6,7 +6,7 @@ import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setH
 import { addAttackBar } from '../core/garbage.js';
 import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect, miniboardEntryEffects } from '../engine/effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
 import { drawUI } from '../engine/draw.js';
-import { setRoomDisplayState } from '../main.js'; // Import setRoomDisplayState
+import { setRoomDisplayState, hideMessage } from '../main.js'; // Import hideMessage
 
 export let socket;
 let shouldAutoMatchOnReconnect = true; // Flag to control auto-matching
@@ -24,6 +24,12 @@ export function setSpectating(value) { // NEW: Setter for isSpectating
 
 export function setAutoMatchOnReconnect(value) {
     shouldAutoMatchOnReconnect = value;
+}
+
+export function resetOnlineState() {
+    currentCountdown = null;
+    lastSentBoard = null;
+    forceFullBoard = false;
 }
 
 export function initializeSocket() {
@@ -239,6 +245,7 @@ export function initializeSocket() {
             finalStatsMap = {}; // Reset for new game
 
             lastSentBoard = null; // Ensure board history is cleared for the new game
+            requestMiniboardRedraw();
 
         });
 
@@ -530,6 +537,7 @@ export function initializeSocket() {
             currentCountdown = count;
 
             showCountdown(count);
+            requestMiniboardRedraw();
 
         });
 
@@ -979,25 +987,175 @@ export function initializeSocket() {
 
             
 
-                    // NEW: spectateRoomInfo handler
-
-                    socket.on('spectateRoomInfo', (data) => {
-
-                        if (spectateRoomInfoCallback) {
-
-                            spectateRoomInfoCallback(data);
-
-                        } else {
-
-                            console.warn("spectateRoomInfo received but no callback registered:", data);
-
-                        }
-
-                    });
+                                // NEW: spectateRoomInfo handler
 
             
 
-                    socket.connect(); // Connect the socket after all event handlers are registered
+                                                        socket.on('spectateRoomInfo', (data) => {
+
+            
+
+                                                            if (spectateRoomInfoCallback) {
+
+            
+
+                                                                spectateRoomInfoCallback(data);
+
+            
+
+                                                            } else {
+
+            
+
+                                                                console.warn("spectateRoomInfo received but no callback registered:", data);
+
+            
+
+                                                            }
+
+            
+
+                                                        });
+
+            
+
+                                            
+
+            
+
+                                                        // NEW: Handle request for full board update when a new spectator joins
+
+            
+
+                                                        socket.on('NewSpectator', () => {
+
+            
+
+                                                            forceFullBoard = true;
+
+            
+
+                                                        });
+
+            
+
+                                            
+
+            
+
+                                                                    // NEW: matching handler for timeout/lobby return
+
+            
+
+                                            
+
+            
+
+                                                                                // NEW: matching handler for timeout/lobby return
+
+            
+
+                                            
+
+            
+
+                                                                                socket.on('matching', () => {
+
+            
+
+                                            
+
+            
+
+                                                                                    console.log("サーバーからの指示でロビーに戻ります");
+
+            
+
+                                            
+
+            
+
+                                                                                    hideMessage(); // Clear any persistent messages
+
+            
+
+                                            
+
+            
+
+                                                                                    resetOnlineState(); // NEW: Reset online state (countdown, etc.)
+
+            
+
+                                            
+
+            
+
+                                                                                    setGameState('LOBBY');
+
+            
+
+                                            
+
+            
+
+                                                                                    resetGame();
+
+            
+
+                                            
+
+            
+
+                                                                                    setRoomDisplayState(false); // Go back to main lobby view
+
+            
+
+                                            
+
+            
+
+                                                                                    hideGameEndScreen();
+
+            
+
+                                            
+
+            
+
+                                                                                    hideConnectionError();
+
+            
+
+                                            
+
+            
+
+                                                                                    // Ensure spectating is turned off
+
+            
+
+                                            
+
+            
+
+                                                                                    setSpectating(false);
+
+            
+
+                                            
+
+            
+
+                                                                                });
+
+            
+
+                        
+
+            
+
+                                socket.connect(); // Connect the socket after all event handlers are registered
 
                 }
 
@@ -1147,6 +1305,7 @@ function addOpponent(userId) {
         if (pos) {
             startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
         }
+        requestMiniboardRedraw();
     }
 }
 
@@ -1206,7 +1365,7 @@ function updateSlotBoard(slot, boardData, diffData) {
 }
 
 function drawMiniBoard(slot) {
-    const { ctx, canvas, boardState, isGameOver, userId } = slot; // Removed 'effect' from destructuring
+    const { ctx, canvas, boardState, isGameOver, userId, isNew } = slot; 
     if (!slot) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1283,6 +1442,14 @@ function drawMiniBoard(slot) {
             }
         }
     }
+
+    // If it's a new miniboard, or if we are not playing (waiting/countdown) and not spectating, make it darker
+    // This ensures existing players' boards are also dark before the game starts
+    // Exclude GAME_OVER state to avoid double darkening with the overlay
+    if (isNew || (!isSpectating && gameState !== 'PLAYING' && gameState !== 'GAME_OVER')) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 }
 
 let animationFrameId = null;
@@ -1293,6 +1460,19 @@ export function drawAllMiniBoards() {
     }
 }
 
+let redrawRequested = false;
+
+export function requestMiniboardRedraw() {
+    redrawRequested = true;
+}
+
+export function processMiniboardRedrawRequest() {
+    if (redrawRequested) {
+        drawAllMiniBoards();
+        redrawRequested = false;
+    }
+}
+
 function startAnimationIfNeeded() {
     // This function is now obsolete.
 }
@@ -1300,6 +1480,11 @@ function startAnimationIfNeeded() {
 export let finalRanking = {}; // To store all player ranks
 export let finalStatsMap = {}; // To store all player stats
 let currentRoomId = null; // To store the current room ID
+
+export function resetRankingData() {
+    finalRanking = {};
+    finalStatsMap = {};
+}
 
 export function setCurrentRoomId(id) {
     currentRoomId = id;
@@ -1437,6 +1622,8 @@ export function startMatching() {
     miniboardSlots.forEach(slot => {
         slot.userId = null;
         slot.dirty = true;
+        slot.isGameOver = false;
+        slot.boardState.forEach(row => row.fill(0));
     }); // Clear miniboards
     socket.emit("matching");
 }
@@ -1456,6 +1643,7 @@ function getBoardWithCurrentPiece(board, currentPiece) {
     }
     return boardCopy;
 }
+
 function getBoardDiff(oldBoard, newBoard) {
     if (!oldBoard) return null;
     const diff = [];
@@ -1468,16 +1656,25 @@ function getBoardDiff(oldBoard, newBoard) {
     }
     return diff.length > 0 ? diff : null;
 }
+
+let forceFullBoard = false; // Flag to force full board update
+
 export function sendBoardStatus(board, currentPiece) {
     if (!socket.connected) return;
     const currentBoardState = getBoardWithCurrentPiece(board, currentPiece);
-    const diff = getBoardDiff(lastSentBoard, currentBoardState);
-    if (diff) {
-        socket.emit("BoardStatus", { diff });
-        lastSentBoard = currentBoardState;
-    } else if (!lastSentBoard) {
+    
+    // Check if we need to force a full update or if it's the first update
+    if (forceFullBoard || !lastSentBoard) {
         socket.emit("BoardStatus", { board: currentBoardState });
         lastSentBoard = currentBoardState;
+        forceFullBoard = false; // Reset flag
+    } else {
+        // Try to send diff
+        const diff = getBoardDiff(lastSentBoard, currentBoardState);
+        if (diff) {
+            socket.emit("BoardStatus", { diff });
+            lastSentBoard = currentBoardState;
+        }
     }
 }
 

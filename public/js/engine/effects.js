@@ -1,7 +1,8 @@
 import { CONFIG } from '../core/config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from '../ui/layout.js';
 import { getMainBoardOffset, tetrominoTypeToIndex } from './draw.js';
-import { currentCountdown, getBoardCenterPosition } from '../network/online.js';
+import { currentCountdown, getBoardCenterPosition, miniboardSlots, requestMiniboardRedraw } from '../network/online.js';
+import { gameState } from '../core/game.js';
 
 export let effects = [];
 export let textEffects = [];
@@ -421,6 +422,12 @@ class MiniboardEntryEffect {
 
         if (progress >= 1) {
             this.active = false;
+            // Set isNew to false for the miniboard slot when effect finishes
+            const slot = miniboardSlots.find(s => s.userId === this.userId);
+            if (slot) {
+                slot.isNew = false;
+                requestMiniboardRedraw();
+            }
             return;
         }
 
@@ -542,8 +549,8 @@ function drawCountdown(ctx, count) {
 }
 
 export function drawOrbs() {
-    // Draw countdown if active
-    if (currentCountdown !== null && currentCountdown !== '' && currentCountdown !== 0) {
+    // Draw countdown if active AND not in lobby
+    if (gameState !== 'LOBBY' && currentCountdown !== null && currentCountdown !== '' && currentCountdown !== 0) {
         drawCountdown(effectsCtx, currentCountdown);
     }
 

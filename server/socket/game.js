@@ -22,6 +22,7 @@ function registerGameHandlers(io, socket) {
         const room = rooms.get(roomId);
         if (!room || room.isGameOver) return;
 
+        playerBoardLastUpdated.set(socket.id, Date.now());
         updatePlayerActivity(socket.id);
         room.playerTargets.set(socket.id, targetId);
     });
@@ -89,6 +90,7 @@ function registerGameHandlers(io, socket) {
         const room = rooms.get(roomId);
         if (!room || room.isGameOver || room.players.size <= 1) return;
 
+        playerBoardLastUpdated.set(socket.id, Date.now());
         updatePlayerActivity(socket.id);
 
         if (typeof lines !== 'number' || lines <= 0 || lines > MAX_GARBAGE_LINES_SINGLE_ATTACK) {
