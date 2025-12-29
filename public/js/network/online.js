@@ -141,6 +141,10 @@ export function initializeSocket() {
                     drawUI();           
                     setGameState('PLAYING');
 
+                    // Record total players at start
+                    const activeOpponentsCount = miniboardSlots.filter(s => s.userId).length;
+                    totalPlayersAtStart = activeOpponentsCount + 1;
+
                     if (closeMenuCallback) {
                         closeMenuCallback();
                     }
@@ -1271,9 +1275,10 @@ function startAnimationIfNeeded() {
     // This function is now obsolete.
 }
 
-export let finalRanking = {}; // To store all player ranks
-export let finalStatsMap = {}; // To store all player stats
-let currentRoomId = null; // To store the current room ID
+export let finalRanking = {}; 
+export let finalStatsMap = {}; 
+export let totalPlayersAtStart = 0; // New: Track starting player count
+let currentRoomId = null; 
 
 export function resetRankingData() {
     finalRanking = {};

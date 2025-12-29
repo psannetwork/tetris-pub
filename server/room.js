@@ -63,13 +63,15 @@ function checkPlayerTimeouts(roomId) {
             const lastBoardUpdate = playerBoardLastUpdated.get(playerId);
             const lastActive = playerLastActive.get(playerId);
 
-            // Only timeout if NO board update for a long time AND NO heartbeat/activity
-            // This prevents active players (who might be thinking or just moving slowly) from being kicked
-            if (lastBoardUpdate && (now - lastBoardUpdate > BOARD_UPDATE_TIMEOUT_MS)) {
-                if (lastActive && (now - lastActive > PLAYER_TIMEOUT_MS)) {
-                    console.log(`⏰ Player ${playerId} timed out in room ${roomId} (no board update AND no activity)`);
-                    handlePlayerTimeout(ioRef, playerId, roomId);
-                }
+            // Trigger timeout if EITHER board update OR activity is missing for 120s
+            // This handles both AFK (not playing) and Disconnected players
+            const isBoardStale = lastBoardUpdate && (now - lastBoardUpdate > BOARD_UPDATE_TIMEOUT_MS);
+            const isActivityStale = lastActive && (now - lastActive > PLAYER_TIMEOUT_MS);
+
+            if (isBoardStale || isActivityStale) {
+                const reason = isBoardStale ? "無操作のためタイムアウト" : "通信切断によるタイムアウト";
+                console.log(`⏰ Player ${playerId} timed out in room ${roomId} (${reason})`);
+                handlePlayerTimeout(ioRef, playerId, roomId);
             }
         } else {
             // --- Lobby Timeout Logic (General Activity) ---

@@ -9,7 +9,7 @@ import {
 import { drawGame, drawUI, setupCanvases } from './engine/draw.js';
 import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects, drawAllEffects, effectsCtx } from './engine/effects.js';
 import { handleInput } from './engine/input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState } from './network/online.js';
+import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState, totalPlayersAtStart } from './network/online.js';
 import { showCountdown } from './ui/ui.js';
 
 // --- DOM Elements (Declared as let, assigned in init) ---
@@ -311,53 +311,77 @@ function closeModal(modal) {
 }
 
 
+// --- Audio Management ---
+let bgm = null;
+
+function initBGM() {
+    if (!bgm) {
+        bgm = new Audio('https://ia800504.us.archive.org/33/items/TetrisThemeMusic/Tetris.mp3');
+        bgm.loop = true;
+        bgm.volume = 0.2;
+    }
+}
+
+function startBGM() {
+    initBGM();
+    bgm.play().catch(e => console.log("Audio play blocked"));
+}
+
+function stopBGM() {
+    if (bgm) {
+        bgm.pause();
+        bgm.currentTime = 0;
+    }
+}
+
 // --- Game Loop ---
 function update(now = performance.now()) {
     try {
         const delta = now - lastTime;
         lastTime = now;
 
-        // If spectating, do not run player-specific game logic
         if (gameState === 'PLAYING' && !isSpectating) { 
             if (gameStartTime === 0) {
                 gameStartTime = now;
+                startBGM(); // Start BGM when game actually starts
             }
+            
+            // ALWAYS update dropCounter at the start of the logic
+            dropCounter += delta;
+            
             handleInput();
 
-            // --- Tetris 99 Style Dynamic Gravity ---
             const elapsedTime = (now - gameStartTime) / 1000;
-            let effectiveLevel = level;
 
-            // Time-based bonus (Internal level increases every 60 seconds)
-            effectiveLevel += Math.floor(elapsedTime / 60) * 2;
-
-            // Player count bonus (Only meaningful in large matches)
+            // --- Survivor Percentage Based Dynamic Gravity ---
             const activeOpponents = miniboardSlots.filter(s => s.userId && !s.isGameOver).length;
             const totalActive = activeOpponents + 1;
+            const startCount = Math.max(1, totalPlayersAtStart || totalActive); 
+            const survivorRate = totalActive / startCount;
 
-            if (totalActive <= 2) {
-                effectiveLevel += 5; // Final duel speed
-            } else if (totalActive <= 10) {
-                effectiveLevel += 3; // Top 10 speed
+            let intensity = (typeof level !== 'undefined') ? level : 1; 
+            intensity += Math.floor(elapsedTime / 60);
+
+            if (survivorRate <= 0.1) {
+                intensity += 90;
+            } else if (survivorRate <= 0.5) {
+                const rateProgress = (0.5 - survivorRate) / 0.4; 
+                intensity += 10 + (rateProgress * 30);
             }
 
-            // Smoother speed curve: dropInterval = 1000 * (0.9 ^ (level - 1))
-            const calcLevel = Math.min(60, effectiveLevel);
+            const calcLevel = Math.max(1, Math.min(100, intensity));
             let dropInterval = 1000 * Math.pow(0.9, calcLevel - 1);
-            
-            // 20G Handling: At effective level 50+ gravity becomes near instant
-            if (effectiveLevel >= 50) {
-                dropInterval = Math.max(0, dropInterval - (effectiveLevel - 50) * 10);
-                if (effectiveLevel >= 70) dropInterval = 0;
-            }
+            const is20G = intensity >= 70 || survivorRate <= 0.1;
 
-            dropCounter += delta;
-            if (dropInterval <= 0) {
+            if (is20G) {
                 while (currentPiece && isValidPosition(currentPiece, 0, 1)) {
+                    currentPiece.y++;
+                }
+                dropCounter = 0;
+            } else if (dropCounter >= dropInterval) {
+                if (currentPiece) {
                     movePiece({ x: 0, y: 1 });
                 }
-            } else if (dropCounter > dropInterval) {
-                movePiece({ x: 0, y: 1 });
                 dropCounter = 0;
             }
 
@@ -586,6 +610,7 @@ function init() {
     // --- Event Listeners ---
     if (joinPublicMatchButton) {
         joinPublicMatchButton.onclick = () => {
+            startBGM();
             // For public matches, hamburger button should not be shown. -> CHANGED: It SHOULD be shown now.
             setRoomDisplayState(true, false, null, [], false); // isHost=false, roomId=null, members=[], isPrivate=false
             startMatching();
@@ -595,12 +620,14 @@ function init() {
 
     if (createRoomButton) {
         createRoomButton.onclick = () => {
+            startBGM();
             openModal(createRoomModal);
         };
     }
 
     if (joinRoomButton) {
         joinRoomButton.onclick = () => {
+            startBGM();
             openModal(joinRoomModal);
         };
     }
