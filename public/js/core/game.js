@@ -457,6 +457,16 @@ function finishLineClear(lines, lockedPiece, tSpin) {
         if (pts > 0) Effects.triggerScoreUpdateEffect();
         linesCleared += lines.length;
 
+        // Level Up Logic (Every 10 lines)
+        const oldLevel = level;
+        level = Math.floor(linesCleared / 10) + 1;
+        if (level > 99) level = 99; // Cap at 99
+
+        if (level !== oldLevel) {
+            console.log(`🚀 Level Up: ${level}`);
+            Effects.addTextEffect(`LEVEL ${level}`, { style: 'default', duration: 1000 });
+        }
+
         let clearTypeForAttack;
         if (lockedPiece.type === 'T' && tSpin.detected) {
             clearTypeForAttack = tSpin.mini ? 'tsmini' : (lines.length === 1 ? 'tsingle' : lines.length === 2 ? 'tsdouble' : 'tstriple');

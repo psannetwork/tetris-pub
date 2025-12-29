@@ -324,8 +324,39 @@ function update(now = performance.now()) {
             }
             handleInput();
 
+            // --- Tetris 99 Style Dynamic Gravity ---
+            const elapsedTime = (now - gameStartTime) / 1000;
+            let effectiveLevel = level;
+
+            // Time-based bonus (Internal level increases every 60 seconds)
+            effectiveLevel += Math.floor(elapsedTime / 60) * 2;
+
+            // Player count bonus (Only meaningful in large matches)
+            const activeOpponents = miniboardSlots.filter(s => s.userId && !s.isGameOver).length;
+            const totalActive = activeOpponents + 1;
+
+            if (totalActive <= 2) {
+                effectiveLevel += 5; // Final duel speed
+            } else if (totalActive <= 10) {
+                effectiveLevel += 3; // Top 10 speed
+            }
+
+            // Smoother speed curve: dropInterval = 1000 * (0.9 ^ (level - 1))
+            const calcLevel = Math.min(60, effectiveLevel);
+            let dropInterval = 1000 * Math.pow(0.9, calcLevel - 1);
+            
+            // 20G Handling: At effective level 50+ gravity becomes near instant
+            if (effectiveLevel >= 50) {
+                dropInterval = Math.max(0, dropInterval - (effectiveLevel - 50) * 10);
+                if (effectiveLevel >= 70) dropInterval = 0;
+            }
+
             dropCounter += delta;
-            if (dropCounter > CONFIG.dropInterval / level) {
+            if (dropInterval <= 0) {
+                while (currentPiece && isValidPosition(currentPiece, 0, 1)) {
+                    movePiece({ x: 0, y: 1 });
+                }
+            } else if (dropCounter > dropInterval) {
                 movePiece({ x: 0, y: 1 });
                 dropCounter = 0;
             }
@@ -341,17 +372,12 @@ function update(now = performance.now()) {
             sendBoardStatus(board, currentPiece);
 
             // Calculate stats
-            const elapsedTime = (now - gameStartTime) / 1000;
             const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
             const seconds = Math.floor(elapsedTime % 60).toString().padStart(2, '0');
             time = `${minutes}:${seconds}`;
             pps = (piecesPlaced / elapsedTime || 0).toFixed(2);
             apm = ((keyPresses * 60) / elapsedTime || 0).toFixed(1);
 
-        } else if (gameState === 'SPECTATING') { 
-            gameStartTime = 0;
-            piecesPlaced = 0;
-            keyPresses = 0;
         } else {
             gameStartTime = 0;
             piecesPlaced = 0;

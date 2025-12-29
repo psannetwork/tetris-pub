@@ -142,7 +142,8 @@ export const CONFIG = {
         softDrop: "ArrowDown", hardDrop: "Space", hold: "KeyC"
     },
     game: {
-        nextPiecesCount: 6
+        nextPiecesCount: 6,
+        baseDropInterval: 1000
     },
     debug: {
         enableGarbage: true

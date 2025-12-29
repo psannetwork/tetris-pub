@@ -329,12 +329,73 @@ html, body {
 #message-display.success { background: #00ffcc; }
 #message-display.info { background: #00f3ff; }
 
-.rank-card {
+/* Result Screen / Ranking */
+#final-ranking-list {
   display: grid;
-  grid-template-columns: 50px 1fr auto;
-  background: #111;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  width: 95%;
+  max-width: 1000px;
+  margin: 20px 0;
+  max-height: 50vh;
+  overflow-y: auto;
   padding: 10px;
-  border-bottom: 1px solid #222;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid #222;
+}
+
+.rank-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #111;
+  padding: 8px 12px;
+  border-left: 3px solid #444;
+  font-size: 0.8rem;
+}
+
+/* 自分の順位をハイライト */
+.rank-card.my-rank {
+  background: #1a1a25;
+  border-left-color: var(--neon-cyan);
+  box-shadow: inset 0 0 10px rgba(0, 243, 255, 0.1);
+}
+
+.rank-card.my-rank .rank-player-name {
+  color: var(--neon-cyan);
+  font-weight: bold;
+}
+
+/* 上位3名の装飾 */
+.rank-card[data-rank="1"] { border-left-color: #ffd700; background: rgba(255, 215, 0, 0.05); }
+.rank-card[data-rank="2"] { border-left-color: #c0c0c0; background: rgba(192, 192, 192, 0.05); }
+.rank-card[data-rank="3"] { border-left-color: #cd7f32; background: rgba(205, 127, 50, 0.05); }
+
+.rank-position {
+  font-family: var(--font-family-display);
+  font-size: 0.9rem;
+  margin-right: 10px;
+}
+
+.rank-player-name {
+  flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.rank-stats {
+  font-size: 0.7rem;
+  color: #666;
+  margin-left: 10px;
+}
+
+#game-end-title {
+  font-family: var(--font-family-display);
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+  text-shadow: 0 0 20px var(--win-color);
 }
 
 #effect-canvas, #ui-canvas {

@@ -362,7 +362,11 @@ function handleGameOver(io, socket, reason, stats) {
 
     if (room.isGameOver) return;
 
-    // 1. 生存確認
+    // ゲーム開始時の人数を確定させる（まだ設定されていない場合）
+    if (!room.totalPlayersAtStart) {
+        room.totalPlayersAtStart = room.initialPlayers.size;
+    }
+
     if (!room.stats.has(socket.id)) {
         room.stats.set(socket.id, stats || { score: 0, lines: 0, level: 1, time: '0:00', apm: 0, pps: 0 });
     }
@@ -370,31 +374,21 @@ function handleGameOver(io, socket, reason, stats) {
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
 
-    // 2. 脱落者の順位確定 (アトミック処理)
+    // 脱落者の順位確定
     if (!ranks.includes(socket.id)) {
-        // 現在の生存者数（まだ順位が決まっていない人数）がそのままこの人の順位になる
-        const currentSurvivors = room.initialPlayers.size - ranks.length;
+        // 現在の「まだ脱落していない人数」が順位になる
+        const rankValue = room.totalPlayersAtStart - ranks.length;
         ranks.push(socket.id);
         
-        // 順位マップを構築 (このプレイヤーの最終順位を確定)
-        const rankUpdate = {
-            userId: socket.id,
-            rank: currentSurvivors,
-            isFinal: true
-        };
-
-        console.log(`[RANK] Room ${roomId}: ${socket.id} secured Rank ${currentSurvivors}`);
-
-        // 全員に「現在の確定順位リスト」と「暫定順位」を送信
+        console.log(`[RANK] Room ${roomId}: ${socket.id} secured Rank ${rankValue}`);
         broadcastRanking(io, room);
     }
 
-    // 3. 優勝判定
-    const remainingCount = room.initialPlayers.size - ranks.length;
+    // 優勝判定
+    const remainingCount = room.totalPlayersAtStart - ranks.length;
     if (remainingCount <= 1 && !room.isGameOver) {
         room.isGameOver = true;
 
-        // 最後の1人を特定
         const winnerId = [...room.initialPlayers].find(id => !ranks.includes(id));
         if (winnerId) {
             ranks.push(winnerId);
@@ -408,6 +402,7 @@ function handleGameOver(io, socket, reason, stats) {
         }
 
         broadcastRanking(io, room);
+        // ... (GameOver notifications)
 
         // GameOver通知
         for (const playerId of room.initialPlayers) {
@@ -434,14 +429,12 @@ function handleGameOver(io, socket, reason, stats) {
 function broadcastRanking(io, room) {
     if (!io) return;
     const ranks = playerRanks.get(room.roomId) || [];
+    const total = room.totalPlayersAtStart || room.initialPlayers.size;
     
-    // 確定している順位のマップ
     const finalRankMap = {};
     ranks.forEach((id, index) => {
-        // 登録順が [最下位, ..., 1位] なので計算
-        // ただし内部配列は [脱落1人目, 脱落2人目, ..., 優勝者] の順
-        const rank = room.initialPlayers.size - index;
-        finalRankMap[id] = rank;
+        // 1人目脱落 = total位, 2人目 = total-1位...
+        finalRankMap[id] = Math.max(1, total - index);
     });
 
     const rankingData = {
@@ -450,7 +443,7 @@ function broadcastRanking(io, room) {
         statsMap: Object.fromEntries(room.stats),
         roomId: room.roomId,
         isGameOver: room.isGameOver,
-        totalPlayers: room.initialPlayers.size
+        totalPlayers: total
     };
 
     emitToRoom(io, room, "ranking", rankingData);

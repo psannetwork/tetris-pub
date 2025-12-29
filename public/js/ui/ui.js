@@ -46,30 +46,19 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
       for (const player of playerList) {
         const { userId, rank, stats } = player;
         const isMe = userId === myId;
-        const displayName = isMe ? 'You' : `Player (${userId.substring(0, 4)}...)`;
+        const displayName = isMe ? 'YOU' : `${userId.substring(0, 6)}`;
         
-        const rankText = rank === null ? 'Playing...' : `#${rank}`;
+        const rankText = rank === null ? 'LIVE' : `${rank}`;
 
         const card = document.createElement('div');
         card.className = 'rank-card';
-        if (isMe) {
-          card.classList.add('my-rank');
-        }
-        if (rank === null) {
-          card.classList.add('playing');
-        }
-        if (rank === 1) {
-          card.classList.add('first-place');
-        }
-
+        if (isMe) card.classList.add('my-rank');
+        if (rank !== null) card.setAttribute('data-rank', rank);
 
         card.innerHTML = `
-          <div class="rank-position">${rankText}</div>
-          <div class="rank-player-name">${displayName}</div>
-          <div class="rank-stats">
-            <span>Score: ${stats.score}</span>
-            <span>Lines: ${stats.lines}</span>
-          </div>
+          <span class="rank-position">${rankText}</span>
+          <span class="rank-player-name">${displayName}</span>
+          <span class="rank-stats">${stats.score} / ${stats.lines}L</span>
         `;
         rankingListContainer.appendChild(card);
       }
