@@ -11,7 +11,9 @@
 <body>
 
   <div id="overall-game-wrapper">
-    <div id="left-miniboards-group"></div>
+    <div id="left-miniboards-group">
+      <canvas id="left-miniboards-canvas"></canvas>
+    </div>
     <div id="game-container"> <!-- This is the new central block -->
       <div id="game-left-panel">
         <div id="hold-box"></div>
@@ -21,15 +23,15 @@
       <div id="game-right-panel">
         <div id="next-box"></div>
         <div id="score-display"></div>
-        <!-- Hamburger Menu Button -->
+        <!-- Menu Button -->
         <button id="menu-button" class="hamburger-menu">
-            <span></span>
-            <span></span>
-            <span></span>
+            MENU
         </button>
       </div>
     </div>
-    <div id="right-miniboards-group"></div>
+    <div id="right-miniboards-group">
+      <canvas id="right-miniboards-canvas"></canvas>
+    </div>
     <canvas id="effect-canvas"></canvas>
     <canvas id="ui-canvas"></canvas>
   </div>

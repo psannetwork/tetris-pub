@@ -14,6 +14,10 @@ function registerSpectatorHandlers(io, socket) {
         }
         const room = rooms.get(roomId);
 
+        if (room.isGameOver) {
+            return socket.emit("uiMessage", { type: 'error', message: "このゲームは既に終了しています。" });
+        }
+
         const oldRoomId = playerRoom.get(socket.id);
         if (oldRoomId && rooms.has(oldRoomId)) {
             const oldRoom = rooms.get(oldRoomId);

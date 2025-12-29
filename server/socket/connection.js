@@ -16,6 +16,9 @@ const { bots } = require('../bots.js');
 function registerConnectionHandlers(io, socket) {
     socket.on("heartbeat", () => {
         updatePlayerActivity(socket.id);
+        // Also update board update timestamp on heartbeat to prevent in-game timeout
+        // as long as the connection is alive
+        playerBoardLastUpdated.set(socket.id, Date.now());
     });
 
     socket.on("disconnect", (reason) => {

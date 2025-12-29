@@ -37,45 +37,26 @@ function registerGameHandlers(io, socket) {
         const ranks = playerRanks.get(roomId) || [];
         if (ranks.includes(socket.id)) return;
 
+        // Update board update time and player activity
         playerBoardLastUpdated.set(socket.id, Date.now());
         updatePlayerActivity(socket.id);
 
-        if (!playerActivity.has(socket.id)) {
-            playerActivity.set(socket.id, {
-                lastUpdate: Date.now(),
-                updateCount: 0,
-                updateResetTime: Date.now()
+        // Update room.boards for new spectators
+        if (board.board) {
+            room.boards[socket.id] = JSON.parse(JSON.stringify(board.board));
+        } else if (board.diff && room.boards[socket.id]) {
+            const storedBoard = room.boards[socket.id];
+            board.diff.forEach(({ r, c, val }) => {
+                if (storedBoard[r]) {
+                    storedBoard[r][c] = val;
+                }
             });
         }
 
-        const activity = playerActivity.get(socket.id);
-        const now = Date.now();
+        const payload = { ...board };
 
-        if (now - activity.updateResetTime >= 1000) {
-            activity.updateResetTime = now;
-            activity.updateCount = 0;
-        }
-
-        activity.updateCount++;
-        if (activity.updateCount > MAX_UPDATES_PER_SECOND) {
-            console.warn(`⚠️ Player ${socket.id} exceeded update rate limit`);
-            kickPlayer(io, roomId, socket.id, "通信が異常な速度で送信されました。");
-            return;
-        }
-
-        activity.lastUpdate = now;
-
-        if (board.board) {
-            room.boards[socket.id] = board;
-        }
-
-        const payload = { UserID: socket.id, ...board };
-
-        for (const playerId of room.players) {
-            if (playerId === socket.id || bots.has(playerId)) continue;
-            io.to(playerId).emit("BoardStatus", payload);
-        }
-        emitToSpectators(io, roomId, "BoardStatus", payload);
+        // Buffer the update instead of immediate broadcast
+        room.pendingBoardUpdates.set(socket.id, payload);
     });
 
     socket.on("gameOver", ({ stats }) => {
@@ -114,7 +95,7 @@ function registerGameHandlers(io, socket) {
             if (!candidates.length) return;
             recipient = candidates[Math.floor(Math.random() * candidates.length)];
             room.playerTargets.set(socket.id, recipient);
-            emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
+            io.to(roomId).emit('targetsUpdate', Array.from(room.playerTargets.entries()));
         }
 
         const emitData = { from: socket.id, lines, to: recipient };
@@ -124,7 +105,8 @@ function registerGameHandlers(io, socket) {
             io.to(recipient).emit("ReceiveGarbage", emitData);
         }
 
-        emitToRoom(io, room, "GarbageTransfer", { from: socket.id, to: recipient, lines });
+        // Broadcast garbage transfer effect to everyone in the room
+        io.to(roomId).emit("GarbageTransfer", { from: socket.id, to: recipient, lines });
     });
 }
 

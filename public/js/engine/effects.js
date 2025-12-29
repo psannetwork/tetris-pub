@@ -55,13 +55,16 @@ export function addTextEffect(text, { style = 'default', duration = 1500, x, y }
 }
 
 export function drawTextEffects() {
-    if (!CONFIG.effects.enableTextEffects) return; // Check if text effects are enabled
+    if (!CONFIG.effects.enableTextEffects) return; 
 
     const now = performance.now();
     for (let i = 0; i < textEffects.length; i++) {
         const effect = textEffects[i];
         const progress = (now - effect.startTime) / effect.duration;
         if (progress >= 1) continue;
+        
+        // ... (rest of drawing code)
+
 
         effectsCtx.save();
         effectsCtx.textAlign = 'center';
@@ -224,34 +227,26 @@ class LightOrb {
     }
 
     draw(ctx) {
-        // Draw trail as fading circles
+        // Draw trail with simple circles
         for (let i = 0; i < this.trail.length; i++) {
             const point = this.trail[i];
             ctx.beginPath();
-            ctx.arc(point.x, point.y, point.size * 0.5, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 200, ${point.alpha * 0.5})`;
+            ctx.arc(point.x, point.y, point.size * 0.4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 200, ${point.alpha * 0.4})`;
             ctx.fill();
         }
 
         if (!this.arrived || this.alpha > 0) {
-            // Main orb with radial gradient
-            const gradient = ctx.createRadialGradient(
-                this.currentX, this.currentY, 0,
-                this.currentX, this.currentY, this.size
-            );
-            gradient.addColorStop(0, `rgba(255, 255, 255, ${this.alpha})`);
-            gradient.addColorStop(0.5, `rgba(255, 255, 200, ${this.alpha * 0.7})`);
-            gradient.addColorStop(1, `rgba(255, 255, 150, 0)`);
-
+            // Main orb - use a simple circle instead of radial gradient
             ctx.beginPath();
-            ctx.arc(this.currentX, this.currentY, this.size, 0, Math.PI * 2);
-            ctx.fillStyle = gradient;
+            ctx.arc(this.currentX, this.currentY, this.size * 0.8, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
             ctx.fill();
 
-            // Small highlight
+            // Glow effect with a simple larger circle
             ctx.beginPath();
-            ctx.arc(this.currentX - this.size / 4, this.currentY - this.size / 4, this.size / 3, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha * 0.9})`;
+            ctx.arc(this.currentX, this.currentY, this.size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 200, ${this.alpha * 0.3})`;
             ctx.fill();
         }
     }
@@ -488,12 +483,9 @@ export function startMiniboardEntryEffect(userId, x, y, width, height) {
 export function drawMiniboardEntryEffects(currentTime) {
     miniboardEntryEffects.forEach(effect => {
         if (effect.isActive()) {
-            effect.update(currentTime);
             effect.draw(currentTime);
         }
     });
-    // Remove inactive effects
-    miniboardEntryEffects = miniboardEntryEffects.filter(effect => effect.isActive());
 }
 
 export function createLightOrb(startPos, endPos) {
@@ -519,43 +511,33 @@ export function createLightOrb(startPos, endPos) {
 function drawCountdown(ctx, count) {
     if (!ctx || !count || count === 0) return;
 
-    // Calculate center position using canvas dimensions
     const centerX = ctx.canvas.width / 2;
     const centerY = ctx.canvas.height / 2;
-
-    // Calculate dynamic font size based on canvas size (similar to 5em in the original HTML)
     const fontSize = Math.max(60, Math.min(ctx.canvas.width * 0.15, ctx.canvas.height * 0.15));
 
-    // Set text properties
     ctx.font = `bold ${fontSize}px ${CONFIG.ui.fontFamily}`;
     ctx.fillStyle = CONFIG.colors.text;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Draw text shadow for better visibility
-    ctx.shadowColor = 'black';
-    ctx.shadowBlur = 15;
-    ctx.shadowOffsetX = 3;
-    ctx.shadowOffsetY = 3;
-
-    // Draw the countdown text
+    // Remove shadowBlur as it's very expensive for large text
     ctx.fillText(String(count), centerX, centerY);
-
-    // Reset shadow settings
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
+    // Draw an outline instead for visibility
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.strokeText(String(count), centerX, centerY);
 }
 
 export function drawOrbs() {
-    // Draw countdown if active AND not in lobby
     if (gameState !== 'LOBBY' && currentCountdown !== null && currentCountdown !== '' && currentCountdown !== 0) {
         drawCountdown(effectsCtx, currentCountdown);
     }
 
-    orbs.forEach(orb => orb.draw(effectsCtx));
-    drawTimeoutEffect(); // Draw timeout effect here
+    // Simplify orb drawing
+    for (let i = 0; i < orbs.length; i++) {
+        orbs[i].draw(effectsCtx);
+    }
+    drawTimeoutEffect(); 
 }
 
 // --- Line Clear and Particle Effects ---
@@ -615,7 +597,7 @@ function addParticle(props) {
 
 export function drawParticles() {
     const now = performance.now();
-    for (let i = effects.length - 1; i >= 0; i--) {
+    for (let i = 0; i < effects.length; i++) {
         const effect = effects[i];
         if (effect.type === 'particle') {
             const progress = (now - effect.startTime) / effect.duration;
@@ -627,10 +609,6 @@ export function drawParticles() {
                 effectsCtx.arc(effect.x, effect.y, effect.size * (1 - progress * 0.5), 0, Math.PI * 2);
                 effectsCtx.fill();
                 effectsCtx.restore();
-            } else {
-                // Return particle to pool
-                releaseParticle(effect);
-                effects.splice(i, 1);
             }
         }
     }
@@ -960,6 +938,14 @@ export function triggerTargetAttackFlash(attackerId) {
 export function updateEffects() {
     const now = performance.now();
 
+    // Limit the number of active effects to prevent performance degradation
+    if (effects.length > 500) {
+        effects.splice(0, effects.length - 500);
+    }
+    if (textEffects.length > 50) {
+        textEffects.splice(0, textEffects.length - 50);
+    }
+
     // Update active effects
     for (let i = effects.length - 1; i >= 0; i--) {
         const e = effects[i];
@@ -1004,13 +990,14 @@ export function updateEffects() {
         activeTimeoutEffect = null;
     }
 
-    // Update miniboard entry effects
-    miniboardEntryEffects.forEach(effect => {
-        if (effect.isActive()) {
-            effect.update(now);
+    // Update miniboard entry effects - logic is now handled only here
+    for (let i = miniboardEntryEffects.length - 1; i >= 0; i--) {
+        const effect = miniboardEntryEffects[i];
+        effect.update(now);
+        if (!effect.isActive()) {
+            miniboardEntryEffects.splice(i, 1);
         }
-    });
-    miniboardEntryEffects = miniboardEntryEffects.filter(effect => effect.isActive());
+    }
 
     // Clean up expired flashes
     for (const [key, value] of targetAttackFlashes.entries()) {
@@ -1022,12 +1009,14 @@ export function updateEffects() {
 
 export function drawAllEffects() {
     if (!effectsCtx) return;
-    effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height); // Clear the canvas
+    
+    // Clear the canvas once at the start of drawing
+    effectsCtx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height); 
 
     const now = performance.now();
     drawTextEffects();
     drawParticles();
-    drawOrbs(); // This already draws countdown and timeout effect
+    drawOrbs(); 
     drawLineClearEffects();
     drawTspinEffect();
     drawPerfectClearEffects();

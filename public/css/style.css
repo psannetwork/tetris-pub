@@ -1,13 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700&family=Press+Start+2P&display=swap');
 
 :root {
-  --background-color: #0a0a0c;
+  --background-color: #050508;
   --board-background-color: #000;
   --text-color: #fff;
   --font-family-body: 'Exo 2', sans-serif;
   --font-family-display: 'Press Start 2P', cursive;
-  --panel-background-color: rgba(20, 20, 25, 0.7);
-  --overlay-background-color: rgba(5, 5, 10, 0.9);
+  --panel-background-color: rgba(15, 15, 20, 0.8);
+  --overlay-background-color: #05050a;
   --win-color: #00ffcc;
   --lose-color: #ff0055;
   --button-primary-bg: #00f3ff;
@@ -38,154 +38,88 @@ html, body {
     left: 50%;
     transform: translate(-50%, -50%);
     display: flex;
-    width: 1196px; /* 275 + 20 + 606 + 20 + 275 */
-    height: 593.5px; /* Max height of miniboards */
+    width: 1196px;
+    height: 593.5px;
     box-sizing: border-box;
-    justify-content: center; /* Center the game-container and miniboards */
-    align-items: flex-start; /* Align items to the top */
-    gap: 20px; /* Gap between miniboards and game-container */
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
 }
 
 #game-container {
     display: flex;
-    width: 606px; /* 96 + 20 + 30 + 20 + 300 + 20 + 120 */
-    height: 600px; /* Main board height */
+    width: 606px;
+    height: 600px;
     box-sizing: border-box;
-    justify-content: center; /* Center main-game-board */
-    align-items: flex-start; /* Align items to the top */
-    gap: 20px; /* Gap between panels and main board */
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
 }
 
-#game-left-panel {
+#game-left-panel, #game-right-panel {
     display: flex;
     flex-direction: column;
-    justify-content: flex-start; /* Push hold box to top */
-    align-items: center; /* Center items horizontally */
-    width: 96px; /* Width of hold box */
-    height: 600px; /* Main board height */
-    box-sizing: border-box;
+    width: 120px;
+    height: 600px;
+    position: relative; /* 子要素の基準位置になるように追加 */
 }
 
-#game-right-panel {
-    position: relative; /* Added for positioning context */
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start; /* Align items to the top */
-    align-items: center; /* Center items horizontally */
-    width: 120px; /* Width of next box, increased from 96 */
-    height: 600px; /* Main board height */
-    box-sizing: border-box;
+#score-display {
+    display: none !important; /* Canvas描画と重複するためHTML側は消去 */
 }
 
-#menu-button {
-    /* Removed old absolute positioning */
-}
-
-/* Hamburger Menu Style */
 .hamburger-menu {
-    position: absolute; /* Position relative to #game-right-panel */
-    bottom: 10px;       /* Stick to the bottom */
+    position: absolute;
+    bottom: 10px;
     left: 50%;
-    transform: translateX(-50%); /* Center horizontally */
-    width: 45px;
-    height: 45px;
-    background: rgba(30, 30, 30, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 12px;
+    transform: translateX(-50%);
+    width: 90px; /* 文字に合わせて幅を広げる */
+    height: 40px;
+    background: #000;
+    border: 2px solid var(--neon-cyan);
+    color: var(--neon-cyan);
+    font-family: var(--font-family-display);
+    font-size: 0.8rem;
     cursor: pointer;
     z-index: 1001;
     display: flex;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 6px;
-    padding: 0;
-    transition: all 0.3s ease;
-    backdrop-filter: blur(5px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    margin-top: 0; /* Remove top margin */
+    transition: all 0.1s;
 }
 
 .hamburger-menu:hover {
-    background: rgba(50, 50, 50, 0.9);
-    transform: scale(1.05);
-    box-shadow: 0 6px 10px rgba(0,0,0,0.4);
-}
-
-.hamburger-menu span {
-    display: block;
-    width: 24px;
-    height: 3px;
-    background-color: #fff;
-    border-radius: 3px;
-    transition: all 0.3s ease;
+    background: var(--neon-cyan);
+    color: #000;
 }
 
 #left-miniboards-group, #right-miniboards-group {
-    width: 275px; /* 7 * 35px + 6 * 5px */
-    height: 593.5px; /* 7 * 80.5px + 6 * 5px */
-    display: grid;
-    grid-template-columns: repeat(7, 35px); /* 7 mini-boards of 35px each */
-    grid-template-rows: repeat(7, 80.5px); /* 7 mini-boards of 80.5px each */
-    gap: 5px; /* Gap between mini-boards */
-    box-sizing: border-box;
-    overflow: hidden; /* Hide overflow if mini-boards exceed container */
+    width: 275px;
+    height: 593.5px;
+}
+
+#left-miniboards-canvas, #right-miniboards-canvas {
+    width: 100%;
+    height: 100%;
 }
 
 #attack-bar {
     width: 30px;
-    height: 600px; /* Main board height */
-    background-color: var(--attack-color); /* Example color */
-    /* align-self is not needed here as it's a direct child of game-container */
+    height: 600px;
+    background-color: var(--attack-color);
 }
 
 #main-game-board {
     width: 300px;
     height: 600px;
     background-color: var(--board-background-color);
-    box-sizing: border-box;
-    box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8); /* Inner shadow for depth */
 }
 
-#hold-box {
-    width: 96px;
-    height: 96px;
-    background-color: var(--panel-background-color);
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
-    /* align-self is not needed here as game-left-panel handles positioning */
-}
-
-#next-box {
+#hold-box, #next-box {
     width: 120px;
-    /* height: 480px; */ /* Removed fixed height */
+    height: 120px;
     background-color: var(--panel-background-color);
-    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5); /* Inner shadow for depth */
-    /* align-self is not needed here as game-right-panel handles positioning */
-}
-
-#score-display {
-    color: white;
-    font-family: var(--font-family-display);
-    width: 120px; /* Same width as next-box */
-    text-align: center;
-    margin-top: 20px; /* Move it down from the top slightly */
-    /* align-self is not needed here as game-right-panel handles positioning */
-    visibility: hidden; /* Visually hidden but still accessible */
-    position: absolute;
-    left: -9999px;
-}
-
-/* Mini-board specific styling */
-.miniboard {
-    width: 35px;
-    height: 80.5px;
-    background-color: var(--panel-background-color);
-    box-sizing: border-box;
-    /* Further styling for individual mini-boards can go here */
-}
-
-canvas {
-    display: block;
+    border: 1px solid #333;
 }
 
 /* Overlays */
@@ -195,447 +129,217 @@ canvas {
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: var(--overlay-background-color);
-  backdrop-filter: blur(4px); /* ぼかしを軽減 */
-  display: flex;
+  background-color: #05050a;
+  display: none; /* 初期状態は非表示 */
   flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 300;
-  opacity: 1;
-  transition: opacity 0.5s ease-in-out;
   text-align: center;
-  box-sizing: border-box;
-  overflow: hidden;
 }
 
-#lobby-overlay::before {
-  content: " ";
-  display: block;
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  /* 走査線のみ残し、グリッドは簡略化 */
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
-              linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-  z-index: 2;
-  background-size: 100% 4px, 3px 100%;
-  pointer-events: none;
-  opacity: 0.3;
+/* 常に表示が必要な状態（JSでクラス操作されるもの） */
+#lobby-overlay:not(.hidden),
+#game-end-overlay.visible {
+    display: flex !important;
 }
 
-/* 重い点滅アニメーション (flicker-bg) を削除 */
+#lobby-overlay.hidden, #game-end-overlay:not(.visible) {
+    display: none !important;
+}
 
 .overlay-content {
-  position: relative;
-  z-index: 3;
-  max-height: 100%;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   width: 100%;
-  box-sizing: border-box;
   padding: 2rem;
-}
-
-#lobby-overlay.hidden, #game-end-overlay.hidden {
-    opacity: 0;
-    pointer-events: none;
 }
 
 .lobby-title {
   font-family: var(--font-family-display);
   font-size: 3.5rem;
-  font-weight: bold;
-  margin-bottom: 4vh;
   color: #fff;
   text-transform: uppercase;
   letter-spacing: 5px;
-  text-shadow: 
-    0 0 10px var(--neon-cyan),
-    0 0 20px var(--neon-cyan);
-  animation: neon-pulse 2s infinite alternate, glitch 8s infinite;
-  position: relative;
-  transform: translateZ(0); /* GPUアクセラレーションを有効化 */
-}
-
-@keyframes glitch {
-  0%, 90%, 100% {
-    transform: translate(0);
-    text-shadow: 0 0 10px var(--neon-cyan);
-  }
-  92% {
-    transform: translate(-2px, 1px);
-    text-shadow: 1px 0 var(--neon-magenta), -1px 0 var(--neon-cyan);
-  }
-  94% {
-    transform: translate(2px, -1px);
-    text-shadow: -1px 0 var(--neon-magenta), 1px 0 var(--neon-cyan);
-  }
+  text-shadow: 0 0 10px var(--neon-cyan);
+  margin-bottom: 4vh;
 }
 
 .menu-buttons button, .lobby-button {
-  background: transparent;
+  background: #000;
   color: var(--neon-cyan);
   border: 2px solid var(--neon-cyan);
   padding: 18px 40px;
-  margin: 15px;
+  margin: 10px;
   font-size: 1rem;
   font-family: var(--font-family-display);
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-  outline: none;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+  transition: background 0.1s;
 }
 
 .menu-buttons button:hover, .lobby-button:hover {
   background: var(--neon-cyan);
   color: #000;
-  box-shadow: 0 0 30px var(--neon-cyan);
-  transform: scale(1.05);
 }
 
-.menu-buttons button::before, .lobby-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    120deg,
-    transparent,
-    rgba(255, 255, 255, 0.3),
-    transparent
-  );
-  transition: 0.5s;
-}
-
-.menu-buttons button:hover::before, .lobby-button:hover::before {
-  left: 100%;
-}
-
-.menu-buttons button:active, .lobby-button:active {
-  transform: translateY(1px);
-  box-shadow: 0 2px 10px rgba(0, 123, 255, 0.3);
-}
-
-.menu-buttons button:focus, .lobby-button:focus {
-    box-shadow: 0 0 0 4px var(--button-focus-glow);
-}
-
-.lobby-button[disabled], .menu-buttons button[disabled] {
-  background-color: #555;
-  color: #888;
-  border-color: #888;
-  opacity: 0.7;
-  cursor: not-allowed;
-  pointer-events: none; /* Prevents click events */
-  box-shadow: none;
-  transform: none;
-}
-
-
-#countdown-overlay {
-  display: none !important; /* Hide HTML overlay as it's now rendered on canvas */
-}
-
-#game-end-overlay {
-  display: none; /* Initially hidden */
-}
-
-#game-end-overlay.visible {
-  display: flex;
-}
-
-#final-ranking-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 80%;
-  max-width: 700px;
-  margin: 20px 0;
-  max-height: 50vh;
-  overflow-y: auto;
-  padding-right: 10px; /* for scrollbar */
-}
-
-.rank-card {
-  display: grid;
-  grid-template-columns: 50px 1fr auto;
-  align-items: center;
-  background-color: var(--panel-background-color);
-  padding: 10px 20px;
-  border-radius: 0;
-  border-left: 5px solid transparent;
-  transition: all 0.3s ease;
-}
-
-.rank-card.my-rank {
-  background-color: rgba(0, 123, 255, 0.3);
-  border-left-color: var(--button-primary-bg);
-}
-
-.rank-card.my-rank .rank-player-name {
-    font-weight: bold;
-}
-
-.rank-position {
-  font-size: 1.5em;
-  font-weight: bold;
-  color: var(--text-color);
-}
-
-.rank-player-name {
-  font-size: 1em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rank-stats {
-  text-align: right;
-  font-size: 0.8em;
-  color: #bdc3c7;
-}
-
-.rank-stats span {
-  margin-left: 15px;
-}
-
-#effect-canvas, #ui-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 10;
-}
-
-/* New: Message Display */
-#message-display {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: fit-content;
-    max-width: 80%;
-    padding: 10px 20px;
-    border-radius: 0;
-    font-size: 1rem;
-    color: white;
-    text-align: center;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 1000; /* Always on top */
-    transition: all 0.5s ease-in-out;
-    opacity: 0;
-    pointer-events: none; /* Make it non-interactive */
-}
-
-#message-display.show {
-    opacity: 1;
-    pointer-events: auto;
-}
-
-#message-display.success {
-    background-color: #00ff00;
-}
-
-#message-display.error {
-    background-color: #ff0000;
-}
-
-#message-display.info {
-    background-color: #007bff;
-}
-
-
-/* New: Modal styles */
 .modal {
   display: none;
   position: fixed;
   z-index: 400;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-  background-color: rgba(0,0,0,0.9);
-  backdrop-filter: blur(5px);
-  padding-top: 60px;
+  left: 0; top: 0; width: 100%; height: 100%;
+  background-color: rgba(0, 0, 0, 0.9);
 }
 
 .modal-content {
-  background-color: #0a0a0c;
-  margin: 5% auto;
+  background-color: #050508;
+  margin: 10% auto;
   padding: 40px;
+  max-width: 450px;
   width: 90%;
-  max-width: 500px;
-  border-radius: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 25px;
-  box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
   border: 1px solid var(--neon-cyan);
   position: relative;
+  box-sizing: border-box;
 }
 
-.modal-content::after {
+/* コーナーの装飾（軽量な枠線のみ） */
+.modal-content::before {
   content: '';
   position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 1px solid var(--neon-cyan);
+  top: -5px; left: -5px; right: -5px; bottom: -5px;
+  border: 1px solid rgba(0, 243, 255, 0.2);
   pointer-events: none;
-  opacity: 0.5;
 }
 
 .modal-content h2 {
-  color: var(--neon-cyan);
   font-family: var(--font-family-display);
-  font-size: 1.5rem;
-  margin-bottom: 20px;
-  text-shadow: 0 0 10px var(--neon-cyan);
+  color: var(--neon-cyan);
+  font-size: 1.2rem;
+  margin-bottom: 30px;
+  text-align: center;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px var(--neon-cyan);
+}
+
+.modal-content h3 {
+  font-family: var(--font-family-display);
+  color: #fff;
+  font-size: 0.9rem;
+  margin-top: 20px;
 }
 
 .modal-content input[type="text"],
 .modal-content input[type="password"] {
   width: 100%;
-  padding: 15px;
-  margin: 8px 0;
-  display: inline-block;
-  border: 1px solid var(--neon-cyan);
-  border-radius: 0;
-  box-sizing: border-box;
-  background-color: rgba(0, 0, 0, 0.5);
+  background: #111;
+  border: 1px solid #333;
+  border-left: 4px solid var(--neon-cyan);
+  padding: 12px 15px;
   color: #fff;
-  font-size: 1rem;
   font-family: var(--font-family-body);
+  font-size: 1rem;
+  margin-bottom: 15px;
   outline: none;
-  transition: all 0.3s ease;
+  box-sizing: border-box;
 }
 
 .modal-content input:focus {
-  box-shadow: 0 0 15px var(--neon-cyan);
-  background-color: rgba(0, 243, 255, 0.1);
+  border-color: var(--neon-cyan);
+  background: #15151a;
 }
 
 .modal-content button {
+  width: 100%;
   background: transparent;
+  border: 1px solid var(--neon-cyan);
   color: var(--neon-cyan);
-  border: 2px solid var(--neon-cyan);
-  padding: 12px 24px;
-  margin: 10px;
-  font-size: 0.9rem;
+  padding: 15px;
   font-family: var(--font-family-display);
+  font-size: 0.8rem;
   cursor: pointer;
-  border-radius: 0;
-  transition: all 0.3s ease;
+  margin-top: 10px;
+  transition: all 0.1s;
   text-transform: uppercase;
 }
 
 .modal-content button:hover {
-  background-color: var(--neon-cyan);
+  background: var(--neon-cyan);
   color: #000;
-  box-shadow: 0 0 20px var(--neon-cyan);
 }
 
 .modal-content .close-modal {
-  border-color: var(--neon-magenta);
-  color: var(--neon-magenta);
+  border-color: #666;
+  color: #666;
+  font-size: 0.7rem;
 }
 
 .modal-content .close-modal:hover {
-  background-color: var(--neon-magenta);
+  border-color: var(--neon-magenta);
+  background: var(--neon-magenta);
   color: #000;
-  box-shadow: 0 0 20px var(--neon-magenta);
 }
 
-#main-menu-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    margin-bottom: 20px;
-}
-
-#room-info-display {
-    background-color: rgba(0, 0, 0, 0.6);
-    padding: 20px 40px;
-    border-radius: 0;
-    margin-top: 20px;
-    border: 1px solid var(--neon-purple);
-    box-shadow: 0 0 15px rgba(125, 0, 255, 0.3);
-}
-
-#room-info-display p {
-    margin: 10px 0;
-    font-size: 1.1rem;
-    color: var(--neon-purple);
-    font-family: var(--font-family-display);
-    text-shadow: 0 0 5px var(--neon-purple);
-}
-
-#room-info-display button {
-    margin-top: 15px;
-}
-
-/* Admin Menu Specific Styles */
-#admin-menu-modal .modal-content h3 {
-    margin-top: 20px;
-    color: var(--text-color);
-}
-
+/* ルーム管理画面内のメンバーリスト */
 #member-list {
-    list-style: none;
-    padding: 0;
-    width: 100%;
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid var(--neon-cyan);
-    background-color: rgba(0, 0, 0, 0.8);
+  list-style: none;
+  padding: 0;
+  margin: 15px 0;
+  border: 1px solid #222;
+  max-height: 150px;
+  overflow-y: auto;
 }
 
 #member-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 15px;
-    border-bottom: 1px solid rgba(0, 243, 255, 0.2);
-    color: #fff;
+  padding: 10px 15px;
+  border-bottom: 1px solid #111;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
 }
 
-#member-list li:last-child {
-    border-bottom: none;
+#member-list li span { color: #aaa; }
+#member-list li span.self { color: var(--neon-cyan); font-weight: bold; }
+
+.kick-button {
+  width: auto !important;
+  padding: 5px 10px !important;
+  font-size: 0.6rem !important;
+  margin: 0 !important;
+  border-color: var(--neon-magenta) !important;
+  color: var(--neon-magenta) !important;
 }
 
-#member-list li span {
-    flex-grow: 1;
-    text-align: left;
-}
-
-#member-list li button.kick-button {
-    background-color: #e74c3c;
+#message-display {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    z-index: 1000;
     color: white;
-    border: none;
-    padding: 5px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.8rem;
+    font-weight: bold;
+    display: none;
 }
 
-#member-list li button.kick-button:hover {
-    background-color: #c0392b;
+#message-display.show { display: block; }
+#message-display.error { background: #ff0055; }
+#message-display.success { background: #00ffcc; }
+#message-display.info { background: #00f3ff; }
+
+.rank-card {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  background: #111;
+  padding: 10px;
+  border-bottom: 1px solid #222;
+}
+
+#effect-canvas, #ui-canvas {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 10;
 }

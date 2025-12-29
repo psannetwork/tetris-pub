@@ -36,8 +36,8 @@ function generateUniqueRoomId() {
 let ioRef = null;
 
 // Timeout duration in milliseconds
-const PLAYER_TIMEOUT_MS = 60000; // 60 seconds
-const BOARD_UPDATE_TIMEOUT_MS = 60000; // 60 seconds
+const PLAYER_TIMEOUT_MS = 120000; // 120 seconds
+const BOARD_UPDATE_TIMEOUT_MS = 120000; // 120 seconds
 
 function setIoReference(io) {
     ioRef = io;
@@ -135,13 +135,23 @@ function createRoom(playerId, isPrivate = false, password = null, hostId = null)
         hostId: hostId || playerId, // New: Host of the room
         creationTime: Date.now(), // New: Track room creation time for timeout
         timeoutId: null, // New: Track timeout ID for cleanup
-        activityCheckInterval: null // Track activity check interval
+        activityCheckInterval: null,
+        pendingBoardUpdates: new Map() // New: Buffer for batch updates
     };
 
     // Set up periodic activity checking for this room
     room.activityCheckInterval = setInterval(() => {
         checkPlayerTimeouts(roomId);
-    }, 2000); // Check every 2 seconds
+    }, 2000); 
+
+    // NEW: Set up batch board update interval (10 times per second)
+    room.batchUpdateInterval = setInterval(() => {
+        if (room.pendingBoardUpdates.size > 0) {
+            const updates = Object.fromEntries(room.pendingBoardUpdates);
+            ioRef.to(roomId).emit("BoardStatusBulk", updates);
+            room.pendingBoardUpdates.clear();
+        }
+    }, 100);
 
     // Set timeout to clean up the room after a specified time
     const timeoutDuration = isPrivate ? 2 * 60 * 60 * 1000 : 30 * 60 * 1000; // 2 hours for private, 30 mins for public
@@ -150,9 +160,12 @@ function createRoom(playerId, isPrivate = false, password = null, hostId = null)
         if (roomToClean) {
             console.log(`⏱️ Room ${roomId} has timed out and will be cleaned up.`);
 
-            // Clean up activity check interval
+            // Clean up intervals
             if (roomToClean.activityCheckInterval) {
                 clearInterval(roomToClean.activityCheckInterval);
+            }
+            if (roomToClean.batchUpdateInterval) {
+                clearInterval(roomToClean.batchUpdateInterval);
             }
 
             // Clean up countdown interval if it exists
@@ -347,78 +360,46 @@ function handleGameOver(io, socket, reason, stats) {
     if (!roomId || !rooms.has(roomId)) return;
     const room = rooms.get(roomId);
 
-    if (room.isGameOver) {
-        return;
-    }
+    if (room.isGameOver) return;
 
-    // NEW: Remove the player's board from room.boards immediately when they are game over
-    delete room.boards[socket.id];
-
-    // Store player stats
-    if (stats) {
-        room.stats.set(socket.id, stats);
+    // 1. 生存確認
+    if (!room.stats.has(socket.id)) {
+        room.stats.set(socket.id, stats || { score: 0, lines: 0, level: 1, time: '0:00', apm: 0, pps: 0 });
     }
 
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
 
-    // Only add to ranks if not a connection timeout and player is not already ranked
+    // 2. 脱落者の順位確定 (アトミック処理)
     if (!ranks.includes(socket.id)) {
-        // Calculate and assign final rank when player is eliminated
-        // The rank is based on the total number of players minus those who have already been eliminated
-        const finalRank = room.initialPlayers.size - ranks.length;
+        // 現在の生存者数（まだ順位が決まっていない人数）がそのままこの人の順位になる
+        const currentSurvivors = room.initialPlayers.size - ranks.length;
         ranks.push(socket.id);
-
-        // Create a ranking map with the specific player's final rank
-        const yourRankMap = {};
-        yourRankMap[socket.id] = finalRank;
-
-        // Notify all players about this specific player's rank being finalized
-        const statsMap = Object.fromEntries(room.stats);
-        const rankingData = {
-            ranking: ranks, // Include the current list of ranked players
-            yourRankMap,
-            statsMap,
-            roomId: room.roomId,
-            isGameOver: false // Game is not over yet, just this player is out
+        
+        // 順位マップを構築 (このプレイヤーの最終順位を確定)
+        const rankUpdate = {
+            userId: socket.id,
+            rank: currentSurvivors,
+            isFinal: true
         };
 
-        emitToRoom(io, room, "ranking", rankingData); // To players
-        emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
+        console.log(`[RANK] Room ${roomId}: ${socket.id} secured Rank ${currentSurvivors}`);
+
+        // 全員に「現在の確定順位リスト」と「暫定順位」を送信
+        broadcastRanking(io, room);
     }
 
-    // Calculate remaining active players
-    const activePlayersCount = room.initialPlayers.size - ranks.length;
-
-    // If the game is now over, handle final win/loss emits
-    if (activePlayersCount <= 1) {
+    // 3. 優勝判定
+    const remainingCount = room.initialPlayers.size - ranks.length;
+    if (remainingCount <= 1 && !room.isGameOver) {
         room.isGameOver = true;
 
-        // The remaining player (if any) gets rank 1
-        const stillPlaying = [...room.initialPlayers].filter(id => !ranks.includes(id));
-        let winnerId = null;
-        if (stillPlaying.length > 0) {
-            winnerId = stillPlaying[0];
-            // Assign rank 1 to the winner if not already assigned
-            if (!ranks.includes(winnerId)) {
-                const winnerRankMap = {};
-                winnerRankMap[winnerId] = 1;
-
-                const statsMap = Object.fromEntries(room.stats);
-                const rankingData = {
-                    ranking: [...ranks, winnerId],
-                    yourRankMap: winnerRankMap,
-                    statsMap,
-                    roomId: room.roomId,
-                    isGameOver: true
-                };
-
-                emitToRoom(io, room, "ranking", rankingData); // To players
-                emitToSpectators(io, room.roomId, "spectatorRanking", rankingData); // To spectators
-            }
-        }
-
-        if (winnerId) { // Check if winnerId exists
+        // 最後の1人を特定
+        const winnerId = [...room.initialPlayers].find(id => !ranks.includes(id));
+        if (winnerId) {
+            ranks.push(winnerId);
+            console.log(`[RANK] Room ${roomId}: ${winnerId} is the WINNER (Rank 1)`);
+            
             if (bots.has(winnerId)) {
                 bots.get(winnerId).emit("YouWin");
             } else if (io) {
@@ -426,13 +407,12 @@ function handleGameOver(io, socket, reason, stats) {
             }
         }
 
+        broadcastRanking(io, room);
+
+        // GameOver通知
         for (const playerId of room.initialPlayers) {
             if (playerId !== winnerId) {
-                // Skip sending GameOver to the player who timed out, as they are already sent back to lobby
-                if (reason === "connection timeout" && playerId === socket.id) {
-                    continue;
-                }
-
+                if (reason === "connection timeout" && playerId === socket.id) continue;
                 if (bots.has(playerId)) {
                     bots.get(playerId).emit("GameOver");
                 } else if (io) {
@@ -440,42 +420,56 @@ function handleGameOver(io, socket, reason, stats) {
                 }
             }
         }
-        if (io) {
-            emitToSpectators(io, room.roomId, "GameOver");
+        if (io) emitToSpectators(io, room.roomId, "GameOver");
+
+        // プライベートルームのリセット処理
+        if (room.isPrivate) {
+            setTimeout(() => resetPrivateRoom(room), 3000);
+            return;
         }
-
-                    // For private rooms, do not reset isGameOver so players can start a new game in the same room
-                    if (room.isPrivate) {
-                        // Reset game state but keep the room open
-                        room.isGameOver = false; // Don't keep it as game over so new games can start
-                        room.isGameStarted = false;
-                        room.isCountingDown = false;
-                        if (room.countdownInterval) {
-                            clearInterval(room.countdownInterval);
-                            room.countdownInterval = null;
-                        }
-                        // Reset the initialPlayers for the next game
-                        room.initialPlayers = new Set(room.players); // Use current player for next game
-                        room.boards = {};
-                        room.stats.clear();
-                        // Clear player ranks but don't delete the map
-                        if (playerRanks.has(roomId)) {
-                            playerRanks.get(roomId).length = 0;
-                        }
-                        return; // Don't clear timeout if private room is kept open
-                    }    }
-
-    // Clear the activity check interval when the game is over
-    if (room.activityCheckInterval) {
-        clearInterval(room.activityCheckInterval);
-        room.activityCheckInterval = null;
     }
+}
 
-    // Clear the timeout when the game is over (only for public rooms or when not keeping private room open)
-    if (room.timeoutId) {
-        clearTimeout(room.timeoutId);
-        room.timeoutId = null;
+// 順位情報を一括配信する補助関数
+function broadcastRanking(io, room) {
+    if (!io) return;
+    const ranks = playerRanks.get(room.roomId) || [];
+    
+    // 確定している順位のマップ
+    const finalRankMap = {};
+    ranks.forEach((id, index) => {
+        // 登録順が [最下位, ..., 1位] なので計算
+        // ただし内部配列は [脱落1人目, 脱落2人目, ..., 優勝者] の順
+        const rank = room.initialPlayers.size - index;
+        finalRankMap[id] = rank;
+    });
+
+    const rankingData = {
+        ranking: ranks,
+        finalRankMap,
+        statsMap: Object.fromEntries(room.stats),
+        roomId: room.roomId,
+        isGameOver: room.isGameOver,
+        totalPlayers: room.initialPlayers.size
+    };
+
+    emitToRoom(io, room, "ranking", rankingData);
+    emitToSpectators(io, room.roomId, "spectatorRanking", rankingData);
+}
+
+function resetPrivateRoom(room) {
+    room.isGameOver = false;
+    room.isGameStarted = false;
+    room.isCountingDown = false;
+    if (room.countdownInterval) clearInterval(room.countdownInterval);
+    room.countdownInterval = null;
+    room.initialPlayers = new Set(room.players);
+    room.boards = {};
+    room.stats.clear();
+    if (playerRanks.has(room.roomId)) {
+        playerRanks.get(room.roomId).length = 0;
     }
+    console.log(`[ROOM] Private Room ${room.roomId} reset for next round.`);
 }
 
 function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストによってキックされました。") {

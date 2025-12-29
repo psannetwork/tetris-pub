@@ -259,43 +259,40 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
 
 // --- Modal Functions ---
 function openModal(modal) {
-    if (!modal) return; // Guard against null modal
+    if (!modal) return; 
     modal.style.display = 'block';
     mainMenuButtons.style.display = 'none';
-    roomInfoDisplay.style.display = 'none'; // Also hide room info if showing
-    if (menuButton) { // NEW: Check if element exists
-        menuButton.style.display = 'none'; // Hide hamburger when other modals open
-    }
-    if (isSpectating) { // NEW: hide game-related elements if spectating
-        document.getElementById('game-left-panel').style.display = 'none';
-        document.getElementById('game-right-panel').style.display = 'none';
-        document.getElementById('attack-bar').style.display = 'none';
-        document.getElementById('main-game-board').style.display = 'none';
+    roomInfoDisplay.style.display = 'none'; 
+    if (menuButton) { 
+        menuButton.style.display = 'none'; 
     }
 }
 
 function closeModal(modal) {
-    if (!modal) return; // Guard against null modal
+    if (!modal) return; 
     modal.style.display = 'none';
 
     // Re-evaluate UI state after closing a modal
     if (getCurrentRoomId()) {
-        // If we are in a room, request fresh room info to redraw the UI correctly.
-        // This will show the menu button again if needed.
-        socket.emit('requestRoomInfo');
+        // Only request fresh room info if we are NOT in a game/spectating
+        // to avoid interrupting the active game state.
+        if (gameState !== 'PLAYING' && gameState !== 'SPECTATING') {
+            socket.emit('requestRoomInfo');
+        }
+        // Always restore the menu button if we are in a room
+        if (menuButton) {
+            menuButton.style.display = 'flex';
+        }
     } else {
         // If not in a room, we are in the lobby. Show main menu.
         mainMenuButtons.style.display = 'block';
         roomInfoDisplay.style.display = 'none';
     }
 
-    // Restore game board visibility if it was hidden (e.g., for spectator modal)
+    // Restore game board visibility
     document.getElementById('main-game-board').style.display = 'block';
-    if (!isSpectating) {
-        document.getElementById('game-left-panel').style.display = 'block';
-        document.getElementById('game-right-panel').style.display = 'block';
-        document.getElementById('attack-bar').style.display = 'block';
-    }
+    
+    // ... rest of the function ...
 
 
     // Clear inputs when closing specific modals
@@ -316,80 +313,75 @@ function closeModal(modal) {
 
 // --- Game Loop ---
 function update(now = performance.now()) {
-    // If spectating, do not run player-specific game logic
-    if (gameState === 'PLAYING' && !isSpectating) { // NEW: Add !isSpectating
-        if (gameStartTime === 0) {
-            gameStartTime = now;
-        }
-        handleInput();
-
+    try {
         const delta = now - lastTime;
         lastTime = now;
 
-        dropCounter += delta;
-        if (dropCounter > CONFIG.dropInterval / level) {
-            movePiece({ x: 0, y: 1 });
-            dropCounter = 0;
-        }
-
-        if (currentPiece && !isValidPosition(currentPiece, 0, 1)) {
-            currentPiece.lockDelay += delta;
-            if (currentPiece.lockDelay >= LOCK_DELAY) {
-                lockPiece();
-                piecesPlaced++; // Increment pieces placed on lock
+        // If spectating, do not run player-specific game logic
+        if (gameState === 'PLAYING' && !isSpectating) { 
+            if (gameStartTime === 0) {
+                gameStartTime = now;
             }
+            handleInput();
+
+            dropCounter += delta;
+            if (dropCounter > CONFIG.dropInterval / level) {
+                movePiece({ x: 0, y: 1 });
+                dropCounter = 0;
+            }
+
+            if (currentPiece && !isValidPosition(currentPiece, 0, 1)) {
+                currentPiece.lockDelay += delta;
+                if (currentPiece.lockDelay >= LOCK_DELAY) {
+                    lockPiece();
+                    piecesPlaced++; 
+                }
+            }
+            
+            sendBoardStatus(board, currentPiece);
+
+            // Calculate stats
+            const elapsedTime = (now - gameStartTime) / 1000;
+            const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
+            const seconds = Math.floor(elapsedTime % 60).toString().padStart(2, '0');
+            time = `${minutes}:${seconds}`;
+            pps = (piecesPlaced / elapsedTime || 0).toFixed(2);
+            apm = ((keyPresses * 60) / elapsedTime || 0).toFixed(1);
+
+        } else if (gameState === 'SPECTATING') { 
+            gameStartTime = 0;
+            piecesPlaced = 0;
+            keyPresses = 0;
+        } else {
+            gameStartTime = 0;
+            piecesPlaced = 0;
+            keyPresses = 0;
         }
+
+        // Update button states less frequently (approx every 100ms)
+        if (!window._lastButtonUpdateTime || now - window._lastButtonUpdateTime > 100) {
+            updateButtonStates();
+            window._lastButtonUpdateTime = now;
+        }
+
+        // Drawing is now separated and happens every frame regardless of state
+        updateEffects(); 
+        drawGame();
+        drawUI();
+        processMiniboardRedrawRequest(); 
         
-        // updateEffects(); // REMOVED - now called once at the end
-        sendBoardStatus(board, currentPiece);
+        // drawAllEffects handles text, particles, orbs, and miniboard entry effects
+        drawAllEffects(); 
+        
+        if (effectsCtx && !isSpectating) {
+            drawTargetLines(effectsCtx);
+        }
 
-        // Calculate stats
-        const elapsedTime = (now - gameStartTime) / 1000;
-        const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
-        const seconds = Math.floor(elapsedTime % 60).toString().padStart(2, '0');
-        time = `${minutes}:${seconds}`;
-        pps = (piecesPlaced / elapsedTime || 0).toFixed(2);
-        apm = ((keyPresses * 60) / elapsedTime || 0).toFixed(1);
+        startAnimationIfNeeded(); 
 
-    } else if (gameState === 'SPECTATING') { // NEW: Handle spectating state
-        // In spectating mode, only effects are updated and miniboards drawn
-        // updateEffects(); // REMOVED - now called once at the end
-        // Stats are reset as no active player game is running
-        gameStartTime = 0;
-        piecesPlaced = 0;
-        keyPresses = 0;
-    } else {
-        // Reset stats when not playing (or spectating)
-        gameStartTime = 0;
-        piecesPlaced = 0;
-        keyPresses = 0;
+    } catch (error) {
+        console.error("🚀 Game Loop Error:", error);
     }
-
-    // Update button states based on game state
-    updateButtonStates();
-
-    // Drawing is now separated and happens every frame regardless of state
-    updateEffects(); // Call updateEffects once before drawing all effects
-    drawGame();
-    drawUI();
-    processMiniboardRedrawRequest(); // Draw miniboards only if requested
-    drawAllEffects(); // Call drawAllEffects to render all effects
-    
-    // Draw target lines separately as it depends on spectator state
-    if (effectsCtx && !isSpectating) {
-        drawTargetLines(effectsCtx);
-    }
-
-    // drawAllEffects handles text, particles, orbs, and miniboard entry effects
-    drawAllEffects(); 
-    
-    // Draw target lines separately as it depends on spectator state
-    if (effectsCtx && !isSpectating) {
-        drawTargetLines(effectsCtx);
-    }
-
-    // drawAllMiniBoards() is handled by its own animation system when needed
-    startAnimationIfNeeded(); // Start miniboard animation when needed
 
     requestAnimationFrame(update);
 }
@@ -415,21 +407,21 @@ function updateButtonStates() {
         setButtonState(joinPublicSpectateButton, false); 
         setButtonState(hostStartGameButton, false);
         setButtonState(adminStartGameButton, false);
-    } else if (gameState === 'GAME_OVER' && !isSpectating && !appState.isSpectating) { 
+    } else if (gameState === 'GAME_OVER') { 
         setButtonState(joinPublicMatchButton, false);
-        setButtonState(retryButton, true);
+        setButtonState(retryButton, !isSpectating); // Spectators can't retry
         setButtonState(lobbyButton, true);
-        setButtonState(spectateButton, true); 
+        setButtonState(spectateButton, false); 
         setButtonState(joinPublicSpectateButton, false); 
         
         // Host can still see start button if in a private room to restart
-        setButtonState(hostStartGameButton, appState.isPrivate && isHost);
-        setButtonState(adminStartGameButton, appState.isPrivate && isHost);
+        setButtonState(hostStartGameButton, appState.isPrivate && isHost && !isSpectating);
+        setButtonState(adminStartGameButton, appState.isPrivate && isHost && !isSpectating);
 
         if (retryButton) {
             retryButton.textContent = appState.isPrivate ? 'ルームに戻る' : 'Play Again';
         }
-    } else if (gameState === 'SPECTATING' || isSpectating || appState.isSpectating) { 
+    } else if (gameState === 'SPECTATING' || isSpectating) { 
         setButtonState(joinPublicMatchButton, false);
         setButtonState(retryButton, false); 
         setButtonState(lobbyButton, false);
@@ -733,22 +725,22 @@ function init() {
     if (lobbyButton) {
         lobbyButton.onclick = () => {
             setManualDisconnect(true);
-            setAutoMatchOnReconnect(false); // Don't auto-match when going back to lobby
+            setAutoMatchOnReconnect(false); 
             if (socket) {
                 socket.disconnect();
             }
-            gameEndOverlay.classList.remove('visible');
+            if (gameEndOverlay) gameEndOverlay.classList.remove('visible');
             setGameState('LOBBY');
+            setSpectating(false); // Ensure spectating is cleared
             resetGame();
-            setRoomDisplayState(false); // Go back to main lobby view
-            setButtonState(lobbyButton, false);
-            setButtonState(retryButton, false);
-            setButtonState(joinPublicMatchButton, true);
-            setButtonState(spectateButton, false); // NEW
-            // Reconnect the socket after disconnecting to allow new matching
-            // Delay reconnection slightly to ensure disconnect events are processed
+            resetAppState();
+            setRoomDisplayState(false); 
+            
+            updateButtonStates();
+
+            // Reconnect the socket
             setTimeout(() => {
-                initializeSocket(); // Reinitialize socket to ensure clean state
+                initializeSocket(); 
                 connectToServer();
             }, 100);
         };
@@ -762,22 +754,24 @@ function init() {
             if (socket) {
                 socket.disconnect();
             }
-            closeModal(spectatorMenuModal);
-            gameEndOverlay.classList.remove('visible'); // Hide game end overlay just in case
+            
+            // Set state to LOBBY and clear room state first to prevent closeModal from emitting
             setGameState('LOBBY');
-            resetGame();
-            setSpectating(false); // Clear spectating state
+            setSpectating(false); 
             setRoomDisplayState(false);
+            
+            closeModal(spectatorMenuModal);
+            gameEndOverlay.classList.remove('visible'); 
+            resetGame();
 
             // Explicitly set button states for the lobby
-            setButtonState(lobbyButton, false);
-            setButtonState(retryButton, false);
-            setButtonState(joinPublicMatchButton, true);
-            setButtonState(spectateButton, false);
-            setButtonState(joinPublicSpectateButton, true);
+            updateButtonStates();
 
-            initializeSocket();
-            connectToServer();
+            // Delay reconnection slightly to ensure disconnect events are processed
+            setTimeout(() => {
+                initializeSocket();
+                connectToServer();
+            }, 100);
         };
     };
 
