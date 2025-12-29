@@ -200,8 +200,8 @@ function registerRoomHandlers(io, socket) {
             return socket.emit("uiMessage", { type: 'error', message: "ゲームは既に開始されています。" });
         }
 
-        // Allow private rooms to start with 1 player for testing, public matches still need MIN_PLAYERS_TO_START
-        const minPlayers = room.isPrivate ? 1 : MIN_PLAYERS_TO_START;
+        // Enforce MIN_PLAYERS_TO_START (2) for all room types
+        const minPlayers = MIN_PLAYERS_TO_START;
         if (room.players.size < minPlayers) {
             return socket.emit("uiMessage", { type: 'error', message: `ゲーム開始には最低 ${minPlayers} 人のプレイヤーが必要です。` });
         }

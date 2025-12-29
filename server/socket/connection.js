@@ -65,6 +65,21 @@ function registerConnectionHandlers(io, socket) {
                 });
                 emitToRoom(io, room, 'targetsUpdate', Array.from(room.playerTargets.entries()));
 
+                // NEW: If the game is active and only 1 player remains connected,
+                // automatically trigger a communication error/timeout for that player.
+                if (wasInGame && room.players.size === 1) {
+                    const lastPlayerId = room.players.values().next().value;
+                    if (lastPlayerId && !bots.has(lastPlayerId)) {
+                        console.log(`[STALEMATE] Only player ${lastPlayerId} left in room ${roomId}. Forcing error.`);
+                        io.to(lastPlayerId).emit('uiMessage', {
+                            type: 'error',
+                            message: '対戦相手がいなくなったため、ゲームを中断しました。'
+                        });
+                        io.to(lastPlayerId).emit('matching');
+                        // handleGameOver for the last person will be handled by their own matching/exit
+                    }
+                }
+
                 if (room.hostId === socket.id && room.isPrivate) {
                     if (room.countdownInterval) clearInterval(room.countdownInterval);
                     for (const playerId of room.players) {
