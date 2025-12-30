@@ -389,7 +389,7 @@ function update(now = performance.now()) {
                 if (triggeredMilestone && Effects.effectsCtx) {
                     Effects.addTextEffect(`${triggeredMilestone} PLAYERS LEFT`, { 
                         style: 'milestone',
-                        duration: 2000,
+                        duration: 3500, // Extended to 3.5 seconds
                         y: Effects.effectsCtx.canvas.height / 2 
                     });
                 }
@@ -410,18 +410,27 @@ function update(now = performance.now()) {
                 intensity += 10;
             }
 
+            // 4. Calculate final drop interval
             const calcLevel = Math.max(1, Math.min(100, intensity));
             let dropInterval = 1000 * Math.pow(0.9, calcLevel - 1);
+            
             const is20G = intensity >= 70;
 
+            dropCounter += delta;
+            
             if (is20G) {
+                // 20G: Super fast fall (3 rows per frame) instead of instant teleport
+                // This makes the movement visible while staying extremely fast
                 if (currentPiece) {
-                    while (isValidPosition(currentPiece, 0, 1)) {
-                        currentPiece.y++;
+                    for (let i = 0; i < 3; i++) {
+                        if (isValidPosition(currentPiece, 0, 1)) {
+                            movePiece({ x: 0, y: 1 });
+                        }
                     }
                 }
                 dropCounter = 0;
             } else if (dropCounter >= dropInterval) {
+                // Normal free fall
                 if (currentPiece) {
                     movePiece({ x: 0, y: 1 });
                 }

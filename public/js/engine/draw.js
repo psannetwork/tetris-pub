@@ -171,17 +171,28 @@ export function drawGame() {
 
     // --- Draw dynamic elements (ghost, current piece) ---
     if (currentPiece) {
-        // Draw ghost piece
+        const startRow = CONFIG.board.rows - CONFIG.board.visibleRows;
+
+        // Draw ghost piece (lower opacity for better distinction)
         const ghost = { ...currentPiece };
         while (isValidPosition(ghost, 0, 1)) {
             ghost.y++;
         }
-        gameCtx.globalAlpha = CONFIG.effects.ghostPieceOpacity;
+        gameCtx.globalAlpha = 0.25; // Slightly lower than default
         drawPiece(gameCtx, ghost, 0, 0);
         gameCtx.globalAlpha = 1.0;
 
-        // Draw current piece
+        // Draw current piece with a subtle glow if falling fast
+        const isFastFalling = (level >= 50); // High intensity levels
+        if (isFastFalling) {
+            gameCtx.shadowBlur = 10;
+            gameCtx.shadowColor = CONFIG.colors.tetromino[tetrominoTypeToIndex(currentPiece.type) + 1] || "#FFF";
+        }
+
         drawPiece(gameCtx, currentPiece, 0, 0);
+        
+        // Reset shadow
+        gameCtx.shadowBlur = 0;
     }
 
 
