@@ -281,14 +281,36 @@ html, body {
   color: #000;
 }
 
-/* ルーム管理画面内のメンバーリスト */
-#member-list {
+/* 観戦ルームリスト */
+#public-rooms-list {
   list-style: none;
   padding: 0;
   margin: 15px 0;
   border: 1px solid #222;
-  max-height: 150px;
-  overflow-y: auto;
+  max-height: 300px; /* 固定の高さを設定 */
+  overflow-y: auto;  /* 縦スクロールを有効化 */
+  width: 100%;
+}
+
+#public-rooms-list li {
+  padding: 12px 15px;
+  border-bottom: 1px solid #111;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0a0a0c;
+}
+
+#public-rooms-list li span {
+  font-size: 0.9rem;
+  color: #ccc;
+}
+
+.join-spectate-room-button {
+  width: auto !important;
+  padding: 8px 15px !important;
+  font-size: 0.7rem !important;
+  margin: 0 !important;
 }
 
 #member-list li {

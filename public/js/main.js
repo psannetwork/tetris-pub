@@ -312,25 +312,42 @@ function closeModal(modal) {
 
 
 // --- Audio Management ---
-let bgm = null;
+const lobbyBgm = new Audio('bgm/loby.mp3');
+const gameBgm = new Audio('bgm/playing1.mp3');
+lobbyBgm.loop = true;
+gameBgm.loop = true;
+lobbyBgm.volume = 0.2;
+gameBgm.volume = 0.2;
 
-function initBGM() {
-    if (!bgm) {
-        bgm = new Audio('https://ia800504.us.archive.org/33/items/TetrisThemeMusic/Tetris.mp3');
-        bgm.loop = true;
-        bgm.volume = 0.2;
+let currentBgm = null;
+
+function playBgm(type) {
+    let nextBgm = null;
+    if (type === 'lobby') nextBgm = lobbyBgm;
+    else if (type === 'game') nextBgm = gameBgm;
+
+    // If already playing the requested track, do nothing
+    if (currentBgm === nextBgm && currentBgm && !currentBgm.paused) {
+        return;
+    }
+
+    if (currentBgm && currentBgm !== nextBgm) {
+        currentBgm.pause();
+        // Reset game BGM when switching away, but keep lobby BGM position
+        if (currentBgm === gameBgm) currentBgm.currentTime = 0;
+    }
+    
+    currentBgm = nextBgm;
+    
+    if (currentBgm) {
+        currentBgm.play().catch(e => console.log("Audio play blocked"));
     }
 }
 
-function startBGM() {
-    initBGM();
-    bgm.play().catch(e => console.log("Audio play blocked"));
-}
-
-function stopBGM() {
-    if (bgm) {
-        bgm.pause();
-        bgm.currentTime = 0;
+function stopBGM(reset = false) {
+    if (currentBgm) {
+        currentBgm.pause();
+        if (reset) currentBgm.currentTime = 0;
     }
 }
 
@@ -343,7 +360,8 @@ function update(now = performance.now()) {
         if (gameState === 'PLAYING' && !isSpectating) { 
             if (gameStartTime === 0) {
                 gameStartTime = now;
-                startBGM(); // Start BGM when game actually starts
+                gameBgm.currentTime = 0; // Ensure fresh start for game music
+                playBgm('game'); 
             }
             
             // ALWAYS update dropCounter at the start of the logic
@@ -550,6 +568,7 @@ function init() {
     // NEW: Admin Back to Lobby Button Logic
     if (adminBackToLobbyButton) {
         adminBackToLobbyButton.onclick = () => {
+             playBgm('lobby');
              closeModal(adminMenuModal);
              
              // Same logic as lobbyButton.onclick
@@ -578,6 +597,16 @@ function init() {
     }
 
 
+    // NEW: Stop BGM during countdown
+    if (socket) {
+        socket.on("CountDown", (count) => {
+            // Silence BGM during countdown (matching or game start)
+            if (count !== null && count !== "") {
+                stopBGM();
+            }
+        });
+    }
+
     setGameGetStatsCallback(getStats);
     setOnlineGetStatsCallback(getStats);
     setupCanvases();
@@ -596,6 +625,15 @@ function init() {
     // if (menuButton) menuButton.style.display = 'none'; // REMOVED: Always show menu button
     if (messageDisplay) messageDisplay.style.display = 'none'; // Ensure message display is hidden initially
 
+    // NEW: Start lobby BGM on first interaction anywhere on the page
+    const startAudioOnFirstClick = () => {
+        playBgm('lobby');
+        window.removeEventListener('click', startAudioOnFirstClick);
+        window.removeEventListener('keydown', startAudioOnFirstClick);
+    };
+    window.addEventListener('click', startAudioOnFirstClick);
+    window.addEventListener('keydown', startAudioOnFirstClick);
+
     // Register the callback to close menu when game starts
     setCloseMenuCallback(closeMenuWhenGameStarts);
 
@@ -610,7 +648,7 @@ function init() {
     // --- Event Listeners ---
     if (joinPublicMatchButton) {
         joinPublicMatchButton.onclick = () => {
-            startBGM();
+            playBgm('lobby');
             // For public matches, hamburger button should not be shown. -> CHANGED: It SHOULD be shown now.
             setRoomDisplayState(true, false, null, [], false); // isHost=false, roomId=null, members=[], isPrivate=false
             startMatching();
@@ -620,14 +658,14 @@ function init() {
 
     if (createRoomButton) {
         createRoomButton.onclick = () => {
-            startBGM();
+            playBgm('lobby');
             openModal(createRoomModal);
         };
     }
 
     if (joinRoomButton) {
         joinRoomButton.onclick = () => {
-            startBGM();
+            playBgm('lobby');
             openModal(joinRoomModal);
         };
     }
@@ -635,6 +673,7 @@ function init() {
     // NEW: Public Spectate Button
     if (joinPublicSpectateButton) {
         joinPublicSpectateButton.onclick = () => {
+            playBgm('lobby');
             requestPublicRooms(); // Request list of public rooms
             openModal(spectateRoomsModal);
         };
@@ -777,6 +816,7 @@ function init() {
 
     if (lobbyButton) {
         lobbyButton.onclick = () => {
+            playBgm('lobby');
             setManualDisconnect(true);
             setAutoMatchOnReconnect(false); 
             if (socket) {
@@ -802,6 +842,7 @@ function init() {
     // NEW: Spectator Back to Lobby Button
     if (spectatorBackToLobbyButton) {
         spectatorBackToLobbyButton.onclick = () => {
+            playBgm('lobby');
             setManualDisconnect(true);
             setAutoMatchOnReconnect(false);
             if (socket) {
@@ -875,8 +916,9 @@ function startSpectating(roomId) {
 
     setGameState('SPECTATING');
     resetGame();
+    playBgm('game'); // Start game BGM for spectators
     // Don't clear effects when spectating - keep showing game effects
-    setSpectating(true); // Set spectating state
+    setSpectating(true); 
     setRoomDisplayState(true, false, roomId, [], false); // Update UI for spectating
     spectateRoom(roomId); // Tell server to spectate
     updateButtonStates();

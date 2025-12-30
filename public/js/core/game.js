@@ -154,6 +154,7 @@ export function detectTSpin(piece) {
 }
 
 export function rotatePiece(piece, dir) {
+    if (isClearing) return; // Prevent movement during line clear animation
     const newRotation = (piece.rotation + dir + 4) % 4;
     let offsets = [];
     piece.lastMove = null; // Reset last move
@@ -242,6 +243,7 @@ export function rotatePiece(piece, dir) {
 }
 
 export function movePiece(offset) {
+    if (isClearing) return;
     if (isValidPosition(currentPiece, offset.x, offset.y)) {
         currentPiece.x += offset.x;
         currentPiece.y += offset.y;
@@ -256,6 +258,7 @@ export function movePiece(offset) {
 }
 
 export function hardDrop() {
+    if (isClearing) return;
     let d = 0;
     while (isValidPosition(currentPiece, 0, 1)) {
         currentPiece.y++;
@@ -281,7 +284,7 @@ function checkGameOver() {
 }
 
 export function hold() {
-    if (holdUsed) return;
+    if (isClearing || holdUsed) return;
     if (holdPiece == null) {
         holdPiece = currentPiece;
         currentPiece = nextPieces.shift();
