@@ -494,7 +494,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
         nextPieces.push(getNextPieceFromBag());
         Effects.triggerPieceAppearanceEffect(currentPiece); // Add appearance effect for new piece
         holdUsed = false;
-        const garbageToAdd = processFlashingGarbage();
+        const garbageToAdd = processFlashingGarbage(level);
         if (garbageToAdd > 0) {
             addGarbageLines(garbageToAdd);
         }

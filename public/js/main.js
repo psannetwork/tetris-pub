@@ -7,7 +7,7 @@ import {
     board, score, linesCleared
 } from './core/game.js';
 import { drawGame, drawUI, setupCanvases } from './engine/draw.js';
-import { updateEffects, initEffects, startTimeoutEffect, drawMiniboardEntryEffects, clearAllEffects, drawAllEffects, effectsCtx } from './engine/effects.js';
+import * as Effects from './engine/effects.js';
 import { handleInput } from './engine/input.js';
 import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState, totalPlayersAtStart } from './network/online.js';
 import { showCountdown } from './ui/ui.js';
@@ -159,7 +159,7 @@ function showMessage({ type, message, data }) {
         messageDisplay.classList.add('show', type);
 
         if (type === 'timeout') { 
-            startTimeoutEffect(message);
+            Effects.startTimeoutEffect(message);
         } else if (type === 'publicRoomsList' && data) { 
             populatePublicRoomsList(data);
             openModal(spectateRoomsModal);
@@ -357,43 +357,68 @@ function update(now = performance.now()) {
         const delta = now - lastTime;
         lastTime = now;
 
+        // Initialize variables with defaults to prevent ReferenceErrors
+        let currentElapsedTime = 0;
+        let currentSurvivorRate = 1.0;
+
         if (gameState === 'PLAYING' && !isSpectating) { 
             if (gameStartTime === 0) {
                 gameStartTime = now;
-                gameBgm.currentTime = 0; // Ensure fresh start for game music
+                gameBgm.currentTime = 0; 
                 playBgm('game'); 
             }
             
-            // ALWAYS update dropCounter at the start of the logic
             dropCounter += delta;
-            
             handleInput();
 
-            const elapsedTime = (now - gameStartTime) / 1000;
+            currentElapsedTime = (now - gameStartTime) / 1000;
 
-            // --- Survivor Percentage Based Dynamic Gravity ---
             const activeOpponents = miniboardSlots.filter(s => s.userId && !s.isGameOver).length;
             const totalActive = activeOpponents + 1;
             const startCount = Math.max(1, totalPlayersAtStart || totalActive); 
-            const survivorRate = totalActive / startCount;
+            currentSurvivorRate = totalActive / startCount;
 
+            // --- Milestone Notifications ---
+            if (typeof window._lastPlayersLeft === 'undefined') {
+                window._lastPlayersLeft = totalActive;
+            }
+
+            const milestones = [50, 30, 20, 10, 5, 2];
+            if (totalActive < window._lastPlayersLeft) {
+                const triggeredMilestone = milestones.find(m => totalActive <= m && window._lastPlayersLeft > m);
+                if (triggeredMilestone && Effects.effectsCtx) {
+                    Effects.addTextEffect(`${triggeredMilestone} PLAYERS LEFT`, { 
+                        style: 'milestone',
+                        duration: 2000,
+                        y: Effects.effectsCtx.canvas.height / 2 
+                    });
+                }
+            }
+            window._lastPlayersLeft = totalActive;
+
+            // --- Optimized Dynamic Intensity Formula ---
             let intensity = (typeof level !== 'undefined') ? level : 1; 
-            intensity += Math.floor(elapsedTime / 60);
+            intensity += Math.floor(currentElapsedTime / 30);
 
-            if (survivorRate <= 0.1) {
-                intensity += 90;
-            } else if (survivorRate <= 0.5) {
-                const rateProgress = (0.5 - survivorRate) / 0.4; 
-                intensity += 10 + (rateProgress * 30);
+            if (currentSurvivorRate <= 0.1) {
+                intensity += 80;
+            } else if (currentSurvivorRate <= 0.3) {
+                intensity += 50;
+            } else if (currentSurvivorRate <= 0.5) {
+                intensity += 30;
+            } else if (currentSurvivorRate <= 0.7) {
+                intensity += 10;
             }
 
             const calcLevel = Math.max(1, Math.min(100, intensity));
             let dropInterval = 1000 * Math.pow(0.9, calcLevel - 1);
-            const is20G = intensity >= 70 || survivorRate <= 0.1;
+            const is20G = intensity >= 70;
 
             if (is20G) {
-                while (currentPiece && isValidPosition(currentPiece, 0, 1)) {
-                    currentPiece.y++;
+                if (currentPiece) {
+                    while (isValidPosition(currentPiece, 0, 1)) {
+                        currentPiece.y++;
+                    }
                 }
                 dropCounter = 0;
             } else if (dropCounter >= dropInterval) {
@@ -414,11 +439,11 @@ function update(now = performance.now()) {
             sendBoardStatus(board, currentPiece);
 
             // Calculate stats
-            const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, '0');
-            const seconds = Math.floor(elapsedTime % 60).toString().padStart(2, '0');
+            const minutes = Math.floor(currentElapsedTime / 60).toString().padStart(2, '0');
+            const seconds = Math.floor(currentElapsedTime % 60).toString().padStart(2, '0');
             time = `${minutes}:${seconds}`;
-            pps = (piecesPlaced / elapsedTime || 0).toFixed(2);
-            apm = ((keyPresses * 60) / elapsedTime || 0).toFixed(1);
+            pps = (piecesPlaced / currentElapsedTime || 0).toFixed(2);
+            apm = ((keyPresses * 60) / currentElapsedTime || 0).toFixed(1);
 
         } else {
             gameStartTime = 0;
@@ -433,16 +458,16 @@ function update(now = performance.now()) {
         }
 
         // Drawing is now separated and happens every frame regardless of state
-        updateEffects(); 
+        Effects.updateEffects(); 
         drawGame();
         drawUI();
         processMiniboardRedrawRequest(); 
         
         // drawAllEffects handles text, particles, orbs, and miniboard entry effects
-        drawAllEffects(); 
+        Effects.drawAllEffects(); 
         
-        if (effectsCtx && !isSpectating) {
-            drawTargetLines(effectsCtx);
+        if (Effects.effectsCtx && !isSpectating) {
+            drawTargetLines(Effects.effectsCtx);
         }
 
         startAnimationIfNeeded(); 
@@ -613,7 +638,7 @@ function init() {
     // NEW: Initialize effects canvas
     const effectCanvas = document.getElementById('effect-canvas');
     if (effectCanvas) {
-        initEffects(effectCanvas);
+        Effects.initEffects(effectCanvas);
     }
     initializeSocket(); // Should be called once, connectToServer handles it
     gameEndOverlay.classList.remove('visible');
@@ -879,13 +904,15 @@ export function incrementKeyPresses() {
 }
 
 export function getStats() {
+    const activeOpponents = miniboardSlots.filter(s => s.userId && !s.isGameOver).length;
     return { 
         time,
         lines: linesCleared,
         level,
         score,
         apm,
-        pps
+        pps,
+        playersLeft: activeOpponents + 1
     };
 }
 
@@ -966,7 +993,7 @@ function handleSpectateRoomInfo(data) {
     setGameState('SPECTATING');
     setSpectating(true);
     setRoomDisplayState(true, false, data.roomId, [], false); // Host is always false for spectators
-    clearAllEffects();
+    Effects.clearAllEffects();
     resetGame(); // Clear client-side game state
     updateButtonStates();
 

@@ -1,6 +1,6 @@
 'use strict';
 import { CONFIG } from '../core/config.js';
-import { board, currentPiece, holdPiece, nextPieces, isValidPosition } from '../core/game.js';
+import { currentPiece, holdPiece, nextPieces, board, isGameOver, isGameClear, ren, level, isValidPosition } from '../core/game.js';
 import { getStats } from '../main.js';
 import * as Effects from './effects.js';
 import { drawTargetLines } from '../network/online.js';
@@ -211,7 +211,7 @@ function drawUIElements() {
     // Draw score and time information on the UI canvas
     if (scoreDisplay) {
         const stats = getStats();
-        const uiText = `Time: ${stats.time}\nScore: ${stats.score}\nLines: ${stats.lines}\nLevel: ${stats.level}\nPPS: ${stats.pps}\nAPM: ${stats.apm}`;
+        const uiText = `Time: ${stats.time}\nPlayers: ${stats.playersLeft}\nScore: ${stats.score}\nLines: ${stats.lines}\nLevel: ${stats.level}\nPPS: ${stats.pps}\nAPM: ${stats.apm}`;
 
         // Set text properties
         uiCtx.font = CONFIG.ui.scoreFontSize + ' ' + CONFIG.ui.fontFamily;
@@ -274,28 +274,34 @@ function drawAttackBar() {
     const now = performance.now();
     let currentY = BOARD_HEIGHT;
     
+    // Level-based speed multiplier: increases speed by 10% per level up to level 20
+    const levelFactor = Math.min(20, level || 1);
+    const speedMultiplier = 1 + (levelFactor - 1) * 0.15;
+    
+    // Adjusted thresholds and flash speed
+    const flashSpeed = CONFIG.effects.attackBarFlashSpeed / speedMultiplier;
+    const timeThreshold1 = CONFIG.effects.attackBarFlashTime1 / speedMultiplier;
+    const timeThreshold2 = CONFIG.effects.attackBarFlashTime2 / speedMultiplier;
+    const timeThreshold3 = CONFIG.effects.attackBarFlashTime3 / speedMultiplier;
+
     for (const seg of attackBarSegments) {
         const segHeight = BOARD_HEIGHT * (seg.value / MAX_ATTACK);
         
         let segmentColor;
-        
         const elapsed = seg.timestamp ? (now - seg.timestamp) : 0;
-        
-        
 
-        if (elapsed >= CONFIG.effects.attackBarFlashTime1) {
-            // 12秒以上経過: 点滅（100msごとに赤と白）
-            const flashSpeed = CONFIG.effects.attackBarFlashSpeed;
+        if (elapsed >= timeThreshold1) {
+            // High danger: Fast flashing
             const isBright = Math.floor(now / flashSpeed) % 2 === 0;
             segmentColor = isBright ? '#FF0000' : '#FFFFFF';
-        } else if (elapsed >= CONFIG.effects.attackBarFlashTime2) {
-            // 8秒以上経過: 赤
+        } else if (elapsed >= timeThreshold2) {
+            // Danger: Solid red
             segmentColor = '#FF0000';
-        } else if (elapsed >= CONFIG.effects.attackBarFlashTime3) {
-            // 4秒以上経過: 黄
+        } else if (elapsed >= timeThreshold3) {
+            // Warning: Yellow
             segmentColor = '#FFFF00';
         } else {
-            // それ以外: 白
+            // Safe: White
             segmentColor = '#FFFFFF';
         }
         

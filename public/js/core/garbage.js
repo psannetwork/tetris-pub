@@ -32,20 +32,25 @@ export function removeAttackBar(value) {
     }
 }
 
-export function processFlashingGarbage() {
+export function processFlashingGarbage(currentLevel = 1) {
     const now = performance.now();
     let garbageToAdd = 0;
     const segmentsToRemove = [];
 
+    // Apply the same level-based speed multiplier used in the visual drawing
+    const levelFactor = Math.min(20, currentLevel || 1);
+    const speedMultiplier = 1 + (levelFactor - 1) * 0.15;
+    const adjustedPHASE4 = PHASE4 / speedMultiplier;
+
     for (let i = 0; i < attackBarSegments.length; i++) {
         const segment = attackBarSegments[i];
-        if (now - segment.timestamp >= PHASE4) {
+        if (now - segment.timestamp >= adjustedPHASE4) {
             garbageToAdd += segment.value;
             segmentsToRemove.push(i);
         }
     }
     
-    // Remove segments that have reached PHASE4 (blinking phase)
+    // Remove segments that have matured into garbage
     for (let i = segmentsToRemove.length - 1; i >= 0; i--) {
         attackBarSegments.splice(segmentsToRemove[i], 1);
     }

@@ -73,12 +73,19 @@ export function drawTextEffects() {
 
         // ... (rest of the switch statement is the same)
         switch (effect.style) {
+            case 'milestone':
+                fontSize = 60 + Math.sin(progress * Math.PI) * 20; // Pulsing size
+                fillStyle = `rgba(0, 243, 255, ${1 - Math.pow(progress, 4)})`; // Cyan fading slowly
+                strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
+                lineWidth = 5;
+                currentY = effect.initialY; // Stay in center
+                break;
             case 'ko':
-                fontSize = 50 * (1 - progress * 0.5);
-                fillStyle = `rgba(255, 0, 0, ${1 - progress})`;
+                fontSize = 70 * (1 - progress * 0.3);
+                fillStyle = `rgba(255, 0, 85, ${1 - progress})`;
                 strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 lineWidth = 4;
-                currentY = effect.initialY - (progress * 70);
+                currentY = effect.initialY - (progress * 100);
                 break;
             case 'b2b':
                 fontSize = 35 * (1 - progress * 0.5);
