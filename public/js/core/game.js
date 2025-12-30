@@ -285,6 +285,10 @@ function checkGameOver() {
 
 export function hold() {
     if (isClearing || holdUsed) return;
+    
+    // Clear any lingering appearance effects from the previous piece
+    Effects.clearPieceAppearanceEffects();
+
     if (holdPiece == null) {
         holdPiece = currentPiece;
         currentPiece = nextPieces.shift();

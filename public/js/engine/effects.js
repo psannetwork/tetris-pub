@@ -942,6 +942,14 @@ export function triggerTargetAttackFlash(attackerId) {
 
 
 
+export function clearPieceAppearanceEffects() {
+    for (let i = effects.length - 1; i >= 0; i--) {
+        if (effects[i].type === 'pieceAppearance' || effects[i].type === 'receivedAttackFlash') {
+            effects.splice(i, 1);
+        }
+    }
+}
+
 export function updateEffects() {
     const now = performance.now();
 
