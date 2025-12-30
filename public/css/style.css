@@ -122,6 +122,50 @@ html, body {
     border: 1px solid #333;
 }
 
+#auth-container {
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 20px;
+}
+
+.auth-input {
+    width: 100%;
+    background: #111;
+    border: 1px solid #333;
+    border-left: 4px solid var(--neon-cyan);
+    padding: 12px 15px;
+    color: #fff;
+    font-family: var(--font-family-body);
+    font-size: 1rem;
+    margin-bottom: 10px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.auth-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+#user-profile-display {
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(0, 243, 255, 0.05);
+    border: 1px solid rgba(0, 243, 255, 0.2);
+}
+
+#display-nickname {
+    color: var(--neon-cyan);
+    font-weight: bold;
+}
+
+#display-rating {
+    color: var(--neon-yellow);
+    font-weight: bold;
+}
+
 /* Overlays */
 #lobby-overlay, #game-end-overlay, #countdown-overlay {
   position: fixed;
@@ -352,6 +396,33 @@ html, body {
 #message-display.info { background: #00f3ff; }
 
 /* Result Screen / Ranking */
+.rating-change-container {
+    font-family: var(--font-family-display);
+    font-size: 1.8rem;
+    margin-bottom: 30px;
+    padding: 20px 40px;
+    background: linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(20,20,30,0.8) 100%);
+    border: 3px solid var(--neon-cyan);
+    box-shadow: 0 0 15px var(--neon-cyan);
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+@keyframes slideInDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.rating-label { color: #aaa; font-size: 1rem; }
+#rating-old-value { color: #fff; }
+#rating-arrow { color: var(--neon-cyan); }
+#rating-new-value { color: #fff; font-size: 2rem; text-shadow: 0 0 10px var(--neon-cyan); }
+#rating-diff-value { font-size: 1.2rem; font-weight: bold; }
+#rating-diff-value.plus { color: var(--win-color); }
+#rating-diff-value.minus { color: var(--lose-color); }
+
 #final-ranking-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -415,8 +486,9 @@ html, body {
 
 #game-end-title {
   font-family: var(--font-family-display);
-  font-size: 2.5rem;
-  margin-bottom: 10px;
+  font-size: 3rem;
+  margin-top: 20px;
+  margin-bottom: 20px;
   text-shadow: 0 0 20px var(--win-color);
 }
 

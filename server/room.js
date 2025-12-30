@@ -264,9 +264,27 @@ function emitToSpectators(io, roomId, event, data) {
     }
 }
 
-// Unified function to emit to all players in a room (bots and real)
-function emitToRoom(io, room, event, data) { // `io` parameter added
-    // Create a temporary set of players to avoid issues if the set is modified during iteration
+// Helper to get rich member data for UI
+function getMemberData(playerId) {
+    const socket = ioRef ? ioRef.sockets.sockets.get(playerId) : null;
+    if (socket && socket.user) {
+        return {
+            id: playerId,
+            displayName: socket.user.nickname || socket.user.username,
+            rating: socket.user.rating,
+            isLoggedIn: true
+        };
+    }
+    // Guest player
+    return {
+        id: playerId,
+        displayName: `Guest_${playerId.substring(0, 4)}`,
+        rating: null,
+        isLoggedIn: false
+    };
+}
+
+function emitToRoom(io, room, event, data) { 
     const playersToEmit = new Set(room.players);
     for (const playerId of playersToEmit) {
         if (bots.has(playerId)) {
@@ -275,7 +293,21 @@ function emitToRoom(io, room, event, data) { // `io` parameter added
             io.to(playerId).emit(event, data);
         }
     }
-    // Always emit to spectators as well
+    
+    // 特別な処理: roomInfoイベントの場合はメンバーデータを詳細化する
+    if (event === "roomInfo") {
+        const richMembers = [...room.players].map(id => getMemberData(id));
+        const richData = { ...data, members: richMembers };
+        
+        if (io) {
+            for (const playerId of playersToEmit) {
+                if (!bots.has(playerId)) io.to(playerId).emit(event, richData);
+            }
+            emitToSpectators(io, room.roomId, event, richData);
+        }
+        return;
+    }
+
     if (io) {
         emitToSpectators(io, room.roomId, event, data);
     }
@@ -357,14 +389,16 @@ function startCountdown(io, room, initialPhase = 1, initialCount = COUNTDOWN_STA
     }, 1000);
 }
 
-function handleGameOver(io, socket, reason, stats) {
+const Database = require('./database.js');
+const serverConfig = require('./config.js');
+
+async function handleGameOver(io, socket, reason, stats) {
     const roomId = playerRoom.get(socket.id);
     if (!roomId || !rooms.has(roomId)) return;
     const room = rooms.get(roomId);
 
     if (room.isGameOver) return;
 
-    // ゲーム開始時の人数を確定させる（まだ設定されていない場合）
     if (!room.totalPlayersAtStart) {
         room.totalPlayersAtStart = room.initialPlayers.size;
     }
@@ -376,17 +410,28 @@ function handleGameOver(io, socket, reason, stats) {
     if (!playerRanks.has(roomId)) playerRanks.set(roomId, []);
     const ranks = playerRanks.get(roomId);
 
-    // 脱落者の順位確定
     if (!ranks.includes(socket.id)) {
-        // 現在の「まだ脱落していない人数」が順位になる
         const rankValue = room.totalPlayersAtStart - ranks.length;
         ranks.push(socket.id);
         
         console.log(`[RANK] Room ${roomId}: ${socket.id} secured Rank ${rankValue}`);
+
+        // --- Rating Logic Start ---
+        if (!room.isPrivate && socket.user) {
+            const change = serverConfig.rating.calculateChange(rankValue, room.totalPlayersAtStart);
+            try {
+                await Database.updateRating(socket.user.username, change);
+                socket.user.rating += change;
+                socket.emit('rating_update', { change, newRating: socket.user.rating });
+            } catch (err) {
+                console.error('Failed to update rating:', err);
+            }
+        }
+        // --- Rating Logic End ---
+
         broadcastRanking(io, room);
     }
 
-    // 優勝判定
     const remainingCount = room.totalPlayersAtStart - ranks.length;
     if (remainingCount <= 1 && !room.isGameOver) {
         room.isGameOver = true;
@@ -395,6 +440,20 @@ function handleGameOver(io, socket, reason, stats) {
         if (winnerId) {
             ranks.push(winnerId);
             console.log(`[RANK] Room ${roomId}: ${winnerId} is the WINNER (Rank 1)`);
+
+            // --- Winner Rating Logic ---
+            const winnerSocket = io ? io.sockets.sockets.get(winnerId) : null;
+            if (winnerSocket && winnerSocket.user && !room.isPrivate) {
+                const change = serverConfig.rating.calculateChange(1, room.totalPlayersAtStart);
+                try {
+                    await Database.updateRating(winnerSocket.user.username, change);
+                    winnerSocket.user.rating += change;
+                    winnerSocket.emit('rating_update', { change, newRating: winnerSocket.user.rating });
+                } catch (err) {
+                    console.error('Failed to update rating for winner:', err);
+                }
+            }
+            // --- End ---
             
             if (bots.has(winnerId)) {
                 bots.get(winnerId).emit("YouWin");
@@ -506,9 +565,10 @@ function kickPlayer(io, roomId, playerIdToKick, reason = "ルームホストに�
     }
 
     // Notify remaining players in the room
+    const richMembers = [...room.players].map(id => getMemberData(id));
     emitToRoom(io, room, "roomInfo", {
         roomId: room.roomId,
-        members: [...room.players],
+        members: richMembers,
         isPrivate: room.isPrivate,
         hostId: room.hostId
     });

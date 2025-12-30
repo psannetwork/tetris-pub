@@ -9,8 +9,25 @@ import {
 import { drawGame, drawUI, setupCanvases } from './engine/draw.js';
 import * as Effects from './engine/effects.js';
 import { handleInput } from './engine/input.js';
-import { sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState, totalPlayersAtStart } from './network/online.js';
+import { register, login, updateSettings, setAuthCallbacks, sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState, totalPlayersAtStart } from './network/online.js';
 import { showCountdown } from './ui/ui.js';
+
+// --- Auth DOM Elements ---
+let authContainer;
+let loginForm;
+let signupForm;
+let userProfileDisplay;
+let displayNickname;
+let displayRating;
+let loginUsernameInput;
+let loginPasswordInput;
+let signupUsernameInput;
+let signupPasswordInput;
+let signupNicknameInput;
+let settingsModal;
+let settingsNicknameInput;
+let settingsRatingInput;
+let saveSettingsButton;
 
 // --- DOM Elements (Declared as let, assigned in init) ---
 let lobbyOverlay;
@@ -221,20 +238,28 @@ export function setRoomDisplayState(inRoom, isHost = false, roomId = null, membe
         // Populate member list in admin modal (only if not spectating and host)
         if (memberListUl && !isSpectating) { 
             memberListUl.innerHTML = '';
-            members.forEach(memberId => {
+            members.forEach(member => {
+                // Support both ID string (fallback) and rich member object
+                const memberId = typeof member === 'object' ? member.id : member;
+                const displayName = typeof member === 'object' ? member.displayName : member.substring(0, 6);
+                const rating = typeof member === 'object' && member.rating !== null ? ` [R:${member.rating}]` : '';
+
                 const li = document.createElement('li');
-                li.textContent = memberId;
-                if (isHost && memberId !== socket.id) {
-                    const kickButton = document.createElement('button');
-                    kickButton.textContent = 'キック';
-                    kickButton.classList.add('kick-button');
-                    kickButton.dataset.playerId = memberId;
-                    kickButton.onclick = () => {
-                        socket.emit('kickPlayer', { playerIdToKick: memberId });
-                    };
-                    li.appendChild(kickButton);
-                } else if (memberId === socket.id) {
-                    li.innerHTML = `<span>${memberId} (あなた)</span>`;
+                
+                if (memberId === socket.id) {
+                    li.innerHTML = `<span class="self">${displayName}${rating} (あなた)</span>`;
+                } else {
+                    li.textContent = `${displayName}${rating}`;
+                    if (isHost) {
+                        const kickButton = document.createElement('button');
+                        kickButton.textContent = 'キック';
+                        kickButton.classList.add('kick-button');
+                        kickButton.dataset.playerId = memberId;
+                        kickButton.onclick = () => {
+                            socket.emit('kickPlayer', { playerIdToKick: memberId });
+                        };
+                        li.appendChild(kickButton);
+                    }
                 }
                 memberListUl.appendChild(li);
             });
@@ -544,6 +569,79 @@ function updateButtonStates() {
 
 // --- Initialization ---
 function init() {
+    // Auth Elements
+    authContainer = document.getElementById('auth-container');
+    loginForm = document.getElementById('login-form');
+    signupForm = document.getElementById('signup-form');
+    userProfileDisplay = document.getElementById('user-profile-display');
+    displayNickname = document.getElementById('display-nickname');
+    displayRating = document.getElementById('display-rating');
+    loginUsernameInput = document.getElementById('login-username');
+    loginPasswordInput = document.getElementById('login-password');
+    signupUsernameInput = document.getElementById('signup-username');
+    signupPasswordInput = document.getElementById('signup-password');
+    signupNicknameInput = document.getElementById('signup-nickname');
+    settingsModal = document.getElementById('settings-modal');
+    settingsNicknameInput = document.getElementById('settings-nickname');
+    settingsRatingInput = document.getElementById('settings-rating');
+    saveSettingsButton = document.getElementById('save-settings-button');
+
+    // Auth Callbacks
+    setAuthCallbacks({
+        onRegisterSuccess: (data) => {
+            showMessage({ type: 'success', message: '登録が完了しました。ログインしてください。' });
+            signupForm.style.display = 'none';
+            loginForm.style.display = 'block';
+        },
+        onRegisterError: (data) => {
+            showMessage({ type: 'error', message: data.message });
+        },
+        onLoginSuccess: (data) => {
+            showMessage({ type: 'success', message: 'ログインしました。' });
+            authContainer.style.display = 'none';
+            userProfileDisplay.style.display = 'block';
+            mainMenuButtons.style.display = 'block';
+            displayNickname.textContent = data.user.nickname;
+            displayRating.textContent = data.user.rating;
+        },
+        onLoginError: (data) => {
+            showMessage({ type: 'error', message: data.message });
+        },
+        onSettingsUpdated: (data) => {
+            showMessage({ type: 'success', message: '設定を保存しました。' });
+            displayNickname.textContent = data.user.nickname;
+            displayRating.textContent = data.user.rating;
+            closeModal(settingsModal);
+        },
+        onRatingUpdate: (data) => {
+            displayRating.textContent = data.newRating;
+        }
+    });
+
+    // Auth Button Handlers
+    document.getElementById('show-signup-button').onclick = () => {
+        loginForm.style.display = 'none';
+        signupForm.style.display = 'block';
+    };
+    document.getElementById('show-login-button').onclick = () => {
+        signupForm.style.display = 'none';
+        loginForm.style.display = 'block';
+    };
+    document.getElementById('login-button').onclick = () => {
+        login(loginUsernameInput.value, loginPasswordInput.value);
+    };
+    document.getElementById('signup-button').onclick = () => {
+        register(signupUsernameInput.value, signupPasswordInput.value, signupNicknameInput.value);
+    };
+    document.getElementById('edit-settings-button').onclick = () => {
+        settingsNicknameInput.value = displayNickname.textContent;
+        document.getElementById('settings-current-rating').textContent = displayRating.textContent;
+        openModal(settingsModal);
+    };
+    saveSettingsButton.onclick = () => {
+        updateSettings(settingsNicknameInput.value);
+    };
+
     // Assign DOM elements inside init()
     lobbyOverlay = document.getElementById('lobby-overlay');
     mainMenuButtons = document.getElementById('main-menu-buttons');

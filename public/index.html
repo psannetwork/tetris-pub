@@ -39,7 +39,33 @@
   <div id="lobby-overlay">
     <div class="overlay-content">
       <h1 class="lobby-title">Block Battle Royale</h1>
-      <div id="main-menu-buttons">
+      
+      <div id="auth-container">
+        <div id="login-form">
+          <input type="text" id="login-username" placeholder="ユーザー名" class="auth-input">
+          <input type="password" id="login-password" placeholder="パスワード" class="auth-input">
+          <div class="auth-buttons">
+            <button id="login-button" class="lobby-button">ログイン</button>
+            <button id="show-signup-button" class="lobby-button">新規登録へ</button>
+          </div>
+        </div>
+        <div id="signup-form" style="display: none;">
+          <input type="text" id="signup-username" placeholder="ユーザー名" class="auth-input">
+          <input type="password" id="signup-password" placeholder="パスワード" class="auth-input">
+          <input type="text" id="signup-nickname" placeholder="ニックネーム (任意)" class="auth-input">
+          <div class="auth-buttons">
+            <button id="signup-button" class="lobby-button">登録</button>
+            <button id="show-login-button" class="lobby-button">ログインへ</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="user-profile-display" style="display: none;">
+        <p>ようこそ、 <span id="display-nickname"></span> さん (Rate: <span id="display-rating"></span>)</p>
+        <button id="edit-settings-button" class="lobby-button">設定変更</button>
+      </div>
+
+      <div id="main-menu-buttons" style="display: none;">
         <button id="join-public-match-button" class="lobby-button">公開マッチ</button>
         <button id="create-room-button" class="lobby-button">部屋作成</button>
         <button id="join-room-button" class="lobby-button">部屋IDで参加</button>
@@ -51,6 +77,17 @@
         <p><span id="room-host-status"></span></p>
         <button id="host-start-game-button" class="lobby-button" style="display: none;">ゲーム開始</button>
       </div>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal">
+    <div class="modal-content">
+      <h2>ユーザー設定</h2>
+      <label>ニックネーム:</label>
+      <input type="text" id="settings-nickname">
+      <p>現在のレート: <span id="settings-current-rating"></span></p>
+      <button id="save-settings-button">保存</button>
+      <button class="close-modal">閉じる</button>
     </div>
   </div>
 
@@ -110,6 +147,13 @@
   <div id="game-end-overlay">
     <div class="overlay-content">
       <div id="game-end-title" class="menu-title"></div>
+      <div id="rating-change-display" class="rating-change-container" style="display: none;">
+        <span class="rating-label">RATE:</span>
+        <span id="rating-old-value"></span>
+        <span id="rating-arrow">→</span>
+        <span id="rating-new-value"></span>
+        <span id="rating-diff-value"></span>
+      </div>
       <div id="final-ranking-list"></div>
       <div class="menu-buttons">
         <button id="retry-button">Play Again</button>

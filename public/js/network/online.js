@@ -1,7 +1,7 @@
 import { CONFIG } from '../core/config.js';
 import { tetrominoTypeToIndex } from '../engine/draw.js';
 import { MAIN_BOARD_CELL_SIZE, BOARD_WIDTH, BOARD_HEIGHT, ATTACK_BAR_WIDTH, HOLD_BOX_WIDTH, NEXT_BOX_WIDTH, ATTACK_BAR_GAP, HOLD_BOX_GAP, NEXT_BOX_GAP, TOTAL_WIDTH } from '../ui/layout.js';
-import { showCountdown, showGameEndScreen, hideGameEndScreen } from '../ui/ui.js';
+import { showCountdown, showGameEndScreen, hideGameEndScreen, setLastRatingUpdate } from '../ui/ui.js';
 import { resetGame, setGameState, gameState, triggerGameOver, setGameClear, setHoldPiece, setNextPieces, initializePieces } from '../core/game.js';
 import { addAttackBar } from '../core/garbage.js';
 import { createLightOrb, triggerTargetAttackFlash, targetAttackFlashes, addTextEffect, clearAllEffects, triggerReceivedAttackEffect, startMiniboardEntryEffect, miniboardEntryEffects } from '../engine/effects.js'; // Added clearAllEffects and triggerReceivedAttackEffect
@@ -55,43 +55,41 @@ export function initializeSocket() {
     socket.on("connect", () => {
         console.log("✅ サーバーに接続:", socket.id);
         
-        // Update currentSocketId and clear past IDs if this is a fresh connection (or not a reconnect)
         if (currentSocketId && currentSocketId !== socket.id) {
-            myPastSocketIds.add(currentSocketId); // Add previous ID to past IDs
+            myPastSocketIds.add(currentSocketId); 
         }
-        currentSocketId = socket.id; // Update current ID
+        currentSocketId = socket.id; 
 
-        miniboardSlots.forEach(slot => {
-            slot.userId = null;
-        });
-        finalRanking = {}; // Reset on new connection
-        finalStatsMap = {}; // Reset on new connection
-
-        // Start heartbeat
-        if (heartbeatIntervalId) {
-            clearInterval(heartbeatIntervalId);
-        }
-        heartbeatIntervalId = setInterval(() => {
-            if (socket.connected) {
-                socket.emit('heartbeat');
-            }
-        }, HEARTBEAT_INTERVAL_MS);
-
-        if (wasManualDisconnect() && shouldAutoMatchOnReconnect) {
-            setManualDisconnect(false);
-            startMatching(); // auto-retry
-        } else if (wasManualDisconnect()) {
-            // If manual disconnect but auto-match disabled, just go to lobby
-            setManualDisconnect(false);
-            setGameState('LOBBY');
-            hideConnectionError();
-        } else {
-            setGameState('LOBBY'); // Ensure client is in lobby state on connect
-            hideConnectionError();
-        }
+        // 既存のログイン情報があれば再ログインを試みる（任意で追加可能）
     });
 
-        socket.on('targetsUpdate', (targets) => {
+    socket.on('register_success', (data) => {
+        if (authCallbacks.onRegisterSuccess) authCallbacks.onRegisterSuccess(data);
+    });
+
+    socket.on('register_error', (data) => {
+        if (authCallbacks.onRegisterError) authCallbacks.onRegisterError(data);
+    });
+
+    socket.on('login_success', (data) => {
+        if (authCallbacks.onLoginSuccess) authCallbacks.onLoginSuccess(data);
+    });
+
+    socket.on('login_error', (data) => {
+        if (authCallbacks.onLoginError) authCallbacks.onLoginError(data);
+    });
+
+    socket.on('settings_updated', (data) => {
+        if (authCallbacks.onSettingsUpdated) authCallbacks.onSettingsUpdated(data);
+    });
+
+    socket.on('rating_update', (data) => {
+        addTextEffect(`${data.change >= 0 ? '+' : ''}${data.change} RATE`, { style: 'milestone', duration: 2000 });
+        setLastRatingUpdate(data);
+        if (authCallbacks.onRatingUpdate) authCallbacks.onRatingUpdate(data);
+    });
+
+    socket.on('targetsUpdate', (targets) => {
 
             playerTargets = new Map(targets);
 
@@ -107,7 +105,10 @@ export function initializeSocket() {
                             clearAllEffects(); 
 
                             const currentOpponents = new Set(miniboardSlots.filter(s => s.userId).map(s => s.userId));
-                            const newOpponentIds = new Set(data.members.filter(id => id !== socket.id));
+                            
+                            // メンバーがオブジェクト配列（{id, displayName...}）であることを考慮してIDを抽出
+                            const memberIds = data.members.map(m => typeof m === 'object' ? m.id : m);
+                            const newOpponentIds = new Set(memberIds.filter(id => id !== socket.id));
 
                         // Add new opponents
                         newOpponentIds.forEach(id => {
@@ -1404,6 +1405,24 @@ function getAttackBarPosition() {
         x: attackBarRect.left - wrapperRect.left + attackBarRect.width / 2,
         y: attackBarRect.top - wrapperRect.top + attackBarRect.height / 2 
     };
+}
+
+// --- Auth & Settings Callbacks ---
+let authCallbacks = {};
+export function setAuthCallbacks(callbacks) {
+    authCallbacks = { ...authCallbacks, ...callbacks };
+}
+
+export function register(username, password, nickname) {
+    socket.emit('register', { username, password, nickname });
+}
+
+export function login(username, password) {
+    socket.emit('login', { username, password });
+}
+
+export function updateSettings(nickname) {
+    socket.emit('update_settings', { nickname });
 }
 
 export function startMatching() {

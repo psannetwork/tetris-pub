@@ -8,21 +8,73 @@ const gameEndTitle = document.getElementById('game-end-title');
 const countdownOverlay = document.getElementById('countdown-overlay');
 const rankingListContainer = document.getElementById('final-ranking-list');
 
+// --- Rating State ---
+let lastRatingUpdate = null;
+
+export function setLastRatingUpdate(update) {
+    lastRatingUpdate = update;
+    // リザルト画面が既に表示されている場合は、即座にアニメーションを開始する
+    if (gameEndOverlay && gameEndOverlay.classList.contains('visible')) {
+        animateRatingChange();
+    }
+}
+
+function animateRatingChange() {
+    const ratingDisplay = document.getElementById('rating-change-display');
+    if (!ratingDisplay || !lastRatingUpdate) return;
+
+    ratingDisplay.style.display = 'flex';
+    const { change, newRating } = lastRatingUpdate;
+    const oldRating = newRating - change;
+    
+    const oldValEl = document.getElementById('rating-old-value');
+    const newValEl = document.getElementById('rating-new-value');
+    const diffValEl = document.getElementById('rating-diff-value');
+
+    oldValEl.textContent = oldRating;
+    diffValEl.textContent = (change >= 0 ? `+${change}` : change);
+    diffValEl.className = 'rating-diff-value ' + (change >= 0 ? 'plus' : 'minus');
+
+    // アニメーション
+    let current = oldRating;
+    const duration = 1500; // 少し長めの1.5秒
+    const startTime = performance.now();
+
+    const animate = (now) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeOut = 1 - Math.pow(1 - progress, 4); // より滑らかなイージング
+        
+        const displayValue = Math.floor(oldRating + (newRating - oldRating) * easeOut);
+        newValEl.textContent = displayValue;
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        } else {
+            newValEl.textContent = newRating;
+        }
+    };
+    requestAnimationFrame(animate);
+    
+    // 表示後はクリア
+    lastRatingUpdate = null;
+}
+
 /**
  * Controls the game over/win screen overlay.
- * @param {string} title - The message to display (e.g., "You Win!").
- * @param {boolean} isWin - True if it's a win screen.
- * @param {object} rankingMap - A map of userId to their final rank.
- * @param {string} myId - The current user's ID.
- * @param {object} statsMap - A map of userId to their game stats.
  */
 export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {}) {
   if (gameEndOverlay && gameEndTitle && rankingListContainer) {
-    // 1. Set title
     gameEndTitle.textContent = title;
     gameEndTitle.style.color = isWin ? CONFIG.colors.win : CONFIG.colors.lose;
 
-    // 2. Clear previous ranking
+    // レート情報の表示（既に届いている場合）
+    if (lastRatingUpdate) {
+        animateRatingChange();
+    } else {
+        document.getElementById('rating-change-display').style.display = 'none';
+    }
+
     rankingListContainer.innerHTML = '';
 
     // 3. Create a comprehensive list of all players involved.
