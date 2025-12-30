@@ -43,7 +43,7 @@ initializeSocket(io);
 // --- Bot Initialization ---
 if (ENABLE_BOTS) {
     const { bots } = require('./server/bots.js');
-    const { TetrisBot, BASE_AI_PARAMETERS } = require('./bot/bot.js');
+    const { BlockBot, BASE_AI_PARAMETERS } = require('./bot/bot.js');
     const { setIoReference } = require('./server/room.js'); // Import the function
 
     console.log(`🤖 Initializing ${BOT_COUNT} bots...`);
@@ -66,7 +66,7 @@ if (ENABLE_BOTS) {
 
         bots.set(botSocket.id, botSocket);
 
-        new TetrisBot(i, Math.floor(Math.random() * 101), BASE_AI_PARAMETERS, botSocket);
+        new BlockBot(i, Math.floor(Math.random() * 101), BASE_AI_PARAMETERS, botSocket);
 
         handleSocketConnection(io, botSocket);
 

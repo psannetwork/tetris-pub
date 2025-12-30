@@ -101,7 +101,7 @@ export function drawTextEffects() {
                 lineWidth = 3;
                 currentY = effect.initialY - (progress * 60);
                 break;
-            case 'tetris':
+            case 'quad':
                 fontSize = 40 * (1 - progress * 0.5);
                 fillStyle = `rgba(0, 255, 255, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
@@ -646,8 +646,9 @@ export function triggerLineClearEffect(rows, clearType) {
             let particleColors = ['#FFFFFF'];
 
             switch (clearType) {
-                case 'tetris':
-                    particleCount = CONFIG.effects.particleCountTetris || 40;
+                case 'quad':
+                    particleColors = [CONFIG.colors.tetromino[1]]; 
+                    particleCount = CONFIG.effects.particleCountQuad || 40;
                     break;
                 case 'tspin':
                     particleCount = CONFIG.effects.particleCountTspin || 30;

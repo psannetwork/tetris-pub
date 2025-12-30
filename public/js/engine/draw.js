@@ -491,22 +491,20 @@ function drawBlock(ctx, x, y, color, size) {
 
     if (isGarbage) {
         // Draw garbage blocks smaller
-        const border = size * 0.15; // Larger border, making the block smaller
-        ctx.fillStyle = '#222'; // Darker background for garbage cell
+        const border = size * 0.15;
+        ctx.fillStyle = '#222';
         ctx.fillRect(x, y, size, size);
         ctx.fillStyle = baseColor;
         ctx.fillRect(x + border, y + border, size - border * 2, size - border * 2);
     } else {
-        const lighter = lightenDarkenColor(baseColor, CONFIG.effects.lightenDarkenAmount);
-        const darker = lightenDarkenColor(baseColor, -CONFIG.effects.lightenDarkenAmount);
-        ctx.fillStyle = darker;
+        ctx.fillStyle = "#111";
         ctx.fillRect(x, y, size, size);
+        
         ctx.fillStyle = baseColor;
-        ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
-        const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
-        gradient.addColorStop(0, lighter);
-        gradient.addColorStop(1, baseColor);
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x + size * CONFIG.effects.drawBlockBorderRatio, y + size * CONFIG.effects.drawBlockBorderRatio, size * CONFIG.effects.drawBlockFillRatio, size * CONFIG.effects.drawBlockFillRatio);
+        const innerGap = size * 0.05;
+        ctx.fillRect(x + innerGap, y + innerGap, size - innerGap * 2, size - innerGap * 2);
+
+        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.fillRect(x + innerGap, y + innerGap, size - innerGap * 2, (size - innerGap * 2) * 0.2);
     }
 }

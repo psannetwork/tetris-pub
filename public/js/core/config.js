@@ -1,27 +1,22 @@
 'use strict';
-// ゲーム内で使用する各種設定パラメータ
 export const CONFIG = {
     board: {
-      rows: 22,              // 全体の行数（上部は隠し行）
-      visibleRows: 20,       // 表示される行数
-      cols: 10,              // カラム数
+      rows: 22,
+      visibleRows: 20,
+      cols: 10,
     },
-    // 落下間隔（レベルに応じて後で調整可能）
-    dropInterval: 1000,      // ミリ秒単位
-    // 得点設定
+    dropInterval: 1000,
     scoring: {
-        single: 100, double: 300, triple: 500, tetris: 800,
+        single: 100, double: 300, triple: 500, quad: 800,
         tspin: 400, tspinSingle: 800, tspinDouble: 1200, tspinTriple: 1600,
         tspinMini: 100, perfectClear: 1000, perfectClearSingle: 800, perfectClearDouble: 1000,
-        perfectClearTriple: 1800, perfectClearTetris: 2000, drop: 2
+        perfectClearTriple: 1800, perfectClearQuad: 2000, drop: 2
     },
-    // 色設定
     colors: {
         background: "#2c3e50",
         boardBackground: "#222",
-        // インデックス： 1:I, 2:J, 3:L, 4:O, 5:S, 6:T, 7:Z
         tetromino: [
-            null, "#3498db", "#2980b9", "#e67e22", "#f1c40f", "#2ecc71", "#9b59b6", "#e74c3c"
+            null, "#d63031", "#00b894", "#fdcb6e", "#6c5ce7", "#0984e3", "#e17055", "#b2bec3"
         ],
         ghost: "rgba(255,255,255,0.2)",
         garbage: "#888",
@@ -43,7 +38,6 @@ export const CONFIG = {
     tetromino: {
         borderWidth: 2,
     },
-    // エフェクト設定
     effects: {
         lineClearDuration: 250,
         tspinEffectDuration: 1000,
@@ -60,7 +54,7 @@ export const CONFIG = {
         tspinEffectFontSizeBase: 40,
         tspinEffectFontSizeShrink: 0.5,
         tspinEffectMoveUp: 30,
-        particleCountTetris: 40,
+        particleCountQuad: 40,
         particleCountTspin: 30,
         particleCountB2B: 20,
         particleCountCombo: 15,
@@ -73,21 +67,20 @@ export const CONFIG = {
         scoreUpdateScaleFactor: 0.2,
         targetAttackFlashDuration: 200,
         targetAttackFlashOpacity: 0.5,
-        attackBarFlashSpeed: 100, // ms
-        attackBarFlashTime1: 12000, // ms (red and white flash)
-        attackBarFlashTime2: 8000,  // ms (red)
-        attackBarFlashTime3: 4000,  // ms (yellow)
-        screenShakeIntensityFactor: 0.5, // Multiplier for screen shake intensity
-        screenShakeEaseOutFactor: 2, // Exponent for ease-out effect (e.g., 2 for quadratic)
+        attackBarFlashSpeed: 100,
+        attackBarFlashTime1: 12000,
+        attackBarFlashTime2: 8000,
+        attackBarFlashTime3: 4000,
+        screenShakeIntensityFactor: 0.5,
+        screenShakeEaseOutFactor: 2,
         ghostPieceOpacity: 0.3,
         lineClearEffectOpacity: 0.8,
-        particleGravity: 0.1, // Default particle gravity
+        particleGravity: 0.1,
         drawBlockBorderRatio: 0.1,
         drawBlockFillRatio: 0.8,
-        lightenDarkenAmount: 30, // Amount to lighten/darken colors
-        scoreUpdateEffectDuration: 200, // ms
-        scoreUpdateScaleFactor: 0.2, // Max scale increase for score update
-        // Performance-related effect settings
+        lightenDarkenAmount: 30,
+        scoreUpdateEffectDuration: 200,
+        scoreUpdateScaleFactor: 0.2,
         enableParticleEffects: true,
         enableOrbEffects: true,
         enableTextEffects: true,
@@ -95,8 +88,8 @@ export const CONFIG = {
         enableComboEffects: true,
         enablePerfectClearEffects: true,
         enableAttackEffects: true,
-        enableTimeoutEffects: true, // NEW: Enable timeout effects
-        enableMiniboardEntryEffects: true, // NEW: Enable miniboard entry effects
+        enableTimeoutEffects: true,
+        enableMiniboardEntryEffects: true,
         maxParticlesPerClear: 100,
         maxOrbs: 20,
         appearanceParticleCount: 6,
@@ -109,7 +102,6 @@ export const CONFIG = {
         perfectClearFlashDuration: 800,
         attackFlashDuration: 250,
     },
-    // UI設定
     ui: {
         fontFamily: "'Exo 2', sans-serif",
         fontSize: "1rem",
@@ -135,8 +127,6 @@ export const CONFIG = {
         nextBoxHeight: 324,
         scoreAreaHeight: 100,
     },
-
-    // キーバインディング
     keyBindings: {
         rotateCCW: "KeyZ", rotateCW: "KeyX", moveLeft: "ArrowLeft", moveRight: "ArrowRight",
         softDrop: "ArrowDown", hardDrop: "Space", hold: "KeyC"
@@ -150,8 +140,6 @@ export const CONFIG = {
     },
     MAX_MINIBOARDS_PER_SIDE: 40,
     serverUrl: 'https://tetris.psannetwork.net',
-
-    // テトリミノの形状定義
     TETROMINOES: {
         I: { shape: [[[-1, 0], [0, 0], [1, 0], [2, 0]], [[1, -1], [1, 0], [1, 1], [1, 2]], [[-1, 1], [0, 1], [1, 1], [2, 1]], [[0, -1], [0, 0], [0, 1], [0, 2]]] },
         J: { shape: [[[-1, -1], [-1, 0], [0, 0], [1, 0]], [[0, -1], [0, 0], [0, 1], [1, -1]], [[-1, 0], [0, 0], [1, 0], [1, 1]], [[-1, 1], [0, -1], [0, 0], [0, 1]]] },
@@ -162,5 +150,3 @@ export const CONFIG = {
         Z: { shape: [[[-1, -1], [0, -1], [0, 0], [1, 0]], [[1, -1], [0, 0], [1, 0], [0, 1]], [[-1, 0], [0, 0], [0, 1], [1, 1]], [[0, -1], [-1, 0], [0, 0], [-1, 1]]] }
     }
 };
-
-  

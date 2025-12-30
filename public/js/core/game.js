@@ -395,7 +395,7 @@ export function lockPiece() {
         if (tSpin.detected) {
             clearType = 'tspin';
         } else if (lines.length === 4) {
-            clearType = 'tetris';
+            clearType = 'quad';
         } else if (ren > 1) {
             clearType = 'combo';
         } else if (lines.length > 0) {
@@ -429,7 +429,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
             const tSpinText = tSpin.mini ? 'T-SPIN MINI' : `T-SPIN ${['', 'SINGLE', 'DOUBLE', 'TRIPLE'][lines.length]}`.trim();
             Effects.addTextEffect(tSpinText, { style: 'tspin', duration: 800 });
         } else if (lines.length === 4) {
-            Effects.addTextEffect('TETRIS', { style: 'tetris', duration: 800 });
+            Effects.addTextEffect('QUAD CLEAR', { style: 'quad', duration: 800 });
         }
 
         if (ren > 1) {
@@ -458,7 +458,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
             case 1: pts = CONFIG.scoring.single; break;
             case 2: pts = CONFIG.scoring.double; break;
             case 3: pts = CONFIG.scoring.triple; break;
-            case 4: pts = CONFIG.scoring.tetris; break;
+            case 4: pts = CONFIG.scoring.quad; break;
         }
         score += pts;
         if (pts > 0) Effects.triggerScoreUpdateEffect();
@@ -478,7 +478,7 @@ function finishLineClear(lines, lockedPiece, tSpin) {
         if (lockedPiece.type === 'T' && tSpin.detected) {
             clearTypeForAttack = tSpin.mini ? 'tsmini' : (lines.length === 1 ? 'tsingle' : lines.length === 2 ? 'tsdouble' : 'tstriple');
         } else {
-            clearTypeForAttack = lines.length === 1 ? 'single' : lines.length === 2 ? 'double' : lines.length === 3 ? 'triple' : lines.length === 4 ? 'tetris' : 'none';
+            clearTypeForAttack = lines.length === 1 ? 'single' : lines.length === 2 ? 'double' : lines.length === 3 ? 'triple' : lines.length === 4 ? 'quad' : 'none';
         }
 
         const firepower = sendFirepower(clearTypeForAttack, btb, ren, isPerfectClear, 0, lines);
@@ -526,7 +526,7 @@ function calculateFirepower(clearType, btb, ren, perfectClear, targetCount) {
         case 'single': base = 0; break;
         case 'double': base = 1; break;
         case 'triple': base = 2; break;
-        case 'tetris': base = 4; break;
+        case 'quad': base = 4; break;
         case 'tsmini': base = 0; break;
         case 'tsingle': base = 2; break;
         case 'tsdouble': base = 4; break;

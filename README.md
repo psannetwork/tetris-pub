@@ -1,4 +1,4 @@
-# テトリス 99 Web
+# Block Battle Royale
 
 ## 操作方法
 

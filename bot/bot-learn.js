@@ -1,7 +1,7 @@
 'use strict';
 
 const fs = require('fs');
-const { TetrisBot } = require('./bot-ws.js');
+const { BlockBot } = require('./bot-ws.js');
 const { BASE_AI_PARAMETERS } = require('./parameters.js');
 
 // --- Learning Parameters ---
@@ -147,7 +147,7 @@ class BotTrainer {
         return new Promise((resolve, reject) => {
             try {
                 // Create bot with proper callback interface
-                const bot = new TetrisBot(
+                const bot = new BlockBot(
                     individual.id + '-' + Date.now(), // Unique ID to prevent conflicts
                     100,
                     individual.params,

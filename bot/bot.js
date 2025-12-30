@@ -67,7 +67,7 @@ function computeSendGarbage(piece, linesCleared, renChain, boardAfterClear) {
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
-class TetrisBot {
+class BlockBot {
   constructor(index, strength, aiParams, socket) {
     this.index = index;
     this.strength = strength;
@@ -180,4 +180,4 @@ class TetrisBot {
   }
 }
 
-module.exports = { TetrisBot, BASE_AI_PARAMETERS };
+module.exports = { BlockBot, BASE_AI_PARAMETERS };

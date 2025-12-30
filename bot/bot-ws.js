@@ -378,7 +378,7 @@ function computeSendGarbage(piece,linesCleared,renChain,boardAfterClear) {
   return g;
 }
 
-class TetrisBot {
+class BlockBot {
   constructor(index,strength,aiParams, onGameOver = null, enableAnimation = true, moveDelay = BOT_MOVE_DELAY, noReconnect = false) {
     this.index=index;
     this.strength=strength;
@@ -498,4 +498,4 @@ class TetrisBot {
   }
 }
 
-module.exports = { TetrisBot };
+module.exports = { BlockBot };

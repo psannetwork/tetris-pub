@@ -75,8 +75,7 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
 }
 
 export function showPerfectClearMessage() {
-  addTextEffect('PERFECT CLEAR', { style: 'tetris', duration: 2000 });
-}
+      addTextEffect('PERFECT CLEAR', { style: 'quad', duration: 2000 });}
 
 /**
  * Updates the countdown state (now handled in canvas drawing).
