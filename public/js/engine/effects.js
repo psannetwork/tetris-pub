@@ -1,8 +1,13 @@
 import { CONFIG } from '../core/config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from '../ui/layout.js';
-import { getMainBoardOffset, tetrominoTypeToIndex } from './draw.js';
 import { currentCountdown, getBoardCenterPosition, miniboardSlots, requestMiniboardRedraw } from '../network/online.js';
 import { gameState } from '../core/game.js';
+
+// Helper to avoid circular dependency with draw.js
+function getTetrominoTypeToIndex(type) {
+    const types = Object.keys(CONFIG.TETROMINOES);
+    return types.indexOf(type);
+}
 
 export let effects = [];
 export let textEffects = [];
@@ -536,10 +541,6 @@ function drawCountdown(ctx, count) {
 }
 
 export function drawOrbs() {
-    if (gameState !== 'LOBBY' && currentCountdown !== null && currentCountdown !== '' && currentCountdown !== 0) {
-        drawCountdown(effectsCtx, currentCountdown);
-    }
-
     // Simplify orb drawing
     for (let i = 0; i < orbs.length; i++) {
         orbs[i].draw(effectsCtx);

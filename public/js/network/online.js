@@ -861,7 +861,7 @@ export function initializeSocket() {
 
             
 
-                                                                                socket.on('matching', () => {
+                                                                                                                                                                socket.on('matching', () => {
 
             
 
@@ -869,7 +869,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    console.log("サーバーからの指示でロビーに戻ります");
+                                                                                
 
             
 
@@ -877,7 +877,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    hideMessage(); // Clear any persistent messages
+                                                                                                                                                                    console.log("サーバーからの指示でロビーに戻ります");
 
             
 
@@ -885,7 +885,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    resetOnlineState(); // NEW: Reset online state (countdown, etc.)
+                                                                                
 
             
 
@@ -893,7 +893,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    setGameState('LOBBY');
+                                                                                                                                                                    hideMessage(); // Clear any persistent messages
 
             
 
@@ -901,7 +901,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    resetGame();
+                                                                                
 
             
 
@@ -909,7 +909,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    setRoomDisplayState(false); // Go back to main lobby view
+                                                                                                                                                                    resetOnlineState(); // NEW: Reset online state (countdown, etc.)
 
             
 
@@ -917,7 +917,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    hideGameEndScreen();
+                                                                                
 
             
 
@@ -925,7 +925,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    hideConnectionError();
+                                                                                                                                                                    setGameState('LOBBY');
 
             
 
@@ -933,7 +933,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    // Ensure spectating is turned off
+                                                                                
 
             
 
@@ -941,7 +941,7 @@ export function initializeSocket() {
 
             
 
-                                                                                    setSpectating(false);
+                                                                                                                                                                    resetGame();
 
             
 
@@ -949,7 +949,119 @@ export function initializeSocket() {
 
             
 
-                                                                                });
+                                                                                
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    setRoomDisplayState(false); // Go back to main lobby view
+
+            
+
+                                            
+
+            
+
+                                                                                
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    hideGameEndScreen();
+
+            
+
+                                            
+
+            
+
+                                                                                
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    hideConnectionError();
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    // Force a UI redraw to clear any remaining text
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    drawUI();
+
+            
+
+                                            
+
+            
+
+                                                                                
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    // Ensure spectating is turned off
+
+            
+
+                                            
+
+            
+
+                                                                                
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                    setSpectating(false);
+
+            
+
+                                            
+
+            
+
+                                                                                
+
+            
+
+                                            
+
+            
+
+                                                                                                                                                                });
 
             
 

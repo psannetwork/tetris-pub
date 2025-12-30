@@ -213,11 +213,49 @@ export function drawUI() {
     }
 }
 
+import { gameState } from '../core/game.js';
+
+function drawCountdown() {
+    if (!uiCtx || !currentCountdown) return;
+
+    // 観戦中やロビー画面ではカウントダウン/待機メッセージを表示しない
+    if (gameState === 'LOBBY' || isSpectating) return;
+
+    uiCtx.save();
+    
+    // カウントダウン表示の設定
+    const centerX = uiCanvas.width / 2;
+    const centerY = uiCanvas.height / 2;
+    
+    uiCtx.textAlign = 'center';
+    uiCtx.textBaseline = 'middle';
+    
+    if (typeof currentCountdown === 'number') {
+        // 数字のカウントダウン
+        uiCtx.font = `bold 100px ${CONFIG.ui.fontFamily}`;
+        uiCtx.fillStyle = '#fff';
+        uiCtx.strokeStyle = '#000';
+        uiCtx.lineWidth = 5;
+        uiCtx.strokeText(currentCountdown, centerX, centerY);
+        uiCtx.fillText(currentCountdown, centerX, centerY);
+    } else {
+        // 「プレイヤーを待機中です...」などの文字列
+        uiCtx.font = `bold 30px ${CONFIG.ui.fontFamily}`;
+        uiCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        uiCtx.fillText(currentCountdown, centerX, centerY);
+    }
+    
+    uiCtx.restore();
+}
+
 function drawUIElements() {
     if (!uiCtx) return;
 
     // Clear the UI canvas
     uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+    
+    // Draw Countdown or Waiting messages
+    drawCountdown();
 
     // Draw score and time information on the UI canvas
     if (scoreDisplay) {
