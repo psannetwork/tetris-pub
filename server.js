@@ -6,13 +6,9 @@ const cors = require("cors");
 const { initializeSocket, handleSocketConnection } = require("./server/socket/index.js");
 const { rooms, trackSocketConnection } = require("./server/room.js");
 const EventEmitter = require('events');
+const serverConfig = require("./server/config.js");
 
-// --- Bot Configuration ---
-const ENABLE_BOTS = true;
-const BOT_COUNT = 98;
-// -------------------------
-
-const PORT = process.env.PORT || 6000;
+const PORT = serverConfig.server.port;
 
 const app = express();
 const server = http.createServer(app);
@@ -96,6 +92,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('resume_session', async (data) => {
+    try {
+      if (!data.username) return;
+      const user = await Database.getUser(data.username);
+      if (user) {
+        socket.user = user;
+        socket.emit('login_success', { user, isResume: true });
+      }
+    } catch (err) {
+      console.error('Session resume error:', err);
+    }
+  });
+
+  socket.on('logout', () => {
+    socket.user = null;
+    socket.emit('logout_success');
+  });
+
   socket.on('update_settings', async (data) => {
     if (!socket.user) return;
     try {
@@ -111,17 +125,17 @@ io.on('connection', (socket) => {
 });
 
 // --- Bot Initialization ---
-if (ENABLE_BOTS) {
+if (serverConfig.server.enableBots) {
     const { bots } = require('./server/bots.js');
     const { BlockBot, BASE_AI_PARAMETERS } = require('./bot/bot.js');
     const { setIoReference } = require('./server/room.js'); // Import the function
 
-    console.log(`🤖 Initializing ${BOT_COUNT} bots...`);
+    console.log(`🤖 Initializing ${serverConfig.server.botCount} bots...`);
 
     // Set the io reference for room timeout functionality
     setIoReference(io);
 
-    for (let i = 0; i < BOT_COUNT; i++) {
+    for (let i = 0; i < serverConfig.server.botCount; i++) {
         const botSocket = new EventEmitter();
         botSocket.id = `bot_${i}`;
         botSocket.isBot = true; // Flag to identify bot sockets

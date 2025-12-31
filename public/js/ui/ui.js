@@ -13,16 +13,22 @@ let lastRatingUpdate = null;
 
 export function setLastRatingUpdate(update) {
     lastRatingUpdate = update;
-    // リザルト画面が既に表示されている場合は、即座にアニメーションを開始する
+    // リザルト画面が既に表示されている場合は、少し遅れてアニメーションを開始する
     if (gameEndOverlay && gameEndOverlay.classList.contains('visible')) {
-        animateRatingChange();
+        setTimeout(() => {
+            animateRatingChange();
+        }, 500);
     }
 }
 
 function animateRatingChange() {
     const ratingDisplay = document.getElementById('rating-change-display');
-    if (!ratingDisplay || !lastRatingUpdate) return;
+    if (!ratingDisplay || !lastRatingUpdate) {
+        console.warn("animateRatingChange: Missing ratingDisplay or lastRatingUpdate", { ratingDisplay: !!ratingDisplay, lastRatingUpdate });
+        return;
+    }
 
+    console.log("🎬 Starting rating animation", lastRatingUpdate);
     ratingDisplay.style.display = 'flex';
     const { change, newRating } = lastRatingUpdate;
     const oldRating = newRating - change;
@@ -65,19 +71,11 @@ function animateRatingChange() {
  */
 export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {}) {
   if (gameEndOverlay && gameEndTitle && rankingListContainer) {
-    // --- 1. Rating Change Animation (Start this first) ---
-    const ratingDisplay = document.getElementById('rating-change-display');
-    if (lastRatingUpdate) {
-        animateRatingChange();
-    } else if (ratingDisplay) {
-        ratingDisplay.style.display = 'none';
-    }
-
-    // --- 2. Set title ---
+    // --- 1. Set title ---
     gameEndTitle.textContent = title;
     gameEndTitle.style.color = isWin ? CONFIG.colors.win : CONFIG.colors.lose;
 
-    // 3. Clear previous ranking
+    // 2. Clear previous ranking
     rankingListContainer.innerHTML = '';
 
     // 3. Create a comprehensive list of all players involved.
@@ -121,6 +119,18 @@ export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {})
 
     // 6. Show the overlay
     gameEndOverlay.classList.add('visible');
+
+    // --- 7. Rating Change Animation (Start this AFTER showing overlay) ---
+    const ratingDisplay = document.getElementById('rating-change-display');
+    if (lastRatingUpdate) {
+        // Delay slightly so the user sees the animation starting
+        setTimeout(() => {
+            animateRatingChange();
+        }, 500);
+    } else if (ratingDisplay) {
+        ratingDisplay.style.display = 'none';
+    }
+
     // NEW: Enable spectate button if it exists
     const spectateBtn = document.getElementById('spectate-button');
     if (spectateBtn) {

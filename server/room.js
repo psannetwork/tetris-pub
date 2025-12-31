@@ -399,6 +399,9 @@ async function handleGameOver(io, socket, reason, stats) {
 
     if (room.isGameOver) return;
 
+    // ボットの全滅待機用セットを初期化（まだなければ）
+    if (!room.botsGameOver) room.botsGameOver = new Set();
+
     if (!room.totalPlayersAtStart) {
         room.totalPlayersAtStart = room.initialPlayers.size;
     }
@@ -415,6 +418,11 @@ async function handleGameOver(io, socket, reason, stats) {
         ranks.push(socket.id);
         
         console.log(`[RANK] Room ${roomId}: ${socket.id} secured Rank ${rankValue}`);
+
+        // ボットがゲームオーバーになった場合、追跡セットに追加
+        if (bots.has(socket.id)) {
+            room.botsGameOver.add(socket.id);
+        }
 
         // --- Rating Logic Start ---
         if (!room.isPrivate && socket.user) {
@@ -439,6 +447,7 @@ async function handleGameOver(io, socket, reason, stats) {
         const winnerId = [...room.initialPlayers].find(id => !ranks.includes(id));
         if (winnerId) {
             ranks.push(winnerId);
+            if (bots.has(winnerId)) room.botsGameOver.add(winnerId);
             console.log(`[RANK] Room ${roomId}: ${winnerId} is the WINNER (Rank 1)`);
 
             // --- Winner Rating Logic ---
@@ -463,9 +472,10 @@ async function handleGameOver(io, socket, reason, stats) {
         }
 
         broadcastRanking(io, room);
-        // ... (GameOver notifications)
 
         // GameOver通知
+        const botsInRoom = [...room.initialPlayers].filter(id => bots.has(id));
+        
         for (const playerId of room.initialPlayers) {
             if (playerId !== winnerId) {
                 if (reason === "connection timeout" && playerId === socket.id) continue;
@@ -477,6 +487,31 @@ async function handleGameOver(io, socket, reason, stats) {
             }
         }
         if (io) emitToSpectators(io, room.roomId, "GameOver");
+
+        // --- BOT_START_WITH Synchronized Retry Logic ---
+        if (serverConfig.server.botStartWith) {
+            // 全てのボットがゲームオーバー（または優勝）になるのを待つ
+            const checkAllBotsDone = () => {
+                const allBotsDone = botsInRoom.every(id => room.botsGameOver.has(id));
+                if (allBotsDone) {
+                    console.log(`[BOT] All ${botsInRoom.length} bots finished in room ${roomId}. Synchronizing retry.`);
+                    botsInRoom.forEach(id => {
+                        const bot = bots.get(id);
+                        if (bot) bot.emit('matching');
+                    });
+                } else {
+                    // まだ終わっていないボットがいる場合は、少し待って再チェック
+                    setTimeout(checkAllBotsDone, 1000);
+                }
+            };
+            checkAllBotsDone();
+        } else {
+            // 個別に即時リトライ（従来通り）
+            botsInRoom.forEach(id => {
+                const bot = bots.get(id);
+                if (bot) bot.emit('matching');
+            });
+        }
 
         // プライベートルームのリセット処理
         if (room.isPrivate) {

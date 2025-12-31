@@ -127,12 +127,6 @@ class BlockBot {
       await delay(BOT_MOVE_DELAY);
     }
     this.socket.emit('PlayerGameStatus', 'gameover');
-    if (AUTO_REMATCH) {
-      setTimeout(() => {
-        if (this.isLocal) this.socket.emit('matching');
-        else this.connect();
-      }, 10000);
-    }
   }
 
   applyGarbage() {

@@ -9,10 +9,33 @@ import {
 import { drawGame, drawUI, setupCanvases } from './engine/draw.js';
 import * as Effects from './engine/effects.js';
 import { handleInput } from './engine/input.js';
-import { register, login, updateSettings, setAuthCallbacks, sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState, totalPlayersAtStart } from './network/online.js';
+import { register, login, logout, resumeSession, updateSettings, setAuthCallbacks, sendBoardStatus, connectToServer, startMatching, currentCountdown, drawAllMiniBoards, startAnimationIfNeeded, socket, setManualDisconnect, setAutoMatchOnReconnect, setCurrentRoomId, getCurrentRoomId, isSpectating, setSpectating, spectateRoom, requestPublicRooms, setPublicRoomsListCallback, setSpectateRoomInfoCallback, miniboardSlots, addOpponent, removeOpponent, drawTargetLines, finalRanking, finalStatsMap, resetRankingData, processMiniboardRedrawRequest, resetOnlineState, totalPlayersAtStart } from './network/online.js';
 import { showCountdown } from './ui/ui.js';
 
+// --- Cookie Helpers ---
+function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+function eraseCookie(name) {
+    document.cookie = name + '=; Max-Age=-99999999;path=/;SameSite=Lax';
+}
+
 // --- Auth DOM Elements ---
+let currentUser = null; // Persist user data across socket re-initialization
 let authContainer;
 let loginForm;
 let signupForm;
@@ -102,8 +125,12 @@ let currentKeyBindings = {};
 let activeBindingButton = null;
 
 function setupSettingsUI(user) {
-    settingsNicknameInput.value = user.nickname || user.username;
-    document.getElementById('settings-current-rating').textContent = user.rating;
+    if (!user) {
+        console.warn("setupSettingsUI: No user data provided");
+        return;
+    }
+    settingsNicknameInput.value = user.nickname || user.username || "";
+    document.getElementById('settings-current-rating').textContent = user.rating || 0;
 
     currentKeyBindings = { ...CONFIG.keyBindings };
     if (user.settings && user.settings.keyBindings) {
@@ -656,7 +683,10 @@ function init() {
             showMessage({ type: 'error', message: data.message });
         },
         onLoginSuccess: (data) => {
-            showMessage({ type: 'success', message: 'ログインしました。' });
+            if (!data.isResume) {
+                showMessage({ type: 'success', message: 'ログインしました。' });
+                setCookie('session_username', data.user.username, 30);
+            }
             authContainer.style.display = 'none';
             userProfileDisplay.style.display = 'block';
             mainMenuButtons.style.display = 'block';
@@ -667,7 +697,20 @@ function init() {
                 applyCustomSettings(data.user.settings);
                 setupCanvases();
             }
-            socket.user = data.user;
+            currentUser = data.user;
+            if (socket) socket.user = data.user;
+        },
+        onLogoutSuccess: () => {
+            eraseCookie('session_username');
+            currentUser = null;
+            if (socket) socket.user = null;
+            userProfileDisplay.style.display = 'none';
+            mainMenuButtons.style.display = 'none';
+            authContainer.style.display = 'block';
+            showMessage({ type: 'info', message: 'ログアウトしました。' });
+            // リセット設定
+            applyCustomSettings(CONFIG.defaultSettings || {});
+            setupCanvases();
         },
         onLoginError: (data) => {
             showMessage({ type: 'error', message: data.message });
@@ -676,12 +719,17 @@ function init() {
             showMessage({ type: 'success', message: '設定を保存しました。' });
             displayNickname.textContent = data.user.nickname;
             displayRating.textContent = data.user.rating;
+            currentUser = data.user;
+            if (socket) socket.user = data.user;
             applyCustomSettings(data.user.settings);
             setupCanvases();
             closeModal(settingsModal);
         },
         onRatingUpdate: (data) => {
             displayRating.textContent = data.newRating;
+            if (currentUser) {
+                currentUser.rating = data.newRating;
+            }
         }
     });
 
@@ -701,7 +749,11 @@ function init() {
         register(signupUsernameInput.value, signupPasswordInput.value, signupNicknameInput.value);
     };
     document.getElementById('edit-settings-button').onclick = () => {
-        setupSettingsUI(socket.user);
+        if (!currentUser) {
+            showMessage({ type: 'error', message: 'ユーザー情報が見つかりません。再ログインしてください。' });
+            return;
+        }
+        setupSettingsUI(currentUser);
         openModal(settingsModal);
     };
     saveSettingsButton.onclick = () => {
@@ -1083,7 +1135,18 @@ function init() {
         };
     };
 
+    if (document.getElementById('logout-button')) {
+        document.getElementById('logout-button').onclick = () => {
+            logout();
+        };
+    }
 
+    // Check for existing session
+    const savedUsername = getCookie('session_username');
+    if (savedUsername) {
+        console.log("Found saved session for:", savedUsername);
+        resumeSession(savedUsername);
+    }
 }
 
 // --- Public Functions ---

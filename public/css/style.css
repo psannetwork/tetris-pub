@@ -457,6 +457,7 @@ html, body {
     display: flex;
     align-items: center;
     gap: 20px;
+    animation: slideInDown 0.5s ease-out;
 }
 
 @keyframes slideInDown {

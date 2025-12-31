@@ -75,6 +75,10 @@ export function initializeSocket() {
         if (authCallbacks.onLoginSuccess) authCallbacks.onLoginSuccess(data);
     });
 
+    socket.on('logout_success', () => {
+        if (authCallbacks.onLogoutSuccess) authCallbacks.onLogoutSuccess();
+    });
+
     socket.on('login_error', (data) => {
         if (authCallbacks.onLoginError) authCallbacks.onLoginError(data);
     });
@@ -84,6 +88,7 @@ export function initializeSocket() {
     });
 
     socket.on('rating_update', (data) => {
+        console.log("⭐ Rating Update Received:", data);
         addTextEffect(`${data.change >= 0 ? '+' : ''}${data.change} RATE`, { style: 'milestone', duration: 2000 });
         setLastRatingUpdate(data);
         if (authCallbacks.onRatingUpdate) authCallbacks.onRatingUpdate(data);
@@ -1540,6 +1545,14 @@ export function register(username, password, nickname) {
 
 export function login(username, password) {
     socket.emit('login', { username, password });
+}
+
+export function logout() {
+    socket.emit('logout');
+}
+
+export function resumeSession(username) {
+    socket.emit('resume_session', { username });
 }
 
 export function updateSettings(nickname) {
