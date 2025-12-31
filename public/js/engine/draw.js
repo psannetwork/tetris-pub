@@ -240,8 +240,11 @@ function drawCountdown() {
         uiCtx.fillText(currentCountdown, centerX, centerY);
     } else {
         // 「プレイヤーを待機中です...」などの文字列
-        uiCtx.font = `bold 30px ${CONFIG.ui.fontFamily}`;
-        uiCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        uiCtx.font = `bold 60px ${CONFIG.ui.fontFamily}`;
+        uiCtx.fillStyle = '#fff';
+        uiCtx.strokeStyle = '#000';
+        uiCtx.lineWidth = 4;
+        uiCtx.strokeText(currentCountdown, centerX, centerY);
         uiCtx.fillText(currentCountdown, centerX, centerY);
     }
     

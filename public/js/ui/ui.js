@@ -65,16 +65,19 @@ function animateRatingChange() {
  */
 export function showGameEndScreen(title, isWin, rankingMap, myId, statsMap = {}) {
   if (gameEndOverlay && gameEndTitle && rankingListContainer) {
+    // --- 1. Rating Change Animation (Start this first) ---
+    const ratingDisplay = document.getElementById('rating-change-display');
+    if (lastRatingUpdate) {
+        animateRatingChange();
+    } else if (ratingDisplay) {
+        ratingDisplay.style.display = 'none';
+    }
+
+    // --- 2. Set title ---
     gameEndTitle.textContent = title;
     gameEndTitle.style.color = isWin ? CONFIG.colors.win : CONFIG.colors.lose;
 
-    // レート情報の表示（既に届いている場合）
-    if (lastRatingUpdate) {
-        animateRatingChange();
-    } else {
-        document.getElementById('rating-change-display').style.display = 'none';
-    }
-
+    // 3. Clear previous ranking
     rankingListContainer.innerHTML = '';
 
     // 3. Create a comprehensive list of all players involved.

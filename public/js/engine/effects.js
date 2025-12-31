@@ -2,6 +2,7 @@ import { CONFIG } from '../core/config.js';
 import { BOARD_WIDTH, BOARD_HEIGHT, CELL_SIZE } from '../ui/layout.js';
 import { currentCountdown, getBoardCenterPosition, miniboardSlots, requestMiniboardRedraw } from '../network/online.js';
 import { gameState } from '../core/game.js';
+import { getMainBoardOffset } from './draw.js';
 
 // Helper to avoid circular dependency with draw.js
 function getTetrominoTypeToIndex(type) {
@@ -63,73 +64,80 @@ export function drawTextEffects() {
     if (!CONFIG.effects.enableTextEffects) return; 
 
     const now = performance.now();
+    // 描画位置をずらすためのカウンタ
+    let styleOffsets = {
+        milestone: 0,
+        gameplay: 0 // combo, clear types, etc.
+    };
+
     for (let i = 0; i < textEffects.length; i++) {
         const effect = textEffects[i];
         const progress = (now - effect.startTime) / effect.duration;
         if (progress >= 1) continue;
-        
-        // ... (rest of drawing code)
-
 
         effectsCtx.save();
         effectsCtx.textAlign = 'center';
 
         let fontSize, fillStyle, strokeStyle, lineWidth, currentY;
+        const isMilestone = effect.style === 'milestone';
+        
+        // 同じスタイルのエフェクトが複数ある場合に位置をずらす
+        const stackIndex = isMilestone ? styleOffsets.milestone++ : styleOffsets.gameplay++;
+        const stackYOffset = stackIndex * 40; // 40pxずつずらす
 
-        // ... (rest of the switch statement is the same)
         switch (effect.style) {
             case 'milestone':
-                fontSize = 60 + Math.sin(progress * Math.PI) * 20; // Pulsing size
-                fillStyle = `rgba(0, 243, 255, ${1 - Math.pow(progress, 4)})`; // Cyan fading slowly
+                fontSize = 60 + Math.sin(progress * Math.PI) * 20;
+                fillStyle = `rgba(0, 243, 255, ${1 - Math.pow(progress, 4)})`;
                 strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 lineWidth = 5;
-                currentY = effect.initialY; // Stay in center
+                currentY = effect.initialY + stackYOffset; 
                 break;
             case 'ko':
                 fontSize = 70 * (1 - progress * 0.3);
                 fillStyle = `rgba(255, 0, 85, ${1 - progress})`;
                 strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 lineWidth = 4;
-                currentY = effect.initialY - (progress * 100);
+                currentY = (effect.initialY - (progress * 100)) + stackYOffset;
                 break;
             case 'b2b':
                 fontSize = 35 * (1 - progress * 0.5);
                 fillStyle = `rgba(255, 165, 0, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 3;
-                currentY = effect.initialY - (progress * 60);
+                currentY = (effect.initialY - (progress * 60)) + stackYOffset;
                 break;
             case 'tspin':
                 fontSize = 35 * (1 - progress * 0.5);
                 fillStyle = `rgba(148, 0, 211, ${1 - progress})`;
                 strokeStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 lineWidth = 3;
-                currentY = effect.initialY - (progress * 60);
+                currentY = (effect.initialY - (progress * 60)) + stackYOffset;
                 break;
             case 'quad':
                 fontSize = 40 * (1 - progress * 0.5);
                 fillStyle = `rgba(0, 255, 255, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 3;
-                currentY = effect.initialY - (progress * 65);
+                currentY = (effect.initialY - (progress * 65)) + stackYOffset;
                 break;
             case 'combo':
                 fontSize = 30 * (1 - progress * 0.5);
                 fillStyle = `rgba(255, 255, 0, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 2;
-                currentY = effect.initialY - (progress * 50);
+                currentY = (effect.initialY - (progress * 50)) + stackYOffset;
                 break;
             default:
                 fontSize = 30 * (1 - progress * 0.5);
                 fillStyle = `rgba(255, 255, 255, ${1 - progress})`;
                 strokeStyle = `rgba(0, 0, 0, ${1 - progress})`;
                 lineWidth = 2;
-                currentY = effect.initialY - (progress * 50);
+                currentY = (effect.initialY - (progress * 50)) + stackYOffset;
                 break;
         }
 
-        effectsCtx.font = `bold ${fontSize}px Arial`;
+        effectsCtx.font = `bold ${fontSize}px ${CONFIG.ui.fontFamily}`;
         effectsCtx.fillStyle = fillStyle;
         effectsCtx.strokeStyle = strokeStyle;
         effectsCtx.lineWidth = lineWidth;
@@ -413,6 +421,7 @@ class MiniboardEntryEffect {
             this.particles.push({
                 angle: Math.random() * Math.PI * 2,
                 distance: Math.random() * 40 + 20,
+                currentDistance: Math.random() * 40 + 20, // 初期化
                 size: Math.random() * 2 + 1,
                 speed: Math.random() * 0.02 + 0.01,
                 phase: Math.random() * Math.PI * 2,
@@ -755,7 +764,7 @@ export function triggerPieceAppearanceEffect(piece) {
             const startY = targetY + Math.sin(angle) * distance;
 
             // Get particle color based on piece type
-            const typeIndex = tetrominoTypeToIndex(piece.type);
+            const typeIndex = getTetrominoTypeToIndex(piece.type);
             const color = CONFIG.colors.tetromino[typeIndex + 1] || "#FFFFFF";
 
             addParticle({
@@ -786,7 +795,7 @@ export function triggerPieceAppearanceEffect(piece) {
         y: (piece.y + minY - startRow) * CELL_SIZE + offset.y,
         width: (maxX - minX + 1) * CELL_SIZE,
         height: (maxY - minY + 1) * CELL_SIZE,
-        color: CONFIG.colors.tetromino[tetrominoTypeToIndex(piece.type) + 1] || "#FFFFFF"
+        color: CONFIG.colors.tetromino[getTetrominoTypeToIndex(piece.type) + 1] || "#FFFFFF"
     });
 }
 

@@ -1,6 +1,6 @@
 import { setGameGetStatsCallback } from './core/game.js';
 import { setOnlineGetStatsCallback, setCloseMenuCallback, setRoomClosedCallback, initializeSocket, setUIMessageCallback } from './network/online.js';
-import { CONFIG } from './core/config.js';
+import { CONFIG, applyCustomSettings } from './core/config.js';
 import { 
     gameState, setGameState, resetGame,
     currentPiece, level, isValidPosition, lockPiece, movePiece, LOCK_DELAY,
@@ -96,6 +96,65 @@ let noPublicRoomsMessage;
 let spectatorMenuModal;
 let spectatorBackToLobbyButton;
 let spectatorRankingList;
+
+// --- Settings State ---
+let currentKeyBindings = {};
+let activeBindingButton = null;
+
+function setupSettingsUI(user) {
+    settingsNicknameInput.value = user.nickname || user.username;
+    document.getElementById('settings-current-rating').textContent = user.rating;
+
+    currentKeyBindings = { ...CONFIG.keyBindings };
+    if (user.settings && user.settings.keyBindings) {
+        Object.assign(currentKeyBindings, user.settings.keyBindings);
+    }
+
+    const bindMap = {
+        'kb-left': 'moveLeft', 'kb-right': 'moveRight', 'kb-soft': 'softDrop',
+        'kb-hard': 'hardDrop', 'kb-rotateCCW': 'rotateCCW', 'kb-rotateCW': 'rotateCW',
+        'kb-hold': 'hold'
+    };
+
+    Object.keys(bindMap).forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        const action = bindMap[btnId];
+        btn.textContent = currentKeyBindings[action];
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            if (activeBindingButton) activeBindingButton.classList.remove('active');
+            activeBindingButton = btn;
+            btn.classList.add('active');
+            btn.textContent = '入力待ち...';
+        };
+    });
+
+    const keys = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+    keys.forEach((key, index) => {
+        const picker = document.getElementById(`color-${key}`);
+        if (picker) {
+            picker.value = (user.settings && user.settings.colors && user.settings.colors[key]) 
+                || CONFIG.colors.tetromino[index + 1];
+        }
+    });
+}
+
+window.addEventListener('keydown', (e) => {
+    if (activeBindingButton) {
+        const bindMap = {
+            'kb-left': 'moveLeft', 'kb-right': 'moveRight', 'kb-soft': 'softDrop',
+            'kb-hard': 'hardDrop', 'kb-rotateCCW': 'rotateCCW', 'kb-rotateCW': 'rotateCW',
+            'kb-hold': 'hold'
+        };
+        const action = bindMap[activeBindingButton.id];
+        currentKeyBindings[action] = e.code;
+        activeBindingButton.textContent = e.code;
+        activeBindingButton.classList.remove('active');
+        activeBindingButton = null;
+        e.preventDefault();
+    }
+});
 
 // --- Stats State ---
 let lastTime = 0;
@@ -603,6 +662,12 @@ function init() {
             mainMenuButtons.style.display = 'block';
             displayNickname.textContent = data.user.nickname;
             displayRating.textContent = data.user.rating;
+            
+            if (data.user.settings) {
+                applyCustomSettings(data.user.settings);
+                setupCanvases();
+            }
+            socket.user = data.user;
         },
         onLoginError: (data) => {
             showMessage({ type: 'error', message: data.message });
@@ -611,6 +676,8 @@ function init() {
             showMessage({ type: 'success', message: '設定を保存しました。' });
             displayNickname.textContent = data.user.nickname;
             displayRating.textContent = data.user.rating;
+            applyCustomSettings(data.user.settings);
+            setupCanvases();
             closeModal(settingsModal);
         },
         onRatingUpdate: (data) => {
@@ -634,12 +701,27 @@ function init() {
         register(signupUsernameInput.value, signupPasswordInput.value, signupNicknameInput.value);
     };
     document.getElementById('edit-settings-button').onclick = () => {
-        settingsNicknameInput.value = displayNickname.textContent;
-        document.getElementById('settings-current-rating').textContent = displayRating.textContent;
+        setupSettingsUI(socket.user);
         openModal(settingsModal);
     };
     saveSettingsButton.onclick = () => {
-        updateSettings(settingsNicknameInput.value);
+        const colors = {};
+        ['I', 'J', 'L', 'O', 'S', 'T', 'Z'].forEach(key => {
+            const picker = document.getElementById(`color-${key}`);
+            if (picker) colors[key] = picker.value;
+        });
+
+        const newSettings = {
+            keyBindings: currentKeyBindings,
+            colors: colors
+        };
+        
+        showMessage({ type: 'info', message: '保存中...' });
+        
+        socket.emit('update_settings', { 
+            nickname: settingsNicknameInput.value,
+            settings: newSettings
+        });
     };
 
     // Assign DOM elements inside init()

@@ -9,7 +9,7 @@ const EventEmitter = require('events');
 
 // --- Bot Configuration ---
 const ENABLE_BOTS = true;
-const BOT_COUNT = 50;
+const BOT_COUNT = 98;
 // -------------------------
 
 const PORT = process.env.PORT || 6000;
@@ -39,21 +39,48 @@ app.get("/rooms", (req, res) => {
 });
 
 const Database = require("./server/database.js");
+const { RateLimiterMemory } = require('rate-limiter-flexible');
+
+// レートリミッターの設定 (1IPあたり1時間に5回まで登録可能)
+const registrationLimiter = new RateLimiterMemory({
+  points: 5,
+  duration: 3600, 
+});
+
+// ログイン試行制限 (1IPあたり1分に10回まで)
+const loginLimiter = new RateLimiterMemory({
+  points: 10,
+  duration: 60,
+});
 
 initializeSocket(io);
 
 io.on('connection', (socket) => {
+  const ip = socket.handshake.address;
+
   socket.on('register', async (data) => {
     try {
-      const user = await Database.createUser(data.username, data.password, data.nickname);
+      await registrationLimiter.consume(ip);
+      
+      // 同一IPからの登録をチェック
+      const existingAccount = await Database.getAccountByIp(ip);
+      if (existingAccount) {
+        return socket.emit('register_error', { message: 'このネットワークからは既にアカウントが作成されています（1人1アカウント制限）。' });
+      }
+
+      const user = await Database.createUser(data.username, data.password, data.nickname, ip);
       socket.emit('register_success', { user });
     } catch (err) {
-      socket.emit('register_error', { message: 'ユーザー名が既に使用されているか、エラーが発生しました。' });
+      const message = err.msBeforeNext 
+        ? `リクエストが多すぎます。${Math.round(err.msBeforeNext / 1000 / 60)}分後に再試行してください。`
+        : (err.message || 'エラーが発生しました。');
+      socket.emit('register_error', { message });
     }
   });
 
   socket.on('login', async (data) => {
     try {
+      await loginLimiter.consume(ip);
       const user = await Database.verifyUser(data.username, data.password);
       if (user) {
         socket.user = user;
@@ -62,16 +89,20 @@ io.on('connection', (socket) => {
         socket.emit('login_error', { message: 'ユーザー名またはパスワードが正しくありません。' });
       }
     } catch (err) {
-      socket.emit('login_error', { message: 'エラーが発生しました。' });
+      const message = err.msBeforeNext 
+        ? 'ログイン試行回数が多すぎます。しばらく待ってから再試行してください。'
+        : 'エラーが発生しました。';
+      socket.emit('login_error', { message });
     }
   });
 
   socket.on('update_settings', async (data) => {
     if (!socket.user) return;
     try {
-      // レート（data.rating）は無視し、ニックネームのみ更新を許可
-      await Database.updateUserSettings(socket.user.username, data.nickname);
+      // data.settings にはキーバインドと色情報が含まれる想定
+      await Database.updateUserSettings(socket.user.username, data.nickname, data.settings);
       socket.user.nickname = data.nickname;
+      socket.user.settings = data.settings;
       socket.emit('settings_updated', { user: socket.user });
     } catch (err) {
       socket.emit('settings_error', { message: '設定の更新に失敗しました。' });

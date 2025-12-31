@@ -1239,7 +1239,10 @@ function addOpponent(userId) {
 
         const pos = getBoardCenterPosition(userId);
         if (pos) {
-            startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
+            // Delay slightly to ensure canvas is ready
+            setTimeout(() => {
+                startMiniboardEntryEffect(userId, pos.x - MINIBOARD_WIDTH / 2, pos.y - MINIBOARD_HEIGHT / 2, MINIBOARD_WIDTH, MINIBOARD_HEIGHT);
+            }, 50);
         }
         requestMiniboardRedraw();
     }
@@ -1484,19 +1487,25 @@ export function getBoardCenterPosition(userId, clearedLines = null) {
     } else {
         const slot = userIdToSlotMap.get(userId);
         if (slot && slot.canvas) {
-            // Get the bounding rect of the consolidated canvas (left or right)
             const canvasRect = slot.canvas.getBoundingClientRect();
-            
-            // The slot's x and y are relative to its own consolidated canvas
-            // We need to convert this to be relative to the effects canvas
             const slotCenterX = slot.x + MINIBOARD_WIDTH / 2;
             const slotCenterY = slot.y + MINIBOARD_HEIGHT / 2;
             
-            // Final position = (Canvas screen pos - EffectsCanvas screen pos) + (Slot relative pos)
             return {
                 x: (canvasRect.left - effectsCanvasRect.left) + slotCenterX,
                 y: (canvasRect.top - effectsCanvasRect.top) + slotCenterY
             };
+        } else if (slot) {
+            // Fallback: estimate position if canvas rect is not available
+            const isLeft = miniboardSlots.indexOf(slot) < 49;
+            const sideCanvas = isLeft ? document.getElementById('left-miniboards-canvas') : document.getElementById('right-miniboards-canvas');
+            if (sideCanvas) {
+                const canvasRect = sideCanvas.getBoundingClientRect();
+                return {
+                    x: (canvasRect.left - effectsCanvasRect.left) + slot.x + MINIBOARD_WIDTH / 2,
+                    y: (canvasRect.top - effectsCanvasRect.top) + slot.y + MINIBOARD_HEIGHT / 2
+                };
+            }
         }
     }
 

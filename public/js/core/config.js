@@ -150,3 +150,23 @@ export const CONFIG = {
         Z: { shape: [[[-1, -1], [0, -1], [0, 0], [1, 0]], [[1, -1], [0, 0], [1, 0], [0, 1]], [[-1, 0], [0, 0], [0, 1], [1, 1]], [[0, -1], [-1, 0], [0, 0], [-1, 1]]] }
     }
 };
+
+export function applyCustomSettings(settings) {
+    if (!settings) return;
+    
+    // キーバインドの上書き
+    if (settings.keyBindings) {
+        Object.assign(CONFIG.keyBindings, settings.keyBindings);
+    }
+    
+    // カラーの上書き
+    if (settings.colors) {
+        // インデックス 1:I, 2:J, 3:L, 4:O, 5:S, 6:T, 7:Z
+        const keys = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+        keys.forEach((key, index) => {
+            if (settings.colors[key]) {
+                CONFIG.colors.tetromino[index + 1] = settings.colors[key];
+            }
+        });
+    }
+}

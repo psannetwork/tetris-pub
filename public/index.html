@@ -81,11 +81,40 @@
   </div>
 
   <div id="settings-modal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 600px;">
       <h2>ユーザー設定</h2>
-      <label>ニックネーム:</label>
-      <input type="text" id="settings-nickname">
-      <p>現在のレート: <span id="settings-current-rating"></span></p>
+      <div class="settings-grid">
+        <div class="settings-section">
+          <h3>プロフィール</h3>
+          <label>ニックネーム:</label>
+          <input type="text" id="settings-nickname">
+          <p>現在のレート: <span id="settings-current-rating"></span></p>
+        </div>
+        
+        <div class="settings-section">
+          <h3>キーバインド (クリックして入力)</h3>
+          <div class="keybind-row">左移動: <button id="kb-left" class="kb-button"></button></div>
+          <div class="keybind-row">右移動: <button id="kb-right" class="kb-button"></button></div>
+          <div class="keybind-row">ソフトドロップ: <button id="kb-soft" class="kb-button"></button></div>
+          <div class="keybind-row">ハードドロップ: <button id="kb-hard" class="kb-button"></button></div>
+          <div class="keybind-row">左回転: <button id="kb-rotateCCW" class="kb-button"></button></div>
+          <div class="keybind-row">右回転: <button id="kb-rotateCW" class="kb-button"></button></div>
+          <div class="keybind-row">ホールド: <button id="kb-hold" class="kb-button"></button></div>
+        </div>
+
+        <div class="settings-section">
+          <h3>ブロックカラー</h3>
+          <div class="color-grid">
+            <div class="color-row">I: <input type="color" id="color-I"></div>
+            <div class="color-row">J: <input type="color" id="color-J"></div>
+            <div class="color-row">L: <input type="color" id="color-L"></div>
+            <div class="color-row">O: <input type="color" id="color-O"></div>
+            <div class="color-row">S: <input type="color" id="color-S"></div>
+            <div class="color-row">T: <input type="color" id="color-T"></div>
+            <div class="color-row">Z: <input type="color" id="color-Z"></div>
+          </div>
+        </div>
+      </div>
       <button id="save-settings-button">保存</button>
       <button class="close-modal">閉じる</button>
     </div>
@@ -146,7 +175,6 @@
 
   <div id="game-end-overlay">
     <div class="overlay-content">
-      <div id="game-end-title" class="menu-title"></div>
       <div id="rating-change-display" class="rating-change-container" style="display: none;">
         <span class="rating-label">RATE:</span>
         <span id="rating-old-value"></span>
@@ -154,6 +182,7 @@
         <span id="rating-new-value"></span>
         <span id="rating-diff-value"></span>
       </div>
+      <div id="game-end-title" class="menu-title"></div>
       <div id="final-ranking-list"></div>
       <div class="menu-buttons">
         <button id="retry-button">Play Again</button>
